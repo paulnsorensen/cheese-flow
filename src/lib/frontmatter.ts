@@ -10,6 +10,9 @@ export function parseFrontmatter<T>(content: string): { data: T; body: string } 
   }
 
   const [, rawFrontmatter, body] = match;
+  if (rawFrontmatter === undefined || body === undefined) {
+    throw new Error('Frontmatter parser could not extract YAML content.');
+  }
   const document = parseDocument(rawFrontmatter);
 
   if (document.errors.length > 0) {

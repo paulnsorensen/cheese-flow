@@ -19,7 +19,7 @@
     "node": ">=22"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.build.json",
     "dev": "tsx src/index.ts",
     "install:claude": "tsx src/index.ts install --harness claude-code",
     "install:codex": "tsx src/index.ts install --harness codex",
