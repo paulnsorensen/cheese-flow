@@ -1,0 +1,41 @@
+---
+name: basic-agent
+description: A starter portable agent definition compiled into harness-specific markdown.
+models:
+  default: gpt-5.1-codex
+  claude-code: claude-sonnet-4-5
+  codex: gpt-5.1-codex
+tools:
+  - read
+  - write
+  - bash
+metadata:
+  owner: cheese-flow
+  intent: starter
+---
+# <%= it.agent.name %>
+
+<%= it.agent.description %>
+
+## Runtime
+- Harness target: <%= it.harness.displayName %>
+- Recommended model: <%= it.agent.model %>
+- Output root: <%= it.harness.outputRoot %>
+
+## Responsibilities
+- Read the user's request before changing code.
+- Prefer portable markdown instructions over harness-specific source formats.
+- Keep changes small, validated, and easy to review.
+
+## Allowed tools
+<% it.agent.tools.forEach(function (tool) { %>- <%= tool %>
+<% }) %>
+
+## Harness notes
+<% it.harness.notes.forEach(function (note) { %>- <%= note %>
+<% }) %>
+
+## Workflow
+1. Inspect the repository before editing.
+2. Validate source definitions before compiling them for a harness.
+3. Emit plain markdown so the same agent can be consumed by multiple coding harnesses.

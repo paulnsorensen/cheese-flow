@@ -1,0 +1,56 @@
+{
+  "name": "cheese-flow",
+  "version": "0.1.0",
+  "description": "Opinionated coding harness plugin scaffold for portable agents and skills.",
+  "type": "module",
+  "license": "MIT",
+  "private": true,
+  "bin": {
+    "cheese-flow": "./dist/index.js"
+  },
+  "files": [
+    "dist",
+    "agents",
+    "skills",
+    "LICENSE",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsx src/index.ts",
+    "install:claude": "tsx src/index.ts install --harness claude-code",
+    "install:codex": "tsx src/index.ts install --harness codex",
+    "lint": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/paulnsorensen/cheese-flow.git"
+  },
+  "bugs": {
+    "url": "https://github.com/paulnsorensen/cheese-flow/issues"
+  },
+  "homepage": "https://github.com/paulnsorensen/cheese-flow#readme",
+  "keywords": [
+    "agents",
+    "skills",
+    "cli",
+    "typescript",
+    "llm"
+  ],
+  "dependencies": {
+    "commander": "^14.0.3",
+    "eta": "^4.5.1",
+    "yaml": "^2.8.3",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/node": "^25.6.0",
+    "tsx": "^4.21.0",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.4"
+  }
+}
