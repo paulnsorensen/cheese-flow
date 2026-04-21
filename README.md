@@ -25,6 +25,13 @@ npm run install:claude
 npm run install:codex
 ```
 
+Or use the repository automation entrypoints:
+
+```bash
+just build
+just build-ci
+```
+
 Or target specific harnesses directly:
 
 ```bash
@@ -40,6 +47,12 @@ npx tsx src/index.ts install --harness claude-code,codex
 - Compiles `agents/*.md.eta` into plain markdown for the selected harness
 - Copies `skills/*/SKILL.md` into the harness bundle
 - Writes a small manifest for the generated bundle
+
+## Quality gates
+
+- `just build` installs deps, formats, lints with autofix, typechecks, builds, and runs tests with coverage thresholds
+- `just build-ci` uses the same checks without autofix and is what CI runs
+- Vitest coverage thresholds are set above 90% for statements, branches, functions, and lines
 
 ## Example output
 

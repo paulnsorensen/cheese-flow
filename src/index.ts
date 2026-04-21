@@ -1,13 +1,13 @@
 #!/usr/bin/env node
-import { Command, InvalidArgumentError } from 'commander';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { installHarnessArtifacts } from './lib/compiler.js';
-import { harnessDefinitions, type HarnessName } from './lib/harnesses.js';
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { Command, InvalidArgumentError } from "commander";
+import { installHarnessArtifacts } from "./lib/compiler.js";
+import { type HarnessName, harnessDefinitions } from "./lib/harnesses.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const defaultProjectRoot = path.resolve(__dirname, '..');
+const defaultProjectRoot = path.resolve(__dirname, "..");
 
 const harnessNames = Object.keys(harnessDefinitions) as HarnessName[];
 
@@ -17,35 +17,49 @@ function parseHarness(value: string): HarnessName {
   }
 
   throw new InvalidArgumentError(
-    `Unsupported harness "${value}". Expected one of: ${harnessNames.join(', ')}.`
+    `Unsupported harness "${value}". Expected one of: ${harnessNames.join(", ")}.`,
   );
 }
 
 const program = new Command();
 
 program
-  .name('cheese-flow')
-  .description('Compile portable agents and Agent Skills into harness-specific markdown bundles.')
-  .version('0.1.0');
+  .name("cheese-flow")
+  .description(
+    "Compile portable agents and Agent Skills into harness-specific markdown bundles.",
+  )
+  .version("0.1.0");
 
 program
-  .command('install')
-  .description('Compile the repository skill and agent sources for one or more target harnesses.')
+  .command("install")
+  .description(
+    "Compile the repository skill and agent sources for one or more target harnesses.",
+  )
   .option(
-    '-h, --harness <name...>',
-    'Harness target(s) to install for.',
+    "-H, --harness <name...>",
+    "Harness target(s) to install for.",
     (value, previous: HarnessName[] | undefined) => {
       const items = Array.isArray(previous) ? previous : [];
-      return [...items, ...value.split(',').map((item) => parseHarness(item.trim()))];
+      return [
+        ...items,
+        ...value.split(",").map((item) => parseHarness(item.trim())),
+      ];
     },
-    [] as HarnessName[]
+    [] as HarnessName[],
   )
-  .option('--project-root <path>', 'Project root that contains ./agents and ./skills.', defaultProjectRoot)
+  .option(
+    "--project-root <path>",
+    "Project root that contains ./agents and ./skills.",
+    defaultProjectRoot,
+  )
   .action(async (options: { harness: HarnessName[]; projectRoot: string }) => {
-    const targets = options.harness.length > 0 ? Array.from(new Set(options.harness)) : harnessNames;
+    const targets =
+      options.harness.length > 0
+        ? Array.from(new Set(options.harness))
+        : harnessNames;
     const outputs = await installHarnessArtifacts({
       projectRoot: path.resolve(options.projectRoot),
-      harnesses: targets
+      harnesses: targets,
     });
 
     for (const output of outputs) {

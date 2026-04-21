@@ -1,4 +1,4 @@
-export type HarnessName = 'claude-code' | 'codex';
+export type HarnessName = "claude-code" | "codex";
 
 export type HarnessDefinition = {
   name: HarnessName;
@@ -11,28 +11,28 @@ export type HarnessDefinition = {
 };
 
 export const harnessDefinitions: Record<HarnessName, HarnessDefinition> = {
-  'claude-code': {
-    name: 'claude-code',
-    displayName: 'Claude Code',
-    outputRoot: '.claude',
-    agentDirectory: 'agents',
-    skillDirectory: 'skills',
-    defaultModel: 'claude-sonnet-4-5',
+  "claude-code": {
+    name: "claude-code",
+    displayName: "Claude Code",
+    outputRoot: ".claude",
+    agentDirectory: "agents",
+    skillDirectory: "skills",
+    defaultModel: "claude-sonnet-4-5",
     notes: [
-      'Use concise markdown headings and explicit tool guidance.',
-      'Prefer Claude model identifiers in agent metadata and output.'
-    ]
+      "Use concise markdown headings and explicit tool guidance.",
+      "Prefer Claude model identifiers in agent metadata and output.",
+    ],
   },
   codex: {
-    name: 'codex',
-    displayName: 'Codex',
-    outputRoot: '.codex',
-    agentDirectory: 'agents',
-    skillDirectory: 'skills',
-    defaultModel: 'gpt-5.1-codex',
+    name: "codex",
+    displayName: "Codex",
+    outputRoot: ".codex",
+    agentDirectory: "agents",
+    skillDirectory: "skills",
+    defaultModel: "gpt-5.1-codex",
     notes: [
-      'Bias instructions toward patch-oriented execution and explicit constraints.',
-      'Prefer Codex model identifiers in agent metadata and output.'
-    ]
-  }
+      "Bias instructions toward patch-oriented execution and explicit constraints.",
+      "Prefer Codex model identifiers in agent metadata and output.",
+    ],
+  },
 };
