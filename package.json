@@ -1,0 +1,63 @@
+{
+  "name": "cheese-flow",
+  "version": "0.1.0",
+  "description": "Opinionated coding harness plugin scaffold for portable agents and skills.",
+  "type": "module",
+  "license": "MIT",
+  "private": true,
+  "bin": {
+    "cheese-flow": "./dist/index.js"
+  },
+  "files": [
+    "dist",
+    "agents",
+    "skills",
+    "LICENSE",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "dev": "tsx src/index.ts",
+    "format": "biome format --write .",
+    "format:check": "biome format .",
+    "install:claude": "tsx src/index.ts install --harness claude-code",
+    "install:codex": "tsx src/index.ts install --harness codex",
+    "lint": "tsc --noEmit -p tsconfig.json",
+    "lint:fix": "biome check --write .",
+    "lint:check": "biome check .",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/paulnsorensen/cheese-flow.git"
+  },
+  "bugs": {
+    "url": "https://github.com/paulnsorensen/cheese-flow/issues"
+  },
+  "homepage": "https://github.com/paulnsorensen/cheese-flow#readme",
+  "keywords": [
+    "agents",
+    "skills",
+    "cli",
+    "typescript",
+    "llm"
+  ],
+  "dependencies": {
+    "commander": "^14.0.3",
+    "eta": "^4.5.1",
+    "yaml": "^2.8.3",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.4.12",
+    "@types/node": "^25.6.0",
+    "@vitest/coverage-v8": "^4.1.4",
+    "tsx": "^4.21.0",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.4"
+  }
+}
