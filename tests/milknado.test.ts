@@ -1,176 +1,185 @@
 import { execFile } from "node:child_process";
+import { EventEmitter } from "node:events";
 import path from "node:path";
 import { promisify } from "node:util";
 import { describe, expect, it, vi } from "vitest";
 import {
-  type ExecFileFn,
   getMilknadoBackendScriptPath,
-  getPythonCandidates,
+  getMilknadoCommand,
   runMilknadoCommand,
+  type SpawnFn,
 } from "../src/lib/milknado.js";
 
 const execFileAsync = promisify(execFile);
 
 describe("milknado helpers", () => {
-  it("builds a backend path relative to the project root", () => {
-    expect(getMilknadoBackendScriptPath("/tmp/cheese-flow")).toBe(
-      "/tmp/cheese-flow/python/milknado.py",
+  it("builds the backend path relative to the project root", () => {
+    const projectRoot = path.resolve(path.sep, "tmp", "cheese-flow");
+
+    expect(getMilknadoBackendScriptPath(projectRoot)).toBe(
+      path.join(projectRoot, "python", "milknado.py"),
     );
   });
 
-  it("prefers a configured Python binary without duplicating fallbacks", () => {
-    expect(
-      getPythonCandidates({
-        MILKNADO_PYTHON: "python3",
-      }),
-    ).toEqual(["python3", "python"]);
+  it("builds the uv command for the backend", () => {
+    const projectRoot = path.resolve(path.sep, "tmp", "cheese-flow");
+
+    expect(getMilknadoCommand(projectRoot)).toEqual({
+      command: "uv",
+      args: [
+        "run",
+        "--project",
+        projectRoot,
+        "python",
+        path.join(projectRoot, "python", "milknado.py"),
+      ],
+    });
   });
 
-  it("falls back to the next Python runtime when the first one is missing", async () => {
+  it("runs the backend via uv and streams stdout and stderr", async () => {
+    const projectRoot = path.resolve(path.sep, "tmp", "cheese-flow");
     const stdout = vi.fn();
     const stderr = vi.fn();
-    const execFileFn = vi
-      .fn<ExecFileFn>()
-      .mockRejectedValueOnce(
-        Object.assign(new Error("missing"), { code: "ENOENT" }),
-      )
-      .mockResolvedValueOnce({
-        stdout: "Milknado ready\n",
-        stderr: "",
-      });
+    const child = createMockChildProcess();
+    const spawnFn = vi.fn<SpawnFn>().mockReturnValue(child);
 
-    const command = await runMilknadoCommand({
-      projectRoot: "/tmp/cheese-flow",
-      env: {
-        MILKNADO_PYTHON: "python3",
-      },
-      execFileFn,
+    const runPromise = runMilknadoCommand({
+      projectRoot,
+      spawnFn,
       stdout: { write: stdout },
       stderr: { write: stderr },
     });
 
-    expect(command).toBe("python");
-    expect(execFileFn).toHaveBeenNthCalledWith(
-      1,
-      "python3",
-      ["/tmp/cheese-flow/python/milknado.py"],
+    expect(spawnFn).toHaveBeenCalledWith(
+      "uv",
+      [
+        "run",
+        "--project",
+        projectRoot,
+        "python",
+        path.join(projectRoot, "python", "milknado.py"),
+      ],
       {
-        cwd: "/tmp/cheese-flow",
-        encoding: "utf8",
+        cwd: projectRoot,
+        stdio: "pipe",
       },
     );
-    expect(execFileFn).toHaveBeenNthCalledWith(
-      2,
-      "python",
-      ["/tmp/cheese-flow/python/milknado.py"],
-      {
-        cwd: "/tmp/cheese-flow",
-        encoding: "utf8",
-      },
-    );
+
+    child.stdout.emit("data", "Milknado ready\n");
+    child.stderr.emit("data", "warning\n");
+    child.emit("close", 0);
+
+    await expect(runPromise).resolves.toBeUndefined();
     expect(stdout).toHaveBeenCalledWith("Milknado ready\n");
-    expect(stderr).not.toHaveBeenCalled();
-  });
-
-  it("writes stderr from a successful backend run", async () => {
-    const stdout = vi.fn();
-    const stderr = vi.fn();
-    const execFileFn = vi.fn<ExecFileFn>().mockResolvedValue({
-      stdout: "",
-      stderr: "warning\n",
-    });
-
-    const command = await runMilknadoCommand({
-      projectRoot: "/tmp/cheese-flow",
-      execFileFn,
-      stdout: { write: stdout },
-      stderr: { write: stderr },
-    });
-
-    expect(command).toBe("python3");
-    expect(stdout).not.toHaveBeenCalled();
     expect(stderr).toHaveBeenCalledWith("warning\n");
   });
 
-  it("fails clearly when no Python runtime is available", async () => {
-    const execFileFn = vi
-      .fn<ExecFileFn>()
-      .mockRejectedValue(
-        Object.assign(new Error("missing"), { code: "ENOENT" }),
-      );
+  it("fails clearly when uv is unavailable", async () => {
+    const child = createMockChildProcess();
+    const runPromise = runMilknadoCommand({
+      projectRoot: path.resolve(path.sep, "tmp", "cheese-flow"),
+      spawnFn: vi.fn<SpawnFn>().mockReturnValue(child),
+    });
 
-    await expect(
-      runMilknadoCommand({
-        projectRoot: "/tmp/cheese-flow",
-        env: {
-          MILKNADO_PYTHON: "py",
-        },
-        execFileFn,
-      }),
-    ).rejects.toThrow(
-      /Unable to find a Python runtime for milknado. Tried: py, python3, python\./u,
+    child.emit(
+      "error",
+      Object.assign(new Error("missing"), { code: "ENOENT" }),
     );
-    expect(execFileFn).toHaveBeenCalledTimes(3);
+
+    await expect(runPromise).rejects.toThrow(/Install uv/u);
   });
 
-  it("surfaces backend failures after writing known output", async () => {
+  it("surfaces spawn errors from uv", async () => {
+    const child = createMockChildProcess();
+    const runPromise = runMilknadoCommand({
+      projectRoot: path.resolve(path.sep, "tmp", "cheese-flow"),
+      spawnFn: vi.fn<SpawnFn>().mockReturnValue(child),
+    });
+
+    child.emit("error", new Error("boom"));
+
+    await expect(runPromise).rejects.toThrow(
+      /milknado backend failed via uv: boom/u,
+    );
+  });
+
+  it("surfaces non-zero exit codes after streaming output", async () => {
+    const projectRoot = path.resolve(path.sep, "tmp", "cheese-flow");
     const stdout = vi.fn();
     const stderr = vi.fn();
-    const execFileFn = vi.fn<ExecFileFn>().mockRejectedValue(
-      Object.assign(new Error("python exploded"), {
-        stdout: "partial\n",
-        stderr: "traceback\n",
-      }),
-    );
+    const child = createMockChildProcess();
+    const runPromise = runMilknadoCommand({
+      projectRoot,
+      spawnFn: vi.fn<SpawnFn>().mockReturnValue(child),
+      stdout: { write: stdout },
+      stderr: { write: stderr },
+    });
 
-    await expect(
-      runMilknadoCommand({
-        projectRoot: "/tmp/cheese-flow",
-        env: {
-          MILKNADO_PYTHON: "python3",
-        },
-        execFileFn,
-        stdout: { write: stdout },
-        stderr: { write: stderr },
-      }),
-    ).rejects.toThrow(/milknado backend failed using "python3"/u);
+    child.stdout.emit("data", "partial\n");
+    child.stderr.emit("data", "traceback\n");
+    child.emit("close", 1);
+
+    await expect(runPromise).rejects.toThrow(
+      /milknado backend failed via uv with exit code 1\./u,
+    );
     expect(stdout).toHaveBeenCalledWith("partial\n");
     expect(stderr).toHaveBeenCalledWith("traceback\n");
   });
 
-  it("surfaces non-error backend failures without writing output", async () => {
-    const stdout = vi.fn();
-    const stderr = vi.fn();
-    const execFileFn = vi.fn<ExecFileFn>().mockRejectedValue("boom");
+  it("reports an unknown exit code when the process closes without one", async () => {
+    const child = createMockChildProcess();
+    const runPromise = runMilknadoCommand({
+      projectRoot: path.resolve(path.sep, "tmp", "cheese-flow"),
+      spawnFn: vi.fn<SpawnFn>().mockReturnValue(child),
+    });
 
-    await expect(
-      runMilknadoCommand({
-        projectRoot: "/tmp/cheese-flow",
-        env: {
-          MILKNADO_PYTHON: "python3",
-        },
-        execFileFn,
-        stdout: { write: stdout },
-        stderr: { write: stderr },
-      }),
-    ).rejects.toThrow(/milknado backend failed using "python3": boom/u);
-    expect(stdout).not.toHaveBeenCalled();
-    expect(stderr).not.toHaveBeenCalled();
+    child.emit("close", null);
+
+    await expect(runPromise).rejects.toThrow(
+      /milknado backend failed via uv with exit code unknown\./u,
+    );
+  });
+
+  it("ignores later process events after the command has already settled", async () => {
+    const child = createMockChildProcess();
+    const runPromise = runMilknadoCommand({
+      projectRoot: path.resolve(path.sep, "tmp", "cheese-flow"),
+      spawnFn: vi.fn<SpawnFn>().mockReturnValue(child),
+    });
+
+    child.emit("close", 0);
+    child.emit("error", new Error("late failure"));
+
+    await expect(runPromise).resolves.toBeUndefined();
   });
 });
 
 describe("milknado CLI", () => {
-  it("runs the shipped Python backend and prints its TUI", async () => {
+  it("wires up milknado help without requiring uv or Python", async () => {
     const { stdout } = await execFileAsync(
       "npx",
-      ["tsx", "src/index.ts", "milknado"],
+      ["tsx", "src/index.ts", "milknado", "--help"],
       {
         cwd: path.resolve("."),
       },
     );
 
-    expect(stdout).toContain("Milknado");
-    expect(stdout).toContain("backend   │ python");
-    expect(stdout).toContain("typescript commander");
+    expect(stdout).toContain("milknado");
+    expect(stdout).toContain("Usage:");
+    expect(stdout).toContain(
+      "Project root that contains ./python and pyproject.toml.",
+    );
   });
 });
+
+function createMockChildProcess() {
+  const child = new EventEmitter() as EventEmitter & {
+    stdout: EventEmitter;
+    stderr: EventEmitter;
+  };
+
+  child.stdout = new EventEmitter();
+  child.stderr = new EventEmitter();
+
+  return child;
+}

@@ -73,7 +73,7 @@ program
   .description("Run the sample Python backend and print its TUI.")
   .option(
     "--project-root <path>",
-    "Project root that contains ./python.",
+    "Project root that contains ./python and pyproject.toml.",
     defaultProjectRoot,
   )
   .action(async (options: { projectRoot: string }) => {

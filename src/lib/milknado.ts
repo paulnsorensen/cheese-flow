@@ -1,91 +1,125 @@
-import {
-  type ExecFileOptionsWithStringEncoding,
-  execFile,
-} from "node:child_process";
+import { type SpawnOptionsWithoutStdio, spawn } from "node:child_process";
 import path from "node:path";
-import type { Writable } from "node:stream";
-import { promisify } from "node:util";
 
-type ExecFileResult = {
-  stdout: string;
-  stderr: string;
+type OutputChunk = string | Uint8Array;
+
+export type OutputWriter = {
+  write(chunk: OutputChunk): unknown;
 };
 
-export type ExecFileFn = (
+type OutputReader = {
+  on(event: "data", listener: (chunk: OutputChunk) => void): unknown;
+};
+
+export type SpawnedProcess = {
+  stdout: OutputReader;
+  stderr: OutputReader;
+  on(event: "close", listener: (code: number | null) => void): unknown;
+  on(event: "error", listener: (error: unknown) => void): unknown;
+};
+
+export type SpawnFn = (
   file: string,
   args: readonly string[],
-  options: ExecFileOptionsWithStringEncoding,
-) => Promise<ExecFileResult>;
+  options: SpawnOptionsWithoutStdio,
+) => SpawnedProcess;
 
 export type RunMilknadoCommandOptions = {
   projectRoot: string;
-  env?: NodeJS.ProcessEnv;
-  execFileFn?: ExecFileFn;
-  stdout?: Pick<Writable, "write">;
-  stderr?: Pick<Writable, "write">;
+  spawnFn?: SpawnFn;
+  stdout?: OutputWriter;
+  stderr?: OutputWriter;
 };
 
-const execFileAsync = promisify(execFile) as ExecFileFn;
-const defaultPythonCommands = ["python3", "python"] as const;
+const spawnProcess: SpawnFn = (file, args, options) =>
+  spawn(file, args, options);
 
 export function getMilknadoBackendScriptPath(projectRoot: string): string {
   return path.join(projectRoot, "python", "milknado.py");
 }
 
-export function getPythonCandidates(
-  env: NodeJS.ProcessEnv = process.env,
-): string[] {
-  const preferred = env.MILKNADO_PYTHON?.trim();
-  const candidates = [
-    preferred && preferred.length > 0 ? preferred : undefined,
-    ...defaultPythonCommands,
-  ].filter((value): value is string => Boolean(value));
-
-  return Array.from(new Set(candidates));
+export function getMilknadoCommand(projectRoot: string): {
+  command: string;
+  args: string[];
+} {
+  return {
+    command: "uv",
+    args: [
+      "run",
+      "--project",
+      projectRoot,
+      "python",
+      getMilknadoBackendScriptPath(projectRoot),
+    ],
+  };
 }
 
 export async function runMilknadoCommand(
   options: RunMilknadoCommandOptions,
-): Promise<string> {
-  const execFileFn = options.execFileFn ?? execFileAsync;
+): Promise<void> {
+  const spawnFn = options.spawnFn ?? spawnProcess;
   const stdout = options.stdout ?? process.stdout;
   const stderr = options.stderr ?? process.stderr;
-  const backendScriptPath = getMilknadoBackendScriptPath(options.projectRoot);
-  const candidates = getPythonCandidates(options.env);
+  const { command, args } = getMilknadoCommand(options.projectRoot);
+  const child = spawnFn(command, args, {
+    cwd: options.projectRoot,
+    stdio: "pipe",
+  });
 
-  for (const candidate of candidates) {
-    try {
-      const { stdout: output, stderr: errorOutput } = await execFileFn(
-        candidate,
-        [backendScriptPath],
-        {
-          cwd: options.projectRoot,
-          encoding: "utf8",
-        },
-      );
-      if (output.length > 0) {
-        stdout.write(output);
-      }
-      if (errorOutput.length > 0) {
-        stderr.write(errorOutput);
-      }
-      return candidate;
-    } catch (error) {
-      if (isMissingExecutableError(error)) {
-        continue;
+  child.stdout.on("data", (chunk: OutputChunk) => {
+    stdout.write(chunk);
+  });
+  child.stderr.on("data", (chunk: OutputChunk) => {
+    stderr.write(chunk);
+  });
+
+  await waitForExit(child);
+}
+
+async function waitForExit(child: SpawnedProcess): Promise<void> {
+  await new Promise<void>((resolve, reject) => {
+    let settled = false;
+
+    const settle = (callback: () => void) => {
+      if (settled) {
+        return;
       }
 
-      writeKnownOutput(stdout, stderr, error);
-      const message = error instanceof Error ? error.message : String(error);
-      throw new Error(
-        `milknado backend failed using "${candidate}": ${message}`,
-      );
-    }
-  }
+      settled = true;
+      callback();
+    };
 
-  throw new Error(
-    `Unable to find a Python runtime for milknado. Tried: ${candidates.join(", ")}.`,
-  );
+    child.on("error", (error: unknown) => {
+      settle(() => {
+        if (isMissingExecutableError(error)) {
+          reject(
+            new Error(
+              'Unable to run milknado because "uv" was not found on PATH. Install uv from https://docs.astral.sh/uv/.',
+            ),
+          );
+          return;
+        }
+
+        const message = error instanceof Error ? error.message : String(error);
+        reject(new Error(`milknado backend failed via uv: ${message}`));
+      });
+    });
+
+    child.on("close", (code: number | null) => {
+      settle(() => {
+        if (code === 0) {
+          resolve();
+          return;
+        }
+
+        reject(
+          new Error(
+            `milknado backend failed via uv with exit code ${code ?? "unknown"}.`,
+          ),
+        );
+      });
+    });
+  });
 }
 
 function isMissingExecutableError(
@@ -96,22 +130,4 @@ function isMissingExecutableError(
 
 function isErrnoException(error: unknown): error is NodeJS.ErrnoException {
   return error instanceof Error && "code" in error;
-}
-
-function writeKnownOutput(
-  stdout: Pick<Writable, "write">,
-  stderr: Pick<Writable, "write">,
-  error: unknown,
-): void {
-  if (typeof error !== "object" || error === null) {
-    return;
-  }
-
-  if ("stdout" in error && typeof error.stdout === "string") {
-    stdout.write(error.stdout);
-  }
-
-  if ("stderr" in error && typeof error.stderr === "string") {
-    stderr.write(error.stderr);
-  }
 }

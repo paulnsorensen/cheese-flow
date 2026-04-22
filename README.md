@@ -57,9 +57,10 @@ npx cheese-flow milknado
 
 ## `milknado`
 
-- Runs a tiny Python backend from the TypeScript CLI
-- Prints a simple terminal UI directly to stdout
-- Prefers `MILKNADO_PYTHON` when set, then falls back to `python3` and `python`
+- Runs a Python backend through `uv run --project ...`
+- Streams the Rich-rendered terminal UI to stdout/stderr
+- Uses OR-Tools to solve and display a small linear optimization result
+- Requires `uv` on `PATH`
 
 ## Quality gates
 
