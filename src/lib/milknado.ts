@@ -52,7 +52,6 @@ export async function runMilknadoCommand(
   const stderr = options.stderr ?? process.stderr;
   const backendScriptPath = getMilknadoBackendScriptPath(options.projectRoot);
   const candidates = getPythonCandidates(options.env);
-  let lastError: unknown;
 
   for (const candidate of candidates) {
     try {
@@ -64,12 +63,14 @@ export async function runMilknadoCommand(
           encoding: "utf8",
         },
       );
-      stdout.write(output);
-      stderr.write(errorOutput);
+      if (output.length > 0) {
+        stdout.write(output);
+      }
+      if (errorOutput.length > 0) {
+        stderr.write(errorOutput);
+      }
       return candidate;
     } catch (error) {
-      lastError = error;
-
       if (isMissingExecutableError(error)) {
         continue;
       }
@@ -82,12 +83,8 @@ export async function runMilknadoCommand(
     }
   }
 
-  const detail =
-    isErrnoException(lastError) && typeof lastError.code === "string"
-      ? ` (${lastError.code})`
-      : "";
   throw new Error(
-    `Unable to find a Python runtime for milknado. Tried: ${candidates.join(", ")}${detail}.`,
+    `Unable to find a Python runtime for milknado. Tried: ${candidates.join(", ")}.`,
   );
 }
 
