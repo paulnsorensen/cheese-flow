@@ -38,6 +38,13 @@ Or target specific harnesses directly:
 npx tsx src/index.ts install --harness claude-code
 npx tsx src/index.ts install --harness codex
 npx tsx src/index.ts install --harness claude-code,codex
+npx tsx src/index.ts milknado
+```
+
+Once the package is built or published, the same TUI demo is available through:
+
+```bash
+npx cheese-flow milknado
 ```
 
 ## What `install` does
@@ -47,6 +54,12 @@ npx tsx src/index.ts install --harness claude-code,codex
 - Compiles `agents/*.md.eta` into plain markdown for the selected harness
 - Copies `skills/*/SKILL.md` into the harness bundle
 - Writes a small manifest for the generated bundle
+
+## `milknado`
+
+- Runs a tiny Python backend from the TypeScript CLI
+- Prints a simple terminal UI directly to stdout
+- Prefers `MILKNADO_PYTHON` when set, then falls back to `python3` and `python`
 
 ## Quality gates
 

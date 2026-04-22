@@ -10,6 +10,7 @@
   },
   "files": [
     "dist",
+    "python",
     "agents",
     "skills",
     "LICENSE",
