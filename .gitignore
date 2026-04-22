@@ -5,3 +5,4 @@ coverage/
 .codex/
 .claude/
 .vitest/
+.venv/

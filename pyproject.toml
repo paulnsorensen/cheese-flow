@@ -1,0 +1,14 @@
+[project]
+name = "cheese-flow-milknado"
+version = "0.1.0"
+description = "Python backend for the cheese-flow milknado command."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "ortools==9.14.6206",
+  "rich==14.2.0",
+]
+
+[build-system]
+requires = ["uv_build>=0.9.2,<0.10.0"]
+build-backend = "uv_build"
