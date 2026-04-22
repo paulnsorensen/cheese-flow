@@ -34,7 +34,13 @@ describe("milknado helpers", () => {
 
     expect(execFileFn).toHaveBeenCalledWith(
       "uv",
-      ["run", "--project", "/tmp/cheese-flow", "python", "/tmp/cheese-flow/python/milknado.py"],
+      [
+        "run",
+        "--project",
+        "/tmp/cheese-flow",
+        "python",
+        "/tmp/cheese-flow/python/milknado.py",
+      ],
       {
         cwd: "/tmp/cheese-flow",
         encoding: "utf8",
@@ -45,9 +51,11 @@ describe("milknado helpers", () => {
   });
 
   it("fails clearly when uv is unavailable", async () => {
-    const execFileFn = vi.fn<ExecFileFn>().mockRejectedValue(
-      Object.assign(new Error("missing"), { code: "ENOENT" }),
-    );
+    const execFileFn = vi
+      .fn<ExecFileFn>()
+      .mockRejectedValue(
+        Object.assign(new Error("missing"), { code: "ENOENT" }),
+      );
 
     await expect(
       runMilknadoCommand({
@@ -55,6 +63,25 @@ describe("milknado helpers", () => {
         execFileFn,
       }),
     ).rejects.toThrow(/Install uv/u);
+  });
+
+  it("writes stderr from a successful backend run", async () => {
+    const stdout = vi.fn();
+    const stderr = vi.fn();
+    const execFileFn = vi.fn<ExecFileFn>().mockResolvedValue({
+      stdout: "",
+      stderr: "warning\n",
+    });
+
+    await runMilknadoCommand({
+      projectRoot: "/tmp/cheese-flow",
+      execFileFn,
+      stdout: { write: stdout },
+      stderr: { write: stderr },
+    });
+
+    expect(stdout).not.toHaveBeenCalled();
+    expect(stderr).toHaveBeenCalledWith("warning\n");
   });
 
   it("surfaces backend failures after writing known output", async () => {
@@ -77,6 +104,23 @@ describe("milknado helpers", () => {
     ).rejects.toThrow(/milknado backend failed via uv/u);
     expect(stdout).toHaveBeenCalledWith("partial\n");
     expect(stderr).toHaveBeenCalledWith("traceback\n");
+  });
+
+  it("surfaces non-error backend failures without writing output", async () => {
+    const stdout = vi.fn();
+    const stderr = vi.fn();
+    const execFileFn = vi.fn<ExecFileFn>().mockRejectedValue("boom");
+
+    await expect(
+      runMilknadoCommand({
+        projectRoot: "/tmp/cheese-flow",
+        execFileFn,
+        stdout: { write: stdout },
+        stderr: { write: stderr },
+      }),
+    ).rejects.toThrow(/milknado backend failed via uv: boom/u);
+    expect(stdout).not.toHaveBeenCalled();
+    expect(stderr).not.toHaveBeenCalled();
   });
 });
 
