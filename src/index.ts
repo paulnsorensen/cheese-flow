@@ -9,6 +9,7 @@ import {
   runAllToolChecks,
 } from "./lib/doctor.js";
 import { type HarnessName, harnessDefinitions } from "./lib/harnesses.js";
+import { runMilknadoCommand } from "./lib/milknado.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -83,6 +84,20 @@ program
     if (hasBlockingFailure(results)) {
       process.exitCode = 1;
     }
+  });
+
+program
+  .command("milknado")
+  .description("Run the sample Python backend and print its TUI.")
+  .option(
+    "--project-root <path>",
+    "Project root that contains ./python and pyproject.toml.",
+    defaultProjectRoot,
+  )
+  .action(async (options: { projectRoot: string }) => {
+    await runMilknadoCommand({
+      projectRoot: path.resolve(options.projectRoot),
+    });
   });
 
 program.parseAsync(process.argv).catch((error: unknown) => {

@@ -10,6 +10,9 @@
   },
   "files": [
     "dist",
+    "python",
+    "pyproject.toml",
+    "uv.lock",
     "agents",
     "skills",
     "LICENSE",
