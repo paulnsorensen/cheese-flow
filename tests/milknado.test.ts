@@ -133,10 +133,52 @@ describe("milknado helpers", () => {
       spawnFn: vi.fn<SpawnFn>().mockReturnValue(child),
     });
 
-    child.emit("close", null);
+    child.emit("close", null, null);
 
     await expect(runPromise).rejects.toThrow(
       /milknado backend failed via uv with exit code unknown\./u,
+    );
+  });
+
+  it("reports the terminating signal when the process is killed", async () => {
+    const child = createMockChildProcess();
+    const runPromise = runMilknadoCommand({
+      projectRoot: path.resolve(path.sep, "tmp", "cheese-flow"),
+      spawnFn: vi.fn<SpawnFn>().mockReturnValue(child),
+    });
+
+    child.emit("close", null, "SIGKILL");
+
+    await expect(runPromise).rejects.toThrow(
+      /milknado backend failed via uv with signal SIGKILL\./u,
+    );
+  });
+
+  it("treats SIGINT as a user-cancelled run", async () => {
+    const child = createMockChildProcess();
+    const runPromise = runMilknadoCommand({
+      projectRoot: path.resolve(path.sep, "tmp", "cheese-flow"),
+      spawnFn: vi.fn<SpawnFn>().mockReturnValue(child),
+    });
+
+    child.emit("close", null, "SIGINT");
+
+    await expect(runPromise).rejects.toThrow(
+      /milknado run cancelled by SIGINT\./u,
+    );
+  });
+
+  it("treats SIGTERM as a user-cancelled run", async () => {
+    const child = createMockChildProcess();
+    const runPromise = runMilknadoCommand({
+      projectRoot: path.resolve(path.sep, "tmp", "cheese-flow"),
+      spawnFn: vi.fn<SpawnFn>().mockReturnValue(child),
+    });
+
+    child.emit("close", null, "SIGTERM");
+
+    await expect(runPromise).rejects.toThrow(
+      /milknado run cancelled by SIGTERM\./u,
     );
   });
 

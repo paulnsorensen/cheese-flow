@@ -14,9 +14,14 @@ type OutputReader = {
 export type SpawnedProcess = {
   stdout: OutputReader;
   stderr: OutputReader;
-  on(event: "close", listener: (code: number | null) => void): unknown;
+  on(
+    event: "close",
+    listener: (code: number | null, signal: NodeJS.Signals | null) => void,
+  ): unknown;
   on(event: "error", listener: (error: unknown) => void): unknown;
 };
+
+const userCancelSignals = new Set<NodeJS.Signals>(["SIGINT", "SIGTERM"]);
 
 export type SpawnFn = (
   file: string,
@@ -105,18 +110,22 @@ async function waitForExit(child: SpawnedProcess): Promise<void> {
       });
     });
 
-    child.on("close", (code: number | null) => {
+    child.on("close", (code: number | null, signal: NodeJS.Signals | null) => {
       settle(() => {
         if (code === 0) {
           resolve();
           return;
         }
 
-        reject(
-          new Error(
-            `milknado backend failed via uv with exit code ${code ?? "unknown"}.`,
-          ),
-        );
+        if (signal && userCancelSignals.has(signal)) {
+          reject(new Error(`milknado run cancelled by ${signal}.`));
+          return;
+        }
+
+        const detail = signal
+          ? `signal ${signal}`
+          : `exit code ${code ?? "unknown"}`;
+        reject(new Error(`milknado backend failed via uv with ${detail}.`));
       });
     });
   });
