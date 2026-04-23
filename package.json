@@ -28,9 +28,9 @@
     "format:check": "biome format .",
     "install:claude": "tsx src/index.ts install --harness claude-code",
     "install:codex": "tsx src/index.ts install --harness codex",
-    "lint": "tsc --noEmit -p tsconfig.json",
     "lint:fix": "biome check --write .",
     "lint:check": "biome check .",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage"
   },
