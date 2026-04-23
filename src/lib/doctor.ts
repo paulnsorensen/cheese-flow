@@ -1,6 +1,26 @@
 import { spawn } from "node:child_process";
+import { delimiter, dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 export type ToolTier = "required" | "recommended" | "suggested";
+
+const bundledBinDir = join(
+  dirname(fileURLToPath(import.meta.url)),
+  "..",
+  "..",
+  "node_modules",
+  ".bin",
+);
+
+function spawnEnv(): NodeJS.ProcessEnv {
+  const existingPath = process.env.PATH ?? "";
+  return {
+    ...process.env,
+    PATH: existingPath
+      ? `${bundledBinDir}${delimiter}${existingPath}`
+      : bundledBinDir,
+  };
+}
 
 export type ToolCheck = {
   name: string;
@@ -39,7 +59,10 @@ export const toolChecks: ToolCheck[] = [
 
 export async function runToolCheck(check: ToolCheck): Promise<ToolResult> {
   return new Promise<ToolResult>((resolve) => {
-    const child = spawn(check.name, ["--version"], { stdio: "pipe" });
+    const child = spawn(check.name, ["--version"], {
+      stdio: "pipe",
+      env: spawnEnv(),
+    });
     let stdout = "";
     let stderr = "";
 
