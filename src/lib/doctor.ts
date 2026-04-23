@@ -91,6 +91,8 @@ export function formatReport(results: ToolResult[]): string {
     lines.push(`  ${result.purpose}`);
     if (result.ok && result.version) {
       lines.push(`  found: ${result.version}`);
+    } else if (result.ok) {
+      lines.push(`  found`);
     } else {
       lines.push(`  install: ${result.installHint}`);
     }
