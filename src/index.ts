@@ -3,6 +3,11 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { Command, InvalidArgumentError } from "commander";
 import { installHarnessArtifacts } from "./lib/compiler.js";
+import {
+  formatReport,
+  hasBlockingFailure,
+  runAllToolChecks,
+} from "./lib/doctor.js";
 import { type HarnessName, harnessDefinitions } from "./lib/harnesses.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -24,7 +29,7 @@ function parseHarness(value: string): HarnessName {
 const program = new Command();
 
 program
-  .name("cheese-flow")
+  .name("cheese")
   .description(
     "Compile portable agents and Agent Skills into harness-specific markdown bundles.",
   )
@@ -64,6 +69,19 @@ program
 
     for (const output of outputs) {
       process.stdout.write(`Compiled harness bundle: ${output}\n`);
+    }
+  });
+
+program
+  .command("doctor")
+  .description(
+    "Verify required, recommended, and suggested CLI tools are installed.",
+  )
+  .action(async () => {
+    const results = await runAllToolChecks();
+    process.stdout.write(formatReport(results));
+    if (hasBlockingFailure(results)) {
+      process.exitCode = 1;
     }
   });
 
