@@ -9,6 +9,13 @@ import {
   runAllToolChecks,
 } from "./lib/doctor.js";
 import { type HarnessName, harnessDefinitions } from "./lib/harnesses.js";
+import {
+  defaultClientFactory,
+  defaultClientTransportFactory,
+  defaultServerFactory,
+  defaultServerTransportFactory,
+  runMcpProxy,
+} from "./lib/mcp-proxy.js";
 import { runMilknadoCommand } from "./lib/milknado.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -97,6 +104,26 @@ program
   .action(async (options: { projectRoot: string }) => {
     await runMilknadoCommand({
       projectRoot: path.resolve(options.projectRoot),
+    });
+  });
+
+program
+  .command("mcp")
+  .description(
+    "Run the MCP proxy: a TS stdio MCP server that forwards to a long-lived Python MCP server spawned via uv.",
+  )
+  .option(
+    "--project-root <path>",
+    "Project root that contains ./python/mcp_server.py and pyproject.toml.",
+    defaultProjectRoot,
+  )
+  .action(async (options: { projectRoot: string }) => {
+    await runMcpProxy({
+      projectRoot: path.resolve(options.projectRoot),
+      clientFactory: defaultClientFactory,
+      serverFactory: defaultServerFactory,
+      clientTransportFactory: defaultClientTransportFactory,
+      serverTransportFactory: defaultServerTransportFactory,
     });
   });
 
