@@ -27,6 +27,8 @@ const harnessModelSchema = z.object({
   default: z.string().min(1),
   "claude-code": z.string().min(1).optional(),
   codex: z.string().min(1).optional(),
+  cursor: z.string().min(1).optional(),
+  "copilot-cli": z.string().min(1).optional(),
 });
 
 const agentFrontmatterSchema = z.object({

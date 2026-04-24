@@ -56,6 +56,34 @@ describe("installHarnessArtifacts", () => {
 
     expect(claudeAgent).toContain("claude-sonnet-4-5");
     expect(codexAgent).toContain("gpt-5.1-codex");
+
+    // New emitters: plugin manifest + mcp config appear for both harnesses
+    const claudePlugin = JSON.parse(
+      await readFile(
+        path.join(projectRoot, ".claude", ".claude-plugin", "plugin.json"),
+        "utf8",
+      ),
+    ) as { name: string };
+    expect(claudePlugin.name).toBe("cheese-flow");
+
+    const claudeMcp = JSON.parse(
+      await readFile(path.join(projectRoot, ".claude", ".mcp.json"), "utf8"),
+    ) as { mcpServers: Record<string, unknown> };
+    expect(claudeMcp.mcpServers).toHaveProperty("tilth");
+    expect(claudeMcp.mcpServers).toHaveProperty("tavily");
+
+    const codexPlugin = JSON.parse(
+      await readFile(
+        path.join(projectRoot, ".codex", ".codex-plugin", "plugin.json"),
+        "utf8",
+      ),
+    ) as { name: string };
+    expect(codexPlugin.name).toBe("cheese-flow");
+
+    const codexMcp = JSON.parse(
+      await readFile(path.join(projectRoot, ".codex", ".mcp.json"), "utf8"),
+    ) as { mcpServers: Record<string, unknown> };
+    expect(codexMcp.mcpServers).toHaveProperty("tilth");
   });
 
   it("validates the shipped skill metadata", async () => {
@@ -147,6 +175,234 @@ describe("installHarnessArtifacts", () => {
     expect(manifest.agents).toEqual(["basic-agent.md"]);
     expect(manifest.skills).toEqual(["basic-skill", "nested-dir"]);
     expect(manifest.commands).toEqual([]);
+  });
+
+  it("emits dual-surface artifacts and manifests for cursor", async () => {
+    const projectRoot = await mkdtemp(
+      path.join(os.tmpdir(), "cheese-flow-cursor-"),
+    );
+    createdDirectories.push(projectRoot);
+    await import("node:fs/promises").then(async ({ cp }) => {
+      await cp(path.resolve("agents"), path.join(projectRoot, "agents"), {
+        recursive: true,
+      });
+      await cp(path.resolve("skills"), path.join(projectRoot, "skills"), {
+        recursive: true,
+      });
+    });
+
+    await installHarnessArtifacts({ projectRoot, harnesses: ["cursor"] });
+
+    const cursorRoot = path.join(projectRoot, ".cursor");
+
+    // Dual-surface: rule and command for the basic-skill
+    const rule = await readFile(
+      path.join(cursorRoot, "rules", "basic-skill.mdc"),
+      "utf8",
+    );
+    const command = await readFile(
+      path.join(cursorRoot, "commands", "basic-skill.md"),
+      "utf8",
+    );
+    expect(rule).toContain("alwaysApply: false");
+    expect(rule).toContain("description:");
+    expect(command).toBeTruthy();
+
+    // Plugin manifest at .cursor-plugin/plugin.json
+    const pluginJson = JSON.parse(
+      await readFile(
+        path.join(cursorRoot, ".cursor-plugin", "plugin.json"),
+        "utf8",
+      ),
+    ) as { name: string };
+    expect(pluginJson.name).toBe("cheese-flow");
+
+    // MCP config at mcp.json (no leading dot for cursor)
+    const mcpJson = JSON.parse(
+      await readFile(path.join(cursorRoot, "mcp.json"), "utf8"),
+    ) as { mcpServers: Record<string, unknown> };
+    expect(mcpJson.mcpServers).toHaveProperty("tilth");
+    expect(mcpJson.mcpServers).toHaveProperty("tavily");
+  });
+
+  it("emits plugin manifest, mcp config, and hooks for copilot-cli", async () => {
+    const projectRoot = await mkdtemp(
+      path.join(os.tmpdir(), "cheese-flow-copilot-"),
+    );
+    createdDirectories.push(projectRoot);
+    await import("node:fs/promises").then(async ({ cp }) => {
+      await cp(path.resolve("agents"), path.join(projectRoot, "agents"), {
+        recursive: true,
+      });
+      await cp(path.resolve("skills"), path.join(projectRoot, "skills"), {
+        recursive: true,
+      });
+    });
+
+    // Write an inline hooks.json source
+    await writeFile(
+      path.join(projectRoot, "hooks.json"),
+      JSON.stringify({
+        sessionStart: [{ type: "command", command: "echo start" }],
+      }),
+      "utf8",
+    );
+
+    await installHarnessArtifacts({ projectRoot, harnesses: ["copilot-cli"] });
+
+    const copilotRoot = path.join(projectRoot, ".copilot");
+
+    // Plugin manifest at .claude-plugin/plugin.json (copilot reuses same path)
+    const pluginJson = JSON.parse(
+      await readFile(
+        path.join(copilotRoot, ".claude-plugin", "plugin.json"),
+        "utf8",
+      ),
+    ) as { name: string; category?: string };
+    expect(pluginJson.name).toBe("cheese-flow");
+    expect(pluginJson.category).toBe("development");
+
+    // MCP config
+    const mcpJson = JSON.parse(
+      await readFile(path.join(copilotRoot, ".mcp.json"), "utf8"),
+    ) as { mcpServers: Record<string, unknown> };
+    expect(mcpJson.mcpServers).toHaveProperty("tilth");
+
+    // Hooks file with version:1 and camelCase keys
+    const hooksJson = JSON.parse(
+      await readFile(path.join(copilotRoot, "hooks.json"), "utf8"),
+    ) as { version: number; hooks: Record<string, unknown> };
+    expect(hooksJson.version).toBe(1);
+    expect(hooksJson.hooks).toHaveProperty("sessionStart");
+  });
+
+  it("emits hooks from hooks.json source into each non-cursor harness", async () => {
+    const projectRoot = await mkdtemp(
+      path.join(os.tmpdir(), "cheese-flow-hooks-"),
+    );
+    createdDirectories.push(projectRoot);
+    await import("node:fs/promises").then(async ({ cp }) => {
+      await cp(path.resolve("agents"), path.join(projectRoot, "agents"), {
+        recursive: true,
+      });
+      await cp(path.resolve("skills"), path.join(projectRoot, "skills"), {
+        recursive: true,
+      });
+    });
+
+    await writeFile(
+      path.join(projectRoot, "hooks.json"),
+      JSON.stringify({
+        preToolUse: [{ type: "command", command: "echo pre" }],
+        postToolUse: [{ type: "command", command: "echo post" }],
+      }),
+      "utf8",
+    );
+
+    await installHarnessArtifacts({
+      projectRoot,
+      harnesses: ["claude-code", "codex"],
+    });
+
+    // claude-code: camelCase hooks
+    const claudeHooks = JSON.parse(
+      await readFile(path.join(projectRoot, ".claude", "hooks.json"), "utf8"),
+    ) as { hooks: Record<string, unknown> };
+    expect(claudeHooks.hooks).toHaveProperty("preToolUse");
+    expect(claudeHooks.hooks).toHaveProperty("postToolUse");
+
+    // codex: PascalCase hooks with matcher wrapper
+    const codexHooks = JSON.parse(
+      await readFile(path.join(projectRoot, ".codex", "hooks.json"), "utf8"),
+    ) as { hooks: Record<string, unknown> };
+    expect(codexHooks.hooks).toHaveProperty("PreToolUse");
+    expect(codexHooks.hooks).toHaveProperty("PostToolUse");
+  });
+
+  it("reads plugin metadata from .claude-plugin/plugin.json when present", async () => {
+    const projectRoot = await mkdtemp(
+      path.join(os.tmpdir(), "cheese-flow-plugin-meta-"),
+    );
+    createdDirectories.push(projectRoot);
+    await import("node:fs/promises").then(async ({ cp, mkdir: mkd }) => {
+      await cp(path.resolve("agents"), path.join(projectRoot, "agents"), {
+        recursive: true,
+      });
+      await cp(path.resolve("skills"), path.join(projectRoot, "skills"), {
+        recursive: true,
+      });
+      await mkd(path.join(projectRoot, ".claude-plugin"), { recursive: true });
+    });
+
+    const customMeta = {
+      name: "my-custom-plugin",
+      version: "2.0.0",
+      description: "Custom plugin description.",
+      author: { name: "Test Author" },
+      license: "Apache-2.0",
+      repository: "https://github.com/test/repo",
+      homepage: "https://example.com",
+      keywords: ["test", "plugin"],
+    };
+
+    await writeFile(
+      path.join(projectRoot, ".claude-plugin", "plugin.json"),
+      JSON.stringify(customMeta),
+      "utf8",
+    );
+
+    await installHarnessArtifacts({ projectRoot, harnesses: ["claude-code"] });
+
+    const pluginJson = JSON.parse(
+      await readFile(
+        path.join(projectRoot, ".claude", ".claude-plugin", "plugin.json"),
+        "utf8",
+      ),
+    ) as { name: string; homepage?: string; keywords?: string[] };
+
+    expect(pluginJson.name).toBe("my-custom-plugin");
+    expect(pluginJson.homepage).toBe("https://example.com");
+    expect(pluginJson.keywords).toEqual(["test", "plugin"]);
+  });
+
+  it("rethrows non-ENOENT errors when reading plugin metadata", async () => {
+    const projectRoot = await mkdtemp(path.join(os.tmpdir(), "cheese-flow-"));
+    createdDirectories.push(projectRoot);
+    await import("node:fs/promises").then(async ({ cp, mkdir }) => {
+      await cp(path.resolve("agents"), path.join(projectRoot, "agents"), {
+        recursive: true,
+      });
+      await cp(path.resolve("skills"), path.join(projectRoot, "skills"), {
+        recursive: true,
+      });
+      // Create plugin.json as a directory to trigger EISDIR
+      await mkdir(path.join(projectRoot, ".claude-plugin", "plugin.json"), {
+        recursive: true,
+      });
+    });
+
+    await expect(
+      installHarnessArtifacts({ projectRoot, harnesses: ["claude-code"] }),
+    ).rejects.toThrow();
+  });
+
+  it("rethrows non-ENOENT errors when reading hooks.json", async () => {
+    const projectRoot = await mkdtemp(path.join(os.tmpdir(), "cheese-flow-"));
+    createdDirectories.push(projectRoot);
+    await import("node:fs/promises").then(async ({ cp, mkdir }) => {
+      await cp(path.resolve("agents"), path.join(projectRoot, "agents"), {
+        recursive: true,
+      });
+      await cp(path.resolve("skills"), path.join(projectRoot, "skills"), {
+        recursive: true,
+      });
+      // Create hooks.json as a directory to trigger EISDIR
+      await mkdir(path.join(projectRoot, "hooks.json"), { recursive: true });
+    });
+
+    await expect(
+      installHarnessArtifacts({ projectRoot, harnesses: ["claude-code"] }),
+    ).rejects.toThrow();
   });
 
   it("keeps help on -h and uses -H for harness selection", async () => {

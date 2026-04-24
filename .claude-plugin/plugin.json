@@ -1,0 +1,13 @@
+{
+  "name": "cheese-flow",
+  "version": "0.1.0",
+  "description": "Opinionated coding harness plugin scaffold for portable agents and skills.",
+  "author": {
+    "name": "Paul Sorensen",
+    "url": "https://github.com/paulnsorensen"
+  },
+  "license": "MIT",
+  "repository": "https://github.com/paulnsorensen/cheese-flow",
+  "homepage": "https://github.com/paulnsorensen/cheese-flow",
+  "keywords": ["agents", "skills", "cheese-flow", "claude-code", "copilot-cli"]
+}

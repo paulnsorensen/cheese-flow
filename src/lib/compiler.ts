@@ -2,8 +2,16 @@ import type { Dirent } from "node:fs";
 import { cp, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { Eta } from "eta";
+import { emitCursorSurface } from "./cursor-surface.js";
 import { parseFrontmatter } from "./frontmatter.js";
 import { type HarnessName, harnessDefinitions } from "./harnesses.js";
+import { emitHooks, type HooksSource, hooksSourceSchema } from "./hooks.js";
+import { emitMcpConfig } from "./mcp.js";
+import {
+  emitPluginManifest,
+  type PluginMetadata,
+  pluginMetadataSchema,
+} from "./plugin-manifest.js";
 import {
   type AgentFrontmatter,
   parseAgentFrontmatter,
@@ -13,6 +21,54 @@ import {
   type SkillFrontmatter,
 } from "./schemas.js";
 
+const DEFAULT_PLUGIN_METADATA: PluginMetadata = {
+  name: "cheese-flow",
+  version: "0.1.0",
+  description:
+    "Opinionated coding harness plugin scaffold for portable agents and skills.",
+  author: { name: "Paul Sorensen" },
+  license: "MIT",
+  repository: "https://github.com/paulnsorensen/cheese-flow",
+};
+
+function isFileNotFound(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    (error as { code?: unknown }).code === "ENOENT"
+  );
+}
+
+async function readPluginMetadata(
+  projectRoot: string,
+): Promise<PluginMetadata> {
+  const pluginJsonPath = path.join(
+    projectRoot,
+    ".claude-plugin",
+    "plugin.json",
+  );
+  let raw: string;
+  try {
+    raw = await readFile(pluginJsonPath, "utf8");
+  } catch (error) {
+    if (isFileNotFound(error)) return DEFAULT_PLUGIN_METADATA;
+    throw error;
+  }
+  return pluginMetadataSchema.parse(JSON.parse(raw));
+}
+
+async function readHooksSource(projectRoot: string): Promise<HooksSource> {
+  const hooksJsonPath = path.join(projectRoot, "hooks.json");
+  let raw: string;
+  try {
+    raw = await readFile(hooksJsonPath, "utf8");
+  } catch (error) {
+    if (isFileNotFound(error)) return {};
+    throw error;
+  }
+  return hooksSourceSchema.parse(JSON.parse(raw)) as HooksSource;
+}
+
 const eta = new Eta({ autoEscape: false, autoTrim: false, useWith: true });
 
 type InstallOptions = {
@@ -20,51 +76,89 @@ type InstallOptions = {
   harnesses: HarnessName[];
 };
 
+type ProcessHarnessContext = {
+  harnessName: HarnessName;
+  projectRoot: string;
+  pluginMetadata: PluginMetadata;
+  hooksSource: HooksSource;
+  skillSourceDirectory: string;
+};
+
 export async function installHarnessArtifacts(
   options: InstallOptions,
 ): Promise<string[]> {
+  const pluginMetadata = await readPluginMetadata(options.projectRoot);
+  const hooksSource = await readHooksSource(options.projectRoot);
+  const skillSourceDirectory = path.join(options.projectRoot, "skills");
   const outputs: string[] = [];
   for (const harnessName of options.harnesses) {
-    outputs.push(await processHarness(harnessName, options.projectRoot));
+    outputs.push(
+      await processHarness({
+        harnessName,
+        projectRoot: options.projectRoot,
+        pluginMetadata,
+        hooksSource,
+        skillSourceDirectory,
+      }),
+    );
   }
   return outputs;
 }
 
 async function processHarness(
-  harnessName: HarnessName,
-  projectRoot: string,
+  context: ProcessHarnessContext,
 ): Promise<string> {
-  const harness = harnessDefinitions[harnessName];
-  const outputRoot = path.join(projectRoot, harness.outputRoot);
+  const harness = harnessDefinitions[context.harnessName];
+  const outputRoot = path.join(context.projectRoot, harness.outputRoot);
   const agentOutputDirectory = path.join(outputRoot, harness.agentDirectory);
   const skillOutputDirectory = path.join(outputRoot, harness.skillDirectory);
-  const commandOutputDirectory = path.join(
-    outputRoot,
-    harness.commandDirectory,
-  );
 
   await rm(outputRoot, { recursive: true, force: true });
   await mkdir(agentOutputDirectory, { recursive: true });
   await mkdir(skillOutputDirectory, { recursive: true });
-  await mkdir(commandOutputDirectory, { recursive: true });
 
   const agents = await compileAgents({
-    projectRoot,
-    harness: harnessName,
+    projectRoot: context.projectRoot,
+    harness: context.harnessName,
     agentOutputDirectory,
   });
-  const skills = await copySkills({ projectRoot, skillOutputDirectory });
-  const commands = await copyCommands({
-    projectRoot,
-    commandOutputDirectory,
+  const skills = await copySkills({
+    projectRoot: context.projectRoot,
+    skillOutputDirectory,
   });
 
+  let commands: string[] = [];
+  if (harness.commandDirectory !== undefined) {
+    const commandOutputDirectory = path.join(
+      outputRoot,
+      harness.commandDirectory,
+    );
+    await mkdir(commandOutputDirectory, { recursive: true });
+    commands = await copyCommands({
+      projectRoot: context.projectRoot,
+      commandOutputDirectory,
+    });
+  }
+
   await writeManifest(outputRoot, {
-    harness: harnessName,
+    harness: context.harnessName,
     agents,
     skills,
     commands,
   });
+
+  await emitPluginManifest(
+    context.harnessName,
+    context.pluginMetadata,
+    outputRoot,
+  );
+  await emitMcpConfig(context.harnessName, outputRoot);
+  await emitHooks(context.harnessName, context.hooksSource, outputRoot);
+
+  if (context.harnessName === "cursor") {
+    await emitCursorSurface(context.skillSourceDirectory, outputRoot);
+  }
+
   return outputRoot;
 }
 

@@ -14,7 +14,10 @@ Opinionated scaffolding for portable agents and skills that can be compiled into
 - `src/` — TypeScript CLI and compiler
 - `agents/` — harness-agnostic Eta markdown templates
 - `skills/` — portable Agent Skills definitions
-- `.claude/` / `.codex/` — generated install outputs
+- `.claude-plugin/` — Claude Code + Copilot CLI install manifest
+- `.cursor-plugin/` — Cursor install manifest
+- `.mcp.json` — shared MCP server declarations (tilth, tavily)
+- `.claude/` / `.codex/` / `.cursor/` / `.copilot/` — generated install outputs (gitignored)
 
 ## Getting started
 
@@ -23,6 +26,8 @@ npm install
 npm run build
 npm run install:claude
 npm run install:codex
+npm run install:cursor
+npm run install:copilot
 ```
 
 Or use the repository automation entrypoints:
@@ -37,8 +42,25 @@ Or target specific harnesses directly:
 ```bash
 npx tsx src/index.ts install --harness claude-code
 npx tsx src/index.ts install --harness codex
-npx tsx src/index.ts install --harness claude-code,codex
+npx tsx src/index.ts install --harness cursor
+npx tsx src/index.ts install --harness copilot-cli
+npx tsx src/index.ts install --harness claude-code,codex,cursor,copilot-cli
 npx tsx src/index.ts milknado
+```
+
+## Installing cheese-flow as a plugin
+
+Teammates can install directly from the repo via their harness's native plugin command:
+
+```
+# Claude Code
+/plugin install paulnsorensen/cheese-flow
+
+# Copilot CLI
+copilot plugin install paulnsorensen/cheese-flow
+
+# Cursor
+# Configure via .cursor/settings.json pointing at this repo (see Cursor plugin docs)
 ```
 
 Once the package is built or published, the same TUI demo is available through:
@@ -72,9 +94,14 @@ npx cheese-flow milknado
 
 - Claude Code bundle: `.claude/`
 - Codex bundle: `.codex/`
+- Cursor bundle: `.cursor/`
+- Copilot CLI bundle: `.copilot/`
 
 Each bundle contains:
 
 - `agents/*.md`
-- `skills/*/SKILL.md`
+- `skills/*/SKILL.md` (Cursor: `rules/<skill>.mdc` + `commands/<skill>.md` dual-surface)
 - `manifest.json`
+- `.mcp.json` (Cursor: `mcp.json`)
+- Per-harness plugin manifest (`.claude-plugin/`, `.cursor-plugin/`, or `.codex-plugin/`)
+- `hooks.json` (except Cursor, which does not support hooks)

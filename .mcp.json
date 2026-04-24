@@ -1,0 +1,16 @@
+{
+  "mcpServers": {
+    "tilth": {
+      "command": "npx",
+      "args": ["tilth", "--mcp", "--edit"]
+    },
+    "tavily": {
+      "command": "npx",
+      "args": ["-y", "tavily-mcp@latest"],
+      "env": {
+        "TAVILY_API_KEY": "${TAVILY_API_KEY}"
+      }
+    }
+  },
+  "__TODO_milknado__": "Milknado MCP server integration deferred — see milknado-mcp follow-up spec."
+}
