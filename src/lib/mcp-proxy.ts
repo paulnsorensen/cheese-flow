@@ -16,7 +16,7 @@ export type ProxyTransport = {
 export type ProxyClient = {
   connect(transport: ProxyTransport): Promise<void>;
   close(): Promise<void>;
-  listTools(): Promise<unknown>;
+  listTools(params?: { cursor?: string }): Promise<unknown>;
   callTool(params: {
     name: string;
     arguments?: Record<string, unknown>;
@@ -25,7 +25,7 @@ export type ProxyClient = {
 
 type RequestHandlerSchema = unknown;
 type RequestHandler = (request: {
-  params: { name: string; arguments?: Record<string, unknown> };
+  params?: Record<string, unknown>;
 }) => Promise<unknown>;
 
 export type ProxyServer = {
@@ -76,11 +76,22 @@ export function wireProxyHandlers(
   server: ProxyServer,
   client: ProxyClient,
 ): void {
-  server.setRequestHandler(ListToolsRequestSchema, async () => {
-    return await client.listTools();
+  server.setRequestHandler(ListToolsRequestSchema, async (request) => {
+    const cursor =
+      typeof request.params?.cursor === "string"
+        ? request.params.cursor
+        : undefined;
+    return await client.listTools(
+      cursor === undefined ? undefined : { cursor },
+    );
   });
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
-    return await client.callTool(request.params);
+    return await client.callTool(
+      request.params as {
+        name: string;
+        arguments?: Record<string, unknown>;
+      },
+    );
   });
 }
 
@@ -123,8 +134,17 @@ export async function runMcpProxy(options: RunMcpProxyOptions): Promise<void> {
     ? Promise.race([serverClosed, options.shutdownSignal])
     : serverClosed;
 
-  await client.connect(clientTransport);
   try {
+    try {
+      await client.connect(clientTransport);
+    } catch (error) {
+      if (isMissingUvError(error)) {
+        throw new Error(
+          'Unable to run the MCP proxy because "uv" was not found on PATH. Install uv from https://docs.astral.sh/uv/.',
+        );
+      }
+      throw error;
+    }
     wireProxyHandlers(server, client);
     await server.connect(serverTransport);
     await stop;
@@ -132,4 +152,12 @@ export async function runMcpProxy(options: RunMcpProxyOptions): Promise<void> {
     await server.close().catch(() => undefined);
     await client.close().catch(() => undefined);
   }
+}
+
+function isMissingUvError(error: unknown): boolean {
+  return (
+    error instanceof Error &&
+    "code" in error &&
+    (error as NodeJS.ErrnoException).code === "ENOENT"
+  );
 }

@@ -1,4 +1,5 @@
 import { execFile } from "node:child_process";
+import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 import { describe, expect, it, vi } from "vitest";
@@ -20,7 +21,7 @@ const execFileAsync = promisify(execFile);
 
 describe("mcp-proxy helpers", () => {
   it("builds the MCP server script path relative to the project root", () => {
-    const projectRoot = path.resolve(path.sep, "tmp", "cheese-flow");
+    const projectRoot = path.join(os.tmpdir(), "cheese-flow");
 
     expect(getMcpServerScriptPath(projectRoot)).toBe(
       path.join(projectRoot, "python", "mcp_server.py"),
@@ -28,7 +29,7 @@ describe("mcp-proxy helpers", () => {
   });
 
   it("builds the uv command for the MCP server", () => {
-    const projectRoot = path.resolve(path.sep, "tmp", "cheese-flow");
+    const projectRoot = path.join(os.tmpdir(), "cheese-flow");
 
     expect(getMcpServerCommand(projectRoot)).toEqual({
       command: "uv",
@@ -80,6 +81,34 @@ describe("wireProxyHandlers", () => {
       name: "blend_plan",
       arguments: { x: 1 },
     });
+  });
+
+  it("forwards the tools/list cursor to the downstream client for pagination", async () => {
+    const client: ProxyClient = {
+      connect: vi.fn(),
+      close: vi.fn(),
+      listTools: vi.fn().mockResolvedValue({ tools: [] }),
+      callTool: vi.fn(),
+    };
+
+    const handlers = new Map<unknown, (request: unknown) => Promise<unknown>>();
+    const server: ProxyServer = {
+      connect: vi.fn(),
+      close: vi.fn(),
+      setRequestHandler: vi.fn((schema, handler) => {
+        handlers.set(schema, handler as (request: unknown) => Promise<unknown>);
+      }),
+    };
+
+    wireProxyHandlers(server, client);
+    const [listSchema] = Array.from(handlers.keys());
+    const listHandler = handlers.get(listSchema);
+
+    await listHandler?.({ params: { cursor: "page-2" } });
+    expect(client.listTools).toHaveBeenCalledWith({ cursor: "page-2" });
+
+    await listHandler?.({ params: {} });
+    expect(client.listTools).toHaveBeenLastCalledWith(undefined);
   });
 });
 
@@ -147,7 +176,7 @@ describe("runMcpProxy", () => {
     expect(client.close).toHaveBeenCalledTimes(1);
   });
 
-  it("propagates client connect failures and still attempts to close", async () => {
+  it("propagates client connect failures and still closes both sides", async () => {
     const client = createMockClient();
     const server = createMockServer();
     client.connect = vi.fn().mockRejectedValue(new Error("spawn failed"));
@@ -164,6 +193,31 @@ describe("runMcpProxy", () => {
     ).rejects.toThrow(/spawn failed/u);
 
     expect(server.connect).not.toHaveBeenCalled();
+    expect(server.close).toHaveBeenCalledTimes(1);
+    expect(client.close).toHaveBeenCalledTimes(1);
+  });
+
+  it("translates a missing uv executable (ENOENT) into a friendly error", async () => {
+    const client = createMockClient();
+    const server = createMockServer();
+    const enoent = Object.assign(new Error("spawn uv ENOENT"), {
+      code: "ENOENT",
+    });
+    client.connect = vi.fn().mockRejectedValue(enoent);
+
+    await expect(
+      runMcpProxy({
+        projectRoot: "/tmp/project",
+        clientFactory: () => client,
+        serverFactory: () => server,
+        clientTransportFactory: () => createMockTransport(),
+        serverTransportFactory: () => createMockTransport(),
+        shutdownSignal: Promise.resolve(),
+      }),
+    ).rejects.toThrow(/"uv" was not found on PATH/u);
+
+    expect(server.close).toHaveBeenCalledTimes(1);
+    expect(client.close).toHaveBeenCalledTimes(1);
   });
 });
 
