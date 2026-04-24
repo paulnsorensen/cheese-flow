@@ -1,6 +1,6 @@
 ---
 name: briesearch
-description: Multi-source research orchestrator. Routes a question across web search, library docs, and in-repo tools, writes findings to .claude/research/<slug>.md, and returns a compact synthesis to the main context.
+description: Multi-source research orchestrator. Routes a question across web search, library docs, and in-repo tools, writes findings to <harness>/research/<slug>.md, and returns a compact synthesis to the main context.
 argument-hint: "<question | library | API | dependency>"
 metadata:
   owner: cheese-flow
@@ -12,8 +12,9 @@ metadata:
 
 `/briesearch` is the research orchestrator. It routes a question across
 multiple information sources in parallel, writes full findings to
-`.claude/research/<slug>.md`, and returns a compact synthesis back to the
-main context so it does not pollute the caller's window.
+`<harness>/research/<slug>.md`, and returns a compact synthesis back to the
+main context so it does not pollute the caller's window. `<harness>` is the
+active harness output root — `.claude` for Claude Code, `.codex` for Codex.
 
 ## Source routing
 
@@ -29,7 +30,7 @@ merged; conflicts are flagged in the synthesis.
 
 ## Output contract
 
-- **Full report** written to `.claude/research/<slug>.md`:
+- **Full report** written to `<harness>/research/<slug>.md`:
   - Question and scope.
   - Source-by-source findings with inline citations.
   - Conflicts, caveats, and freshness notes.
@@ -51,7 +52,7 @@ merged; conflicts are flagged in the synthesis.
 ## Deferred behavior
 
 > **Scaffold notice.** Parallel source dispatch and the
-> `.claude/research/<slug>.md` write are not yet wired. This file
+> `<harness>/research/<slug>.md` write are not yet wired. This file
 > documents the routing and output contract. The current implementation
 > should describe what `/briesearch` would do and stop — it does not yet
 > call Tavily, Serper, Context7, or the codebase tools.

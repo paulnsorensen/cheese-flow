@@ -84,7 +84,9 @@ type CompileAgentsOptions = {
 
 async function compileAgents(options: CompileAgentsOptions): Promise<string[]> {
   const sourceDirectory = path.join(options.projectRoot, "agents");
-  const entries = await readdir(sourceDirectory, { withFileTypes: true });
+  const entries = (await readdir(sourceDirectory, { withFileTypes: true }))
+    .slice()
+    .sort((a, b) => a.name.localeCompare(b.name));
   const compiled: string[] = [];
 
   for (const entry of entries) {
@@ -124,7 +126,9 @@ type CopySkillsOptions = {
 
 async function copySkills(options: CopySkillsOptions): Promise<string[]> {
   const sourceDirectory = path.join(options.projectRoot, "skills");
-  const entries = await readdir(sourceDirectory, { withFileTypes: true });
+  const entries = (await readdir(sourceDirectory, { withFileTypes: true }))
+    .slice()
+    .sort((a, b) => a.name.localeCompare(b.name));
   const copied: string[] = [];
 
   for (const entry of entries) {
@@ -175,6 +179,7 @@ async function copyCommands(options: CopyCommandsOptions): Promise<string[]> {
     }
     throw error;
   }
+  entries = entries.slice().sort((a, b) => a.name.localeCompare(b.name));
   const copied: string[] = [];
 
   for (const entry of entries) {

@@ -1,6 +1,6 @@
 ---
 name: mold
-description: Spec writer. Runs a focused dialogue to shape a feature, surfaces at least two approaches with trade-offs, and saves the resulting spec to .claude/specs/<slug>.md only after explicit user approval.
+description: Spec writer. Runs a focused dialogue to shape a feature, surfaces at least two approaches with trade-offs, and saves the resulting spec to <harness>/specs/<slug>.md only after explicit user approval.
 argument-hint: "<rough idea | feature request | issue reference>"
 metadata:
   owner: cheese-flow
@@ -12,7 +12,9 @@ metadata:
 
 `/mold` shapes a rough idea into an implementable spec. It runs a focused
 dialogue — one clarifying question at a time — and saves the result to
-`.claude/specs/<slug>.md` only after you explicitly approve.
+`<harness>/specs/<slug>.md` only after you explicitly approve. `<harness>`
+is the active harness output root — `.claude` for Claude Code, `.codex`
+for Codex.
 
 ## Dialogue style
 
@@ -21,7 +23,7 @@ dialogue — one clarifying question at a time — and saves the result to
 - **Always surface alternatives.** Any non-trivial spec produces at least
   two viable approaches with their trade-offs. "Do nothing" is always a
   candidate and must be considered.
-- **Approval gate.** Nothing is written to `.claude/specs/` until the user
+- **Approval gate.** Nothing is written to `<harness>/specs/` until the user
   says yes.
 
 ## Spec skeleton
@@ -54,7 +56,7 @@ for anything above trivial complexity.
 ## Deferred behavior
 
 > **Scaffold notice.** The conversational loop and approval-gated write
-> to `.claude/specs/` are not yet wired. This file documents the spec
+> to `<harness>/specs/` are not yet wired. This file documents the spec
 > skeleton and the dialogue contract. The current implementation should
 > describe what `/mold` would produce and stop — it does not yet run the
 > interactive session or write any files.
@@ -64,5 +66,5 @@ The next iteration will:
 - Implement the single-question-at-a-time dialogue.
 - Enforce the "surface at least two approaches" rule on every non-trivial
   spec.
-- Gate the write to `.claude/specs/<slug>.md` behind explicit user
+- Gate the write to `<harness>/specs/<slug>.md` behind explicit user
   approval via `AskUserQuestion`.
