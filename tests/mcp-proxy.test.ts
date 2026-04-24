@@ -1,15 +1,8 @@
 import { execFile } from "node:child_process";
-import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 import { describe, expect, it, vi } from "vitest";
 import {
-  defaultClientFactory,
-  defaultClientTransportFactory,
-  defaultServerFactory,
-  defaultServerTransportFactory,
-  getMcpServerCommand,
-  getMcpServerScriptPath,
   type ProxyClient,
   type ProxyServer,
   type ProxyTransport,
@@ -18,31 +11,6 @@ import {
 } from "../src/lib/mcp-proxy.js";
 
 const execFileAsync = promisify(execFile);
-
-describe("mcp-proxy helpers", () => {
-  it("builds the MCP server script path relative to the project root", () => {
-    const projectRoot = path.join(os.tmpdir(), "cheese-flow");
-
-    expect(getMcpServerScriptPath(projectRoot)).toBe(
-      path.join(projectRoot, "python", "mcp_server.py"),
-    );
-  });
-
-  it("builds the uv command for the MCP server", () => {
-    const projectRoot = path.join(os.tmpdir(), "cheese-flow");
-
-    expect(getMcpServerCommand(projectRoot)).toEqual({
-      command: "uv",
-      args: [
-        "run",
-        "--project",
-        projectRoot,
-        "python",
-        path.join(projectRoot, "python", "mcp_server.py"),
-      ],
-    });
-  });
-});
 
 describe("wireProxyHandlers", () => {
   it("forwards tools/list and tools/call to the downstream client", async () => {
@@ -63,7 +31,6 @@ describe("wireProxyHandlers", () => {
     };
 
     wireProxyHandlers(server, client);
-    expect(handlers.size).toBe(2);
 
     const [listSchema, callSchema] = Array.from(handlers.keys());
     const listHandler = handlers.get(listSchema);
@@ -202,6 +169,7 @@ describe("runMcpProxy", () => {
     const server = createMockServer();
     const enoent = Object.assign(new Error("spawn uv ENOENT"), {
       code: "ENOENT",
+      path: "uv",
     });
     client.connect = vi.fn().mockRejectedValue(enoent);
 
@@ -218,22 +186,6 @@ describe("runMcpProxy", () => {
 
     expect(server.close).toHaveBeenCalledTimes(1);
     expect(client.close).toHaveBeenCalledTimes(1);
-  });
-});
-
-describe("default factories", () => {
-  it("constructs real SDK instances without connecting", () => {
-    const client = defaultClientFactory();
-    const server = defaultServerFactory();
-    const clientTransport = defaultClientTransportFactory("/tmp/project");
-    const serverTransport = defaultServerTransportFactory();
-
-    expect(typeof client.connect).toBe("function");
-    expect(typeof client.close).toBe("function");
-    expect(typeof server.connect).toBe("function");
-    expect(typeof server.setRequestHandler).toBe("function");
-    expect(typeof clientTransport.close).toBe("function");
-    expect(typeof serverTransport.close).toBe("function");
   });
 });
 

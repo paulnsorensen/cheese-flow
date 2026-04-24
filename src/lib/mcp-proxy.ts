@@ -23,18 +23,15 @@ export type ProxyClient = {
   }): Promise<unknown>;
 };
 
-type RequestHandlerSchema = unknown;
-type RequestHandler = (request: {
-  params?: Record<string, unknown>;
-}) => Promise<unknown>;
-
 export type ProxyServer = {
   onclose?: () => void;
   connect(transport: ProxyTransport): Promise<void>;
   close(): Promise<void>;
   setRequestHandler(
-    schema: RequestHandlerSchema,
-    handler: RequestHandler,
+    schema: unknown,
+    handler: (request: {
+      params?: Record<string, unknown>;
+    }) => Promise<unknown>,
   ): void;
 };
 
@@ -52,11 +49,11 @@ export type RunMcpProxyOptions = {
   shutdownSignal?: Promise<void>;
 };
 
-export function getMcpServerScriptPath(projectRoot: string): string {
+function getMcpServerScriptPath(projectRoot: string): string {
   return path.join(projectRoot, "python", "mcp_server.py");
 }
 
-export function getMcpServerCommand(projectRoot: string): {
+function getMcpServerCommand(projectRoot: string): {
   command: string;
   args: string[];
 } {
@@ -86,11 +83,16 @@ export function wireProxyHandlers(
     );
   });
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
+    const params = request.params;
+    if (!params || typeof params.name !== "string") {
+      throw new Error("tools/call request is missing a tool name");
+    }
+    const name = params.name;
+    const rawArgs = params.arguments;
     return await client.callTool(
-      request.params as {
-        name: string;
-        arguments?: Record<string, unknown>;
-      },
+      typeof rawArgs === "object" && rawArgs !== null
+        ? { name, arguments: rawArgs as Record<string, unknown> }
+        : { name },
     );
   });
 }
@@ -135,16 +137,7 @@ export async function runMcpProxy(options: RunMcpProxyOptions): Promise<void> {
     : serverClosed;
 
   try {
-    try {
-      await client.connect(clientTransport);
-    } catch (error) {
-      if (isMissingUvError(error)) {
-        throw new Error(
-          'Unable to run the MCP proxy because "uv" was not found on PATH. Install uv from https://docs.astral.sh/uv/.',
-        );
-      }
-      throw error;
-    }
+    await connectClientOrExplain(client, clientTransport);
     wireProxyHandlers(server, client);
     await server.connect(serverTransport);
     await stop;
@@ -154,10 +147,29 @@ export async function runMcpProxy(options: RunMcpProxyOptions): Promise<void> {
   }
 }
 
-function isMissingUvError(error: unknown): boolean {
-  return (
-    error instanceof Error &&
-    "code" in error &&
-    (error as NodeJS.ErrnoException).code === "ENOENT"
-  );
+async function connectClientOrExplain(
+  client: ProxyClient,
+  transport: ProxyTransport,
+): Promise<void> {
+  try {
+    await client.connect(transport);
+  } catch (error) {
+    if (isMissingUvSpawnError(error)) {
+      throw new Error(
+        'Unable to run the MCP proxy because "uv" was not found on PATH. Install uv from https://docs.astral.sh/uv/.',
+      );
+    }
+    throw error;
+  }
+}
+
+function isMissingUvSpawnError(error: unknown): boolean {
+  if (!(error instanceof Error) || !("code" in error)) {
+    return false;
+  }
+  const errno = error as NodeJS.ErrnoException;
+  if (errno.code !== "ENOENT") {
+    return false;
+  }
+  return errno.path === "uv" || /\buv\b/.test(error.message);
 }

@@ -118,12 +118,18 @@ program
     defaultProjectRoot,
   )
   .action(async (options: { projectRoot: string }) => {
+    const shutdownSignal = new Promise<void>((resolve) => {
+      const onSignal = () => resolve();
+      process.once("SIGINT", onSignal);
+      process.once("SIGTERM", onSignal);
+    });
     await runMcpProxy({
       projectRoot: path.resolve(options.projectRoot),
       clientFactory: defaultClientFactory,
       serverFactory: defaultServerFactory,
       clientTransportFactory: defaultClientTransportFactory,
       serverTransportFactory: defaultServerTransportFactory,
+      shutdownSignal,
     });
   });
 
