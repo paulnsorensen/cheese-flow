@@ -541,9 +541,9 @@ describe("emitCursorSurface — filesystem attacks", () => {
 
 // ─── Root manifest validity ──────────────────────────────────────────────────
 
-describe("Root manifest files — validity", () => {
-  const repoRoot = "/Users/paul/conductor/workspaces/cheese-flow/kabul-v2";
+const repoRoot = path.resolve(import.meta.dirname, "..");
 
+describe("Root manifest files — validity", () => {
   it(".claude-plugin/plugin.json parses as valid JSON", async () => {
     const raw = await readFile(
       path.join(repoRoot, ".claude-plugin", "plugin.json"),
@@ -612,8 +612,6 @@ describe("Root manifest files — validity", () => {
 // ─── Gitignore sanity ────────────────────────────────────────────────────────
 
 describe("Gitignore sanity", () => {
-  const repoRoot = "/Users/paul/conductor/workspaces/cheese-flow/kabul-v2";
-
   it(".gitignore contains .cursor/ pattern", async () => {
     const gitignore = await readFile(path.join(repoRoot, ".gitignore"), "utf8");
     expect(gitignore).toContain(".cursor/");

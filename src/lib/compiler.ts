@@ -105,9 +105,7 @@ export async function installHarnessArtifacts(
   return outputs;
 }
 
-async function processHarness(
-  context: ProcessHarnessContext,
-): Promise<string> {
+async function processHarness(context: ProcessHarnessContext): Promise<string> {
   const harness = harnessDefinitions[context.harnessName];
   const outputRoot = path.join(context.projectRoot, harness.outputRoot);
   const agentOutputDirectory = path.join(outputRoot, harness.agentDirectory);
