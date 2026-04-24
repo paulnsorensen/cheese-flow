@@ -1,3 +1,4 @@
+import type { Dirent } from "node:fs";
 import { cp, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { Eta } from "eta";
@@ -6,6 +7,7 @@ import { type HarnessName, harnessDefinitions } from "./harnesses.js";
 import {
   type AgentFrontmatter,
   agentFrontmatterSchema,
+  commandFrontmatterSchema,
   resolveModel,
   type SkillFrontmatter,
   skillFrontmatterSchema,
@@ -28,10 +30,15 @@ export async function installHarnessArtifacts(
     const outputRoot = path.join(options.projectRoot, harness.outputRoot);
     const agentOutputDirectory = path.join(outputRoot, harness.agentDirectory);
     const skillOutputDirectory = path.join(outputRoot, harness.skillDirectory);
+    const commandOutputDirectory = path.join(
+      outputRoot,
+      harness.commandDirectory,
+    );
 
     await rm(outputRoot, { recursive: true, force: true });
     await mkdir(agentOutputDirectory, { recursive: true });
     await mkdir(skillOutputDirectory, { recursive: true });
+    await mkdir(commandOutputDirectory, { recursive: true });
 
     const compiledAgents = await compileAgents({
       projectRoot: options.projectRoot,
@@ -44,12 +51,18 @@ export async function installHarnessArtifacts(
       skillOutputDirectory,
     });
 
+    const copiedCommands = await copyCommands({
+      projectRoot: options.projectRoot,
+      commandOutputDirectory,
+    });
+
     const manifestPath = path.join(outputRoot, "manifest.json");
     const manifest = {
       harness: harnessName,
       generatedAt: new Date().toISOString(),
       agents: compiledAgents,
       skills: copiedSkills,
+      commands: copiedCommands,
     };
 
     await writeFile(
@@ -137,6 +150,55 @@ async function copySkills(options: CopySkillsOptions): Promise<string[]> {
       path.join(options.skillOutputDirectory, entry.name),
       {
         recursive: true,
+        force: true,
+      },
+    );
+    copied.push(entry.name);
+  }
+
+  return copied;
+}
+
+type CopyCommandsOptions = {
+  projectRoot: string;
+  commandOutputDirectory: string;
+};
+
+async function copyCommands(options: CopyCommandsOptions): Promise<string[]> {
+  const sourceDirectory = path.join(options.projectRoot, "commands");
+  let entries: Dirent[];
+  try {
+    entries = await readdir(sourceDirectory, { withFileTypes: true });
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      return [];
+    }
+    throw error;
+  }
+  const copied: string[] = [];
+
+  for (const entry of entries) {
+    if (!entry.isFile() || !entry.name.endsWith(".md")) {
+      continue;
+    }
+
+    const sourcePath = path.join(sourceDirectory, entry.name);
+    const parsed = parseFrontmatter<unknown>(
+      await readFile(sourcePath, "utf8"),
+    );
+    const frontmatter = commandFrontmatterSchema.parse(parsed.data);
+    const baseName = entry.name.replace(/\.md$/u, "");
+
+    if (frontmatter.name !== baseName) {
+      throw new Error(
+        `Command file "${entry.name}" must match frontmatter name "${frontmatter.name}".`,
+      );
+    }
+
+    await cp(
+      sourcePath,
+      path.join(options.commandOutputDirectory, entry.name),
+      {
         force: true,
       },
     );

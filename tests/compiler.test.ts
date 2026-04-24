@@ -150,10 +150,11 @@ describe("installHarnessArtifacts", () => {
         path.join(projectRoot, ".claude", "manifest.json"),
         "utf8",
       ),
-    ) as { agents: string[]; skills: string[] };
+    ) as { agents: string[]; skills: string[]; commands: string[] };
 
     expect(manifest.agents).toEqual(["basic-agent.md"]);
     expect(manifest.skills).toEqual(["basic-skill", "nested-dir"]);
+    expect(manifest.commands).toEqual([]);
   });
 
   it("keeps help on -h and uses -H for harness selection", async () => {

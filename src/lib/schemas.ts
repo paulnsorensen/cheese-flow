@@ -18,6 +18,13 @@ export const skillFrontmatterSchema = z.object({
     .optional(),
 });
 
+export const commandFrontmatterSchema = z.object({
+  name: slug,
+  description: z.string().min(1).max(1024),
+  "argument-hint": z.string().min(1).max(200).optional(),
+  metadata: z.record(z.string(), z.unknown()).optional(),
+});
+
 const harnessModelSchema = z.object({
   default: z.string().min(1),
   "claude-code": z.string().min(1).optional(),

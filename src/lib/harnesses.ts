@@ -6,6 +6,7 @@ export type HarnessDefinition = {
   outputRoot: string;
   agentDirectory: string;
   skillDirectory: string;
+  commandDirectory: string;
   defaultModel: string;
   notes: string[];
 };
@@ -17,6 +18,7 @@ export const harnessDefinitions: Record<HarnessName, HarnessDefinition> = {
     outputRoot: ".claude",
     agentDirectory: "agents",
     skillDirectory: "skills",
+    commandDirectory: "commands",
     defaultModel: "claude-sonnet-4-5",
     notes: [
       "Use concise markdown headings and explicit tool guidance.",
@@ -29,6 +31,7 @@ export const harnessDefinitions: Record<HarnessName, HarnessDefinition> = {
     outputRoot: ".codex",
     agentDirectory: "agents",
     skillDirectory: "skills",
+    commandDirectory: "commands",
     defaultModel: "gpt-5.1-codex",
     notes: [
       "Bias instructions toward patch-oriented execution and explicit constraints.",
