@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
@@ -11,9 +11,9 @@ import {
 } from "../src/lib/compiler.js";
 import { parseFrontmatter } from "../src/lib/frontmatter.js";
 import {
-  agentFrontmatterSchema,
+  parseAgentFrontmatter,
+  parseSkillFrontmatter,
   resolveModel,
-  skillFrontmatterSchema,
 } from "../src/lib/schemas.js";
 
 const createdDirectories: string[] = [];
@@ -21,11 +21,9 @@ const execFileAsync = promisify(execFile);
 
 afterEach(async () => {
   await Promise.all(
-    createdDirectories.splice(0).map(async (directory) => {
-      await import("node:fs/promises").then(({ rm }) =>
-        rm(directory, { recursive: true, force: true }),
-      );
-    }),
+    createdDirectories
+      .splice(0)
+      .map((directory) => rm(directory, { recursive: true, force: true })),
   );
 });
 
@@ -33,13 +31,11 @@ describe("installHarnessArtifacts", () => {
   it("compiles the basic agent template for Claude Code and Codex", async () => {
     const projectRoot = await mkdtemp(path.join(os.tmpdir(), "cheese-flow-"));
     createdDirectories.push(projectRoot);
-    await import("node:fs/promises").then(async ({ cp }) => {
-      await cp(path.resolve("agents"), path.join(projectRoot, "agents"), {
-        recursive: true,
-      });
-      await cp(path.resolve("skills"), path.join(projectRoot, "skills"), {
-        recursive: true,
-      });
+    await cp(path.resolve("agents"), path.join(projectRoot, "agents"), {
+      recursive: true,
+    });
+    await cp(path.resolve("skills"), path.join(projectRoot, "skills"), {
+      recursive: true,
     });
 
     const outputs = await installHarnessArtifacts({
@@ -82,16 +78,14 @@ describe("installHarnessArtifacts", () => {
       path.join(os.tmpdir(), "cheese-flow-invalid-"),
     );
     createdDirectories.push(projectRoot);
-    await import("node:fs/promises").then(async ({ mkdir, cp }) => {
-      await mkdir(path.join(projectRoot, "agents"), { recursive: true });
-      await mkdir(path.join(projectRoot, "skills", "wrong-name"), {
-        recursive: true,
-      });
-      await cp(
-        path.resolve("agents", "basic-agent.md.eta"),
-        path.join(projectRoot, "agents", "basic-agent.md.eta"),
-      );
+    await mkdir(path.join(projectRoot, "agents"), { recursive: true });
+    await mkdir(path.join(projectRoot, "skills", "wrong-name"), {
+      recursive: true,
     });
+    await cp(
+      path.resolve("agents", "basic-agent.md.eta"),
+      path.join(projectRoot, "agents", "basic-agent.md.eta"),
+    );
 
     await writeFile(
       path.join(projectRoot, "skills", "wrong-name", "SKILL.md"),
@@ -112,16 +106,14 @@ describe("installHarnessArtifacts", () => {
       path.join(os.tmpdir(), "cheese-flow-extra-files-"),
     );
     createdDirectories.push(projectRoot);
-    await import("node:fs/promises").then(async ({ cp, mkdir }) => {
-      await cp(path.resolve("agents"), path.join(projectRoot, "agents"), {
-        recursive: true,
-      });
-      await cp(path.resolve("skills"), path.join(projectRoot, "skills"), {
-        recursive: true,
-      });
-      await mkdir(path.join(projectRoot, "skills", "nested-dir"), {
-        recursive: true,
-      });
+    await cp(path.resolve("agents"), path.join(projectRoot, "agents"), {
+      recursive: true,
+    });
+    await cp(path.resolve("skills"), path.join(projectRoot, "skills"), {
+      recursive: true,
+    });
+    await mkdir(path.join(projectRoot, "skills", "nested-dir"), {
+      recursive: true,
     });
 
     await writeFile(
@@ -150,10 +142,11 @@ describe("installHarnessArtifacts", () => {
         path.join(projectRoot, ".claude", "manifest.json"),
         "utf8",
       ),
-    ) as { agents: string[]; skills: string[] };
+    ) as { agents: string[]; skills: string[]; commands: string[] };
 
     expect(manifest.agents).toEqual(["basic-agent.md"]);
     expect(manifest.skills).toEqual(["basic-skill", "nested-dir"]);
+    expect(manifest.commands).toEqual([]);
   });
 
   it("keeps help on -h and uses -H for harness selection", async () => {
@@ -196,12 +189,12 @@ describe("frontmatter and schema helpers", () => {
   });
 
   it("validates allowed tool field variants for skills and default tools for agents", () => {
-    const skill = skillFrontmatterSchema.parse({
+    const skill = parseSkillFrontmatter({
       name: "basic-skill",
       description: "Portable skill",
       "allowed-tools": "read write",
     });
-    const agent = agentFrontmatterSchema.parse({
+    const agent = parseAgentFrontmatter({
       name: "basic-agent",
       description: "Portable agent",
       models: {
