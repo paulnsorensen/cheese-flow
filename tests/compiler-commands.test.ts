@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { installHarnessArtifacts } from "../src/lib/compiler.js";
-import { commandFrontmatterSchema } from "../src/lib/schemas.js";
+import { parseCommandFrontmatter } from "../src/lib/schemas.js";
 
 const createdDirectories: string[] = [];
 
@@ -107,16 +107,14 @@ describe("copyCommands", () => {
   });
 
   it("validates the command frontmatter contract", () => {
-    const command = commandFrontmatterSchema.parse({
+    const command = parseCommandFrontmatter({
       name: "cheese",
       description: "Top-level router command.",
       "argument-hint": "<input>",
-      metadata: { owner: "cheese-flow", status: "scaffold" },
     });
 
     expect(command.name).toBe("cheese");
     expect(command["argument-hint"]).toBe("<input>");
-    expect(command.metadata?.status).toBe("scaffold");
   });
 });
 

@@ -2,10 +2,6 @@
 name: cheese
 description: Unified entry point that inspects user input, announces detected intent, and routes to the right downstream skill (/mold, /fromage, /age, /briesearch, or a debug/review flow) before dispatching.
 argument-hint: "<natural language description | spec path | issue# | PR# | bug report | file path>"
-metadata:
-  owner: cheese-flow
-  version: "0.1.0"
-  status: scaffold
 ---
 
 # /cheese

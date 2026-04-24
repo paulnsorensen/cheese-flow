@@ -2,10 +2,6 @@
 name: culture
 description: Free-form rubber-ducking and architecture exploration. Hard invariant is no writes to production files; the goal is a shared mental model, not code, spec, or PR output.
 argument-hint: "<question | half-formed idea | design problem>"
-metadata:
-  owner: cheese-flow
-  version: "0.1.0"
-  status: scaffold
 ---
 
 # /culture

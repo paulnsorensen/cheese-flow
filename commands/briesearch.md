@@ -2,10 +2,6 @@
 name: briesearch
 description: Multi-source research orchestrator. Routes a question across web search, library docs, and in-repo tools, writes findings to <harness>/research/<slug>.md, and returns a compact synthesis to the main context.
 argument-hint: "<question | library | API | dependency>"
-metadata:
-  owner: cheese-flow
-  version: "0.1.0"
-  status: scaffold
 ---
 
 # /briesearch

@@ -2,10 +2,6 @@
 name: mold
 description: Spec writer. Runs a focused dialogue to shape a feature, surfaces at least two approaches with trade-offs, and saves the resulting spec to <harness>/specs/<slug>.md only after explicit user approval.
 argument-hint: "<rough idea | feature request | issue reference>"
-metadata:
-  owner: cheese-flow
-  version: "0.1.0"
-  status: scaffold
 ---
 
 # /mold

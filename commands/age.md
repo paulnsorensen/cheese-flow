@@ -2,10 +2,6 @@
 name: age
 description: Staff Engineer code review. Runs six parallel review dimensions (safety, architecture, encapsulation, YAGNI, spec, history risk) and returns a unified scored report with only findings at confidence >= 50.
 argument-hint: "[--comprehensive] [--scope <path>] [<diff or change ref>]"
-metadata:
-  owner: cheese-flow
-  version: "0.1.0"
-  status: scaffold
 ---
 
 # /age

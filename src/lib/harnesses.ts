@@ -1,6 +1,6 @@
 export type HarnessName = "claude-code" | "codex";
 
-export type HarnessDefinition = {
+type HarnessDefinition = {
   name: HarnessName;
   displayName: string;
   outputRoot: string;
