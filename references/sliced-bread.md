@@ -158,12 +158,46 @@ application orchestrates those contracts.
 
 ### When does something belong in `common/`?
 
-- Value types used across 2+ slices (Money, UserId, Timestamp)
-- Domain events that multiple slices produce or consume
-- Shared exceptions or error types
+**Default: prefer a named slice.** Most "shared" code is a missing domain in
+disguise. If two slices both send notifications, the right answer is usually a
+`notifications/` slice with its own crust — not `common/notifications.*`.
+Naming the slice forces you to articulate what it *is*, rather than where it
+*goes*. A soft `common/` is worse than no `common/`; it becomes a junk drawer
+that quietly couples everything to everything.
 
-**Not common:** anything used by only one slice. Don't pre-promote to common
-"just in case" another slice might need it.
+`common/` is a quarantine for **shapes, not behavior**. Use it only when *all*
+of these hold:
+
+- The type has **zero behavior** — pure data, no methods that encode
+  slice-specific rules.
+- It is **referenced by 2+ slices today** (don't pre-promote on speculation).
+- A named slice is genuinely a worse fit — the type is too atomic to deserve
+  a domain of its own, or extraction would force a cycle.
+
+**Valid cases:**
+
+- Pure value types with universal semantics — `Money`, `UserId`, `Timestamp`,
+  `Email`.
+- Cross-slice event payloads, where producer and consumer can't both own the
+  schema without creating a cycle.
+- Infrastructural taxonomy with no domain — error enums, result wrappers,
+  opaque ID newtypes, trace/correlation context.
+- Ports (protocols/traits) defined for adapters to implement — these are
+  shape, not behavior.
+
+**Not common:**
+
+- Anything with logic ("validation helpers," "format utilities") — that logic
+  belongs to *some* slice. Find it, name it, and put it there.
+- Anything used by only one slice — keep it inside the slice.
+- Anything extracted "to be reusable later" — wait until a second caller
+  actually exists.
+- Cross-slice request/response models — prefer events; the producer owns the
+  schema and consumers adapt.
+
+If `common/` ever needs to import from a sibling slice, it has stopped being
+common. The fix is to move the offending type into a slice (or create one) —
+not to relax the leaf rule.
 
 ### When do you introduce an adapter?
 

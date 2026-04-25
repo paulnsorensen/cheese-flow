@@ -5,6 +5,12 @@ how slices interact with CQRS, anti-corruption layers, testing, slice-local
 duplication, and — the section most teams need most — when a slice should
 graduate from a folder to a workspace package, library, or service.
 
+> **Load this doc when** the task is a judgement call, not a build:
+> extracting/keeping near-duplicate models, deciding on a read/write split,
+> integrating with an external system whose vocabulary clashes, choosing a
+> per-slice testing strategy, or graduating a slice. For routine feature work
+> inside an existing slice, [Sliced Bread](../sliced-bread.md) alone is enough.
+
 > Companion to [Sliced Bread](../sliced-bread.md). Read that first for the
 > language-agnostic rationale and anti-patterns. See also
 > [attribution](./attribution.md) for predecessor lineage.
@@ -35,15 +41,29 @@ ordering, in practice:
 - One representation is read-optimized, the other is write-authoritative.
 - Extraction would force every change to coordinate across slice owners.
 
-### Promote to `common/` when
+### Promote to `common/` only when a named slice is the wrong answer
 
-- 3+ slices need the same value type with identical semantics.
-- The type is pure data with no slice-specific behavior (`Money`, `UserId`,
-  `Timestamp`, `Email`).
-- The type appears in events that cross slice boundaries.
+The first question is never "should this go in common?" — it's "is there a
+slice missing here?" Most extraction candidates turn out to be unnamed
+domains. A `notifications/` slice beats a `common/notify.*` file every time.
+
+Promote to `common/` only when *all* of these hold:
+
+- 2+ slices reference the type today, with identical semantics. (Don't
+  pre-promote on speculation.)
+- The type carries **zero behavior** — pure data, or a port/protocol whose
+  shape is the contract.
+- A named slice would be a worse fit — the type is too atomic to deserve a
+  domain (`Money`, `UserId`, `Timestamp`, `Email`), or it's an event payload
+  whose schema can't live with either producer or consumer without creating
+  a cycle.
+
+If you find yourself adding *behavior* to a `common/` type, that's the
+signal: the type wants to live in a slice. Move it.
 
 The promotion threshold is a deliberate counterweight to the DRY reflex. Two
-copies of a struct cost less than one wrong abstraction.
+copies of a struct cost less than one wrong abstraction — and a named slice
+usually beats both.
 
 ---
 
