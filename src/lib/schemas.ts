@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { HarnessName } from "./harnesses.js";
+import type { HarnessName } from "../domain/harness.js";
 
 const slug = z
   .string()
@@ -27,6 +27,8 @@ const harnessModelSchema = z.object({
   default: z.string().min(1),
   "claude-code": z.string().min(1).optional(),
   codex: z.string().min(1).optional(),
+  cursor: z.string().min(1).optional(),
+  "copilot-cli": z.string().min(1).optional(),
 });
 
 const agentFrontmatterSchema = z.object({
