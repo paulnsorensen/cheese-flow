@@ -53,14 +53,7 @@ function buildCopilotManifest(
 function buildCursorManifest(
   metadata: PluginMetadata,
 ): Record<string, unknown> {
-  return {
-    name: metadata.name,
-    version: metadata.version,
-    description: metadata.description,
-    author: metadata.author,
-    license: metadata.license,
-    repository: metadata.repository,
-  };
+  return buildBaseManifest(metadata);
 }
 
 function buildCodexManifest(metadata: PluginMetadata): Record<string, unknown> {

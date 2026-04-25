@@ -167,7 +167,7 @@ describe("emitPluginManifest — boundary assault", () => {
     expect(manifest.strict).toBe(true);
   });
 
-  it("cursor manifest omits homepage and keywords (stripped fields)", async () => {
+  it("cursor manifest includes homepage and keywords when supplied", async () => {
     const outputRoot = await mkdtemp(path.join(os.tmpdir(), "cf-adv-"));
     createdDirectories.push(outputRoot);
 
@@ -184,8 +184,8 @@ describe("emitPluginManifest — boundary assault", () => {
     const content = await readFile(manifestPath, "utf8");
     const manifest = JSON.parse(content);
 
-    expect(manifest.homepage).toBeUndefined();
-    expect(manifest.keywords).toBeUndefined();
+    expect(manifest.homepage).toBe("https://example.com");
+    expect(manifest.keywords).toEqual(["a", "b"]);
   });
 
   it("emitted JSON parses cleanly (no trailing commas)", async () => {
