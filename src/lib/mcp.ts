@@ -18,12 +18,16 @@ const canonicalServers: Record<string, McpServerConfig> = {
   },
 };
 
-function resolveOutputPath(harness: HarnessName, outputRoot: string): string {
-  if (harness === "cursor") {
-    return path.join(outputRoot, "mcp.json");
-  }
-  return path.join(outputRoot, ".mcp.json");
-}
+type McpAdapter = {
+  fileName: string;
+};
+
+const mcpAdapters: Record<HarnessName, McpAdapter> = {
+  "claude-code": { fileName: ".mcp.json" },
+  "copilot-cli": { fileName: ".mcp.json" },
+  codex: { fileName: ".mcp.json" },
+  cursor: { fileName: "mcp.json" },
+};
 
 export async function emitMcpConfig(
   harness: HarnessName,
@@ -37,7 +41,7 @@ export async function emitMcpConfig(
       "Milknado MCP server integration deferred — see milknado-mcp follow-up spec.",
   };
 
-  const outputPath = resolveOutputPath(harness, outputRoot);
+  const outputPath = path.join(outputRoot, mcpAdapters[harness].fileName);
   await writeFile(outputPath, `${JSON.stringify(config, null, 2)}\n`);
 
   return outputPath;

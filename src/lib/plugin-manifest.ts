@@ -20,11 +20,9 @@ export const pluginMetadataSchema = z.object({
 
 export type PluginMetadata = z.infer<typeof pluginMetadataSchema>;
 
-const manifestDirByHarness: Record<HarnessName, string> = {
-  "claude-code": ".claude-plugin",
-  "copilot-cli": ".claude-plugin",
-  cursor: ".cursor-plugin",
-  codex: ".codex-plugin",
+type ManifestAdapter = {
+  manifestDir: string;
+  build(metadata: PluginMetadata): Record<string, unknown>;
 };
 
 function buildBaseManifest(metadata: PluginMetadata): Record<string, unknown> {
@@ -50,35 +48,12 @@ function buildCopilotManifest(
   };
 }
 
-function buildCursorManifest(
-  metadata: PluginMetadata,
-): Record<string, unknown> {
-  return buildBaseManifest(metadata);
-}
-
-function buildCodexManifest(metadata: PluginMetadata): Record<string, unknown> {
-  const manifest: Record<string, unknown> = {
-    name: metadata.name,
-    version: metadata.version,
-    description: metadata.description,
-    author: metadata.author,
-    license: metadata.license,
-    repository: metadata.repository,
-  };
-  if (metadata.homepage !== undefined) manifest.homepage = metadata.homepage;
-  if (metadata.keywords !== undefined) manifest.keywords = metadata.keywords;
-  return manifest;
-}
-
-function buildManifest(
-  harness: HarnessName,
-  metadata: PluginMetadata,
-): Record<string, unknown> {
-  if (harness === "copilot-cli") return buildCopilotManifest(metadata);
-  if (harness === "cursor") return buildCursorManifest(metadata);
-  if (harness === "codex") return buildCodexManifest(metadata);
-  return buildBaseManifest(metadata);
-}
+const manifestAdapters: Record<HarnessName, ManifestAdapter> = {
+  "claude-code": { manifestDir: ".claude-plugin", build: buildBaseManifest },
+  "copilot-cli": { manifestDir: ".claude-plugin", build: buildCopilotManifest },
+  cursor: { manifestDir: ".cursor-plugin", build: buildBaseManifest },
+  codex: { manifestDir: ".codex-plugin", build: buildBaseManifest },
+};
 
 export async function emitPluginManifest(
   harness: HarnessName,
@@ -92,8 +67,9 @@ export async function emitPluginManifest(
     );
   }
 
-  const manifest = buildManifest(harness, parsed.data);
-  const manifestDir = path.join(outputRoot, manifestDirByHarness[harness]);
+  const adapter = manifestAdapters[harness];
+  const manifest = adapter.build(parsed.data);
+  const manifestDir = path.join(outputRoot, adapter.manifestDir);
 
   await mkdir(manifestDir, { recursive: true });
 
