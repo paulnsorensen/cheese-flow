@@ -2,6 +2,12 @@
 
 Long-form architectural and engineering references that ship alongside cheese-flow. Source-of-truth documents that agents and skills can cite, quote, or load on demand. Intentionally not wired into any specific skill yet.
 
+## tilth MCP (Code Intelligence)
+
+| Document | When to load |
+|---|---|
+| [tilth/tilth-mcp.md](./tilth/tilth-mcp.md) | **Always when using tilth tools.** Complete reference for tilth_search, tilth_read, tilth_files, tilth_deps, and tilth_edit. Hash anchor format, session deduplication, tree-sitter languages. |
+
 ## Sliced Bread Architecture
 
 | Document | When to load |
