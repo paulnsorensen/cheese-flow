@@ -14,6 +14,7 @@ Opinionated scaffolding for portable agents and skills that can be compiled into
 - `src/` — TypeScript CLI and compiler
 - `agents/` — harness-agnostic Eta markdown templates
 - `skills/` — portable Agent Skills definitions
+- `references/` — long-form architectural references (Sliced Bread, etc.)
 - `.claude/` / `.codex/` — generated install outputs
 
 ## Getting started
@@ -78,3 +79,16 @@ Each bundle contains:
 - `agents/*.md`
 - `skills/*/SKILL.md`
 - `manifest.json`
+
+## References
+
+Long-form architectural docs live under `references/`. Currently:
+
+- [`references/sliced-bread.md`](./references/sliced-bread.md) — language-agnostic Sliced Bread architecture (vertical slices, organic growth, boundary rules).
+- [`references/sb/practice.md`](./references/sb/practice.md) — applied patterns (CQRS, anti-corruption layers, testing, slice-local duplication, slice graduation to packages/libraries/services).
+- [`references/sb/attribution.md`](./references/sb/attribution.md) — predecessor lineage (VSA, Hexagonal, Screaming, Clean, Onion, DDD).
+- [`references/sb/rust.md`](./references/sb/rust.md) — Rust-specific guide (module privacy, `foo.rs` + `foo/` facade).
+- [`references/sb/go.md`](./references/sb/go.md) — Go-specific guide (`internal/` packages, `go.work`).
+- [`references/sb/ts.md`](./references/sb/ts.md) — TypeScript-specific guide (`exports` maps, why barrel files are now anti-pattern).
+
+These are reference material only — not yet wired into any skill or agent.
