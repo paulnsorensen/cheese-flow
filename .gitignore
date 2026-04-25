@@ -8,3 +8,4 @@ coverage/
 .cursor/
 .vitest/
 .venv/
+__pycache__/

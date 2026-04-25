@@ -5,6 +5,19 @@
     "clientKind": "git",
     "useIgnoreFile": true
   },
+  "files": {
+    "includes": [
+      "**",
+      "!**/node_modules",
+      "!**/dist",
+      "!**/coverage",
+      "!**/.venv",
+      "!**/.claude",
+      "!**/.codex",
+      "!**/.cheese-flow",
+      "!**/.vitest"
+    ]
+  },
   "formatter": {
     "enabled": true,
     "indentStyle": "space"

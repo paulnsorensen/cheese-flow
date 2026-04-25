@@ -52,6 +52,7 @@
     "llm"
   ],
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
     "commander": "^14.0.3",
     "eta": "^4.5.1",
     "tilth": "^0.6.3",
