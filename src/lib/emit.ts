@@ -58,8 +58,6 @@ export async function emitMcpConfig(
 
   const config: Record<string, unknown> = {
     mcpServers: canonicalMcpServers,
-    __TODO_milknado__:
-      "Milknado MCP server integration deferred — see milknado-mcp follow-up spec.",
   };
 
   const adapter = harnessAdapters[harness];
