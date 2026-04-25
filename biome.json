@@ -1,5 +1,18 @@
 {
   "$schema": "https://biomejs.dev/schemas/2.4.12/schema.json",
+  "files": {
+    "includes": [
+      "**",
+      "!**/node_modules",
+      "!**/dist",
+      "!**/coverage",
+      "!**/.venv",
+      "!**/.claude",
+      "!**/.codex",
+      "!**/.cheese-flow",
+      "!**/.vitest"
+    ]
+  },
   "formatter": {
     "enabled": true,
     "indentStyle": "space"
