@@ -55,9 +55,10 @@ Layered architecture (controllers → services → repositories) groups by techn
 This means a single feature change touches every layer. Vertical slices group by
 business concept — an `orders` change stays in `orders/`.
 
-The tradeoff: cross-cutting concerns (auth, logging, caching) live in adapters or
-middleware, not sprinkled across slices. If you're tempted to add auth logic inside
-a domain slice, that's a signal it belongs in `app/` or `adapters/`.
+Cross-cutting concerns (auth, logging, caching) live in `adapters/` behind
+domain-defined ports — not sprinkled across slices, and not pushed into a
+separate middleware layer. If you're tempted to add auth logic inside a domain
+slice, push it down to `adapters/`.
 
 ## Why organic growth?
 
@@ -69,8 +70,8 @@ structure emerges from actual pressure, not imagination.
 **Growth triggers:**
 
 - A file passes ~150–200 lines or holds 3+ distinct concepts → extract siblings.
-  (300 lines is the hard ceiling per the global complexity budget — by then you
-  are well past the trigger.)
+  (300 lines is the hard ceiling in this guide — by then you are well past
+  the trigger.)
 - 3+ related files cluster around a sub-concept → create subdirectory
 - A file becomes an import hub for its children → it's now a facade
 
@@ -119,12 +120,17 @@ Resolution: use domain events. `orders` emits `OrderPlaced`, `pricing` subscribe
 
 Where does the event type live? Default rule:
 
-- **Single-producer event** → in the producer slice's public API (`orders.OrderPlaced`).
-- **Promoted to `common/events/`** → only when 2+ slices need to *produce* the same
-  event type, or it's referenced by a contract outside the loaf (entrypoints, persisted log).
+- **Single-producer event** → in the producer slice's public API
+  (`orders.OrderPlaced`), *when the consumer can import from the producer
+  without forming a cycle*.
+- **Promoted to `common/events/`** → when (a) 2+ slices need to *produce* the
+  same event type, (b) the consumer can't import from the producer without
+  forming a cycle (e.g. `orders` already imports `pricing`, so `pricing`
+  consuming `OrderPlaced` would cycle), or (c) it's referenced by a contract
+  outside the loaf (entrypoints, persisted log).
 
-Default to keeping events in the producer. Promote on second producer, not in
-anticipation of one.
+Default to keeping events in the producer. Promote on second producer or to
+break a cycle, not in anticipation.
 
 **Dispatch is synchronous in-process by default.** Subscribers run on the producer's
 call stack within the same transaction unless an adapter (queue, outbox, broker)

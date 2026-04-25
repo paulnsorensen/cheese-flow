@@ -75,13 +75,13 @@ with different models.
 
 ```
 domains/orders/
-├── index.ts
-├── order.ts                    # write model — the entity
-├── place.ts                    # command
-├── update-status.ts            # command
+├── (slice facade)              # whatever your language calls the crust
+├── order.*                     # write model — the entity
+├── place.*                     # command
+├── update-status.*             # command
 └── queries/
-    ├── by-customer.ts          # read-optimized, can join across stores
-    └── pending-summary.ts      # denormalized projection
+    ├── by-customer.*           # read-optimized, can join across stores
+    └── pending-summary.*       # denormalized projection
 ```
 
 ### When CQRS earns its keep within a slice
@@ -201,8 +201,8 @@ take a step without a concrete reason — and **don't skip steps**.
 
 | Stage | Shape | Cost | Triggers to advance |
 |---|---|---|---|
-| 1. **File** | `pricing.ts` | None | >150–200 lines, 3+ concepts in one file |
-| 2. **Folder** | `pricing/{index,calc,rules}.ts` (+ internal) | Subdir, facade file | Hidden helpers want privacy from siblings |
+| 1. **File** | `pricing.*` | None | >150–200 lines, 3+ concepts in one file |
+| 2. **Folder** | `pricing/{index,calc,rules}.*` (+ internal) | Subdir, facade file | Hidden helpers want privacy from siblings |
 | 3. **Workspace package** | `packages/pricing/` (Cargo member / pnpm workspace / `go.mod`) | Manifest, build target, typecheck boundary | Build-time pain, ownership split, contract pressure, TS visibility enforcement |
 | 4. **Versioned library** | published to internal registry | SemVer, publish pipeline, registry coordination | A second repository imports it |
 | 5. **Service** | network boundary | Network reliability, distributed observability, schema versioning, deployment topology | Independent scale / deploy / runtime / failure isolation |

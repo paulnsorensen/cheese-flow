@@ -24,7 +24,7 @@ src/
 ├── main.rs                        # Ignition key — calls app::run()
 ├── domain/                        # The loaf — all business logic lives here
 │   ├── mod.rs                     # Declares child modules, re-exports public API
-│   ├── common/                    # Shared kernel (leaf node — no sibling deps)
+│   ├── common/                    # Common leaf (no sibling deps; not DDD's shared kernel)
 │   │   └── mod.rs
 │   ├── orders.rs                  # ← A slice facade (the crust)
 │   ├── orders/                    # ← Internals behind the facade
@@ -359,7 +359,7 @@ For a workspace, each slice becomes its own crate:
 ```
 Cargo.toml (workspace)
 crates/
-├── domain-common/       # shared kernel crate
+├── domain-common/       # common-leaf crate
 ├── domain-orders/       # orders slice crate
 ├── domain-pricing/      # pricing slice crate
 ├── adapters-sqlite/     # adapter crate

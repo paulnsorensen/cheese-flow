@@ -93,22 +93,35 @@ const (
 
 // Place is the slice's public entry point.
 func Place(items []LineItem) (*Order, error) {
-    if err := validateItems(items); err != nil {  // unexported helper
+    if err := validateItems(items); err != nil {  // unexported helper, same package
         return nil, err
     }
     return &Order{Items: items, Status: Pending}, nil
 }
+
+// validateItems lives in this same file (or any sibling .go file in
+// package orders). Lowercase = invisible to sibling slices like pricing/.
+func validateItems(items []LineItem) error { /* ... */ }
 ```
 
+For helpers that want their own package namespace while staying invisible to
+sibling slices, drop them under `internal/`. Anything under `orders/internal/`
+is importable only by code rooted at `orders/` — the compiler rejects any
+other consumer. Helpers there operate on primitives or types they own;
+importing the parent `orders` package would form a cycle
+(orders → internal → orders).
+
 ```go
-// internal/domain/orders/internal/validation.go
+// internal/domain/orders/internal/limits.go
 //
-// Anything under orders/internal/ is invisible to sibling slices like
-// pricing/. Only files inside orders/ can import it.
+// Anything under orders/internal/ is importable only by files rooted at
+// orders/. The compiler rejects any other consumer.
 
 package internal
 
-func ValidateItems(items []LineItem) error { /* ... */ }
+const MaxLineItems = 100
+
+func CheckCount(n int) error { /* takes a primitive — no cycle with orders */ }
 ```
 
 ### Visibility cheat sheet
