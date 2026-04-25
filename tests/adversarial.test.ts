@@ -466,7 +466,7 @@ describe("emitCursorSurface — filesystem attacks", () => {
     const outputRoot = await mkdtemp(path.join(os.tmpdir(), "cf-adv-"));
     createdDirectories.push(outputRoot);
 
-    // parseFrontmatter throws — emitSkill catches and returns null — skill is skipped
+    // parseFrontmatter throws — emitCursorSurface propagates the error
     await expect(emitCursorSurface(skillsDir, outputRoot)).rejects.toThrow();
   });
 

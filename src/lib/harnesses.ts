@@ -43,7 +43,7 @@ export const harnessDefinitions: Record<HarnessName, HarnessDefinition> = {
     displayName: "Cursor",
     outputRoot: ".cursor",
     agentDirectory: "agents",
-    skillDirectory: "rules",
+    skillDirectory: "skills",
     defaultModel: "auto",
     notes: [
       "Cursor exposes skills on two surfaces: ambient rules (.cursor/rules/*.mdc) and slash commands (.cursor/commands/*.md). Both are emitted from the same SKILL.md source by cursor-surface.ts.",
