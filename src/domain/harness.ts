@@ -50,6 +50,10 @@ export type McpServerConfig = {
 
 export const canonicalMcpServers: Record<string, McpServerConfig> = {
   tilth: { command: "npx", args: ["tilth", "--mcp", "--edit"] },
+  context7: {
+    command: "npx",
+    args: ["-y", "@upstash/context7-mcp"],
+  },
   tavily: {
     command: "npx",
     args: ["-y", "tavily-mcp@latest"],

@@ -70,7 +70,9 @@ describe("installHarnessArtifacts", () => {
       await readFile(path.join(projectRoot, ".claude", ".mcp.json"), "utf8"),
     ) as { mcpServers: Record<string, unknown> };
     expect(claudeMcp.mcpServers).toHaveProperty("tilth");
+    expect(claudeMcp.mcpServers).toHaveProperty("context7");
     expect(claudeMcp.mcpServers).toHaveProperty("tavily");
+    expect(claudeMcp.mcpServers).not.toHaveProperty("serper");
 
     const codexPlugin = JSON.parse(
       await readFile(
@@ -84,6 +86,7 @@ describe("installHarnessArtifacts", () => {
       await readFile(path.join(projectRoot, ".codex", ".mcp.json"), "utf8"),
     ) as { mcpServers: Record<string, unknown> };
     expect(codexMcp.mcpServers).toHaveProperty("tilth");
+    expect(codexMcp.mcpServers).toHaveProperty("context7");
   });
 
   it("validates the shipped skill metadata", async () => {
@@ -173,7 +176,7 @@ describe("installHarnessArtifacts", () => {
     ) as { agents: string[]; skills: string[]; commands: string[] };
 
     expect(manifest.agents).toEqual(["basic-agent.md"]);
-    expect(manifest.skills).toEqual(["basic-skill", "nested-dir"]);
+    expect(manifest.skills).toEqual(["basic-skill", "nested-dir", "research"]);
     expect(manifest.commands).toEqual([]);
   });
 
@@ -222,6 +225,7 @@ describe("installHarnessArtifacts", () => {
       await readFile(path.join(cursorRoot, "mcp.json"), "utf8"),
     ) as { mcpServers: Record<string, unknown> };
     expect(mcpJson.mcpServers).toHaveProperty("tilth");
+    expect(mcpJson.mcpServers).toHaveProperty("context7");
     expect(mcpJson.mcpServers).toHaveProperty("tavily");
   });
 
@@ -267,6 +271,7 @@ describe("installHarnessArtifacts", () => {
       await readFile(path.join(copilotRoot, ".mcp.json"), "utf8"),
     ) as { mcpServers: Record<string, unknown> };
     expect(mcpJson.mcpServers).toHaveProperty("tilth");
+    expect(mcpJson.mcpServers).toHaveProperty("context7");
 
     // Hooks file with version:1 and camelCase keys
     const hooksJson = JSON.parse(

@@ -17,7 +17,7 @@ Opinionated scaffolding for portable agents and skills that can be compiled into
 - `references/` — long-form architectural references (Sliced Bread, etc.)
 - `.claude-plugin/` — Claude Code + Copilot CLI install manifest
 - `.cursor-plugin/` — Cursor install manifest
-- `.mcp.json` — shared MCP server declarations (tilth, tavily)
+- `.mcp.json` — shared MCP server declarations (tilth, Context7, Tavily)
 - `.claude/` / `.codex/` / `.cursor/` / `.copilot/` — generated install outputs (gitignored)
 
 ## Getting started
