@@ -61,7 +61,7 @@ def milknado_plan_batches(
         new_relationships: Optional list of additional dependency edges to
             inject, each with source_change_id, dependant_change_id, and reason.
     """
-    change_ids = [c.get("id", str(i)) for i, c in enumerate(changes)]
+    change_ids = [c.get("id", f"_fallback_{i}") for i, c in enumerate(changes)]
     return {
         "batches": [
             {
