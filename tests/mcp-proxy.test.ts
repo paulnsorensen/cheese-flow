@@ -3,6 +3,10 @@ import path from "node:path";
 import { promisify } from "node:util";
 import { describe, expect, it, vi } from "vitest";
 import {
+  defaultClientFactory,
+  defaultClientTransportFactory,
+  defaultServerFactory,
+  defaultServerTransportFactory,
   type ProxyClient,
   type ProxyServer,
   type ProxyTransport,
@@ -76,6 +80,78 @@ describe("wireProxyHandlers", () => {
 
     await listHandler?.({ params: {} });
     expect(client.listTools).toHaveBeenLastCalledWith(undefined);
+  });
+
+  it("forwards tools/call without an arguments object when none is provided", async () => {
+    const client: ProxyClient = {
+      connect: vi.fn(),
+      close: vi.fn(),
+      listTools: vi.fn(),
+      callTool: vi.fn().mockResolvedValue({ content: [] }),
+    };
+
+    const handlers = new Map<unknown, (request: unknown) => Promise<unknown>>();
+    const server: ProxyServer = {
+      connect: vi.fn(),
+      close: vi.fn(),
+      setRequestHandler: vi.fn((schema, handler) => {
+        handlers.set(schema, handler as (request: unknown) => Promise<unknown>);
+      }),
+    };
+
+    wireProxyHandlers(server, client);
+    const [, callSchema] = Array.from(handlers.keys());
+    const callHandler = handlers.get(callSchema);
+
+    await callHandler?.({ params: { name: "blend_plan" } });
+    expect(client.callTool).toHaveBeenCalledWith({ name: "blend_plan" });
+  });
+
+  it("rejects tools/call requests that omit the tool name", async () => {
+    const client: ProxyClient = {
+      connect: vi.fn(),
+      close: vi.fn(),
+      listTools: vi.fn(),
+      callTool: vi.fn(),
+    };
+
+    const handlers = new Map<unknown, (request: unknown) => Promise<unknown>>();
+    const server: ProxyServer = {
+      connect: vi.fn(),
+      close: vi.fn(),
+      setRequestHandler: vi.fn((schema, handler) => {
+        handlers.set(schema, handler as (request: unknown) => Promise<unknown>);
+      }),
+    };
+
+    wireProxyHandlers(server, client);
+    const [, callSchema] = Array.from(handlers.keys());
+    const callHandler = handlers.get(callSchema);
+
+    await expect(callHandler?.({ params: {} })).rejects.toThrow(
+      /missing a tool name/u,
+    );
+    await expect(callHandler?.({})).rejects.toThrow(/missing a tool name/u);
+    expect(client.callTool).not.toHaveBeenCalled();
+  });
+});
+
+describe("default MCP factories", () => {
+  it("construct real client, server, and transport instances", async () => {
+    const client = defaultClientFactory();
+    const server = defaultServerFactory();
+    const clientTransport = defaultClientTransportFactory("/tmp/project");
+    const serverTransport = defaultServerTransportFactory();
+
+    expect(client).toBeDefined();
+    expect(typeof client.connect).toBe("function");
+    expect(server).toBeDefined();
+    expect(typeof server.setRequestHandler).toBe("function");
+    expect(clientTransport).toBeDefined();
+    expect(serverTransport).toBeDefined();
+
+    await clientTransport.close();
+    await serverTransport.close();
   });
 });
 
@@ -183,6 +259,49 @@ describe("runMcpProxy", () => {
         shutdownSignal: Promise.resolve(),
       }),
     ).rejects.toThrow(/"uv" was not found on PATH/u);
+
+    expect(server.close).toHaveBeenCalledTimes(1);
+    expect(client.close).toHaveBeenCalledTimes(1);
+  });
+
+  it("identifies a missing uv by error message when no spawn path is attached", async () => {
+    const client = createMockClient();
+    const server = createMockServer();
+    const enoent = Object.assign(new Error("spawn uv ENOENT"), {
+      code: "ENOENT",
+    });
+    client.connect = vi.fn().mockRejectedValue(enoent);
+
+    await expect(
+      runMcpProxy({
+        projectRoot: "/tmp/project",
+        clientFactory: () => client,
+        serverFactory: () => server,
+        clientTransportFactory: () => createMockTransport(),
+        serverTransportFactory: () => createMockTransport(),
+        shutdownSignal: Promise.resolve(),
+      }),
+    ).rejects.toThrow(/"uv" was not found on PATH/u);
+  });
+
+  it("passes through unrelated connect errors with non-ENOENT codes", async () => {
+    const client = createMockClient();
+    const server = createMockServer();
+    const eacces = Object.assign(new Error("permission denied"), {
+      code: "EACCES",
+    });
+    client.connect = vi.fn().mockRejectedValue(eacces);
+
+    await expect(
+      runMcpProxy({
+        projectRoot: "/tmp/project",
+        clientFactory: () => client,
+        serverFactory: () => server,
+        clientTransportFactory: () => createMockTransport(),
+        serverTransportFactory: () => createMockTransport(),
+        shutdownSignal: Promise.resolve(),
+      }),
+    ).rejects.toThrow(/permission denied/u);
 
     expect(server.close).toHaveBeenCalledTimes(1);
     expect(client.close).toHaveBeenCalledTimes(1);
