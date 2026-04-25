@@ -1,0 +1,20 @@
+import type { HarnessAdapter } from "../domain/harness.js";
+import { buildBaseManifest, pascalMatcherHooks } from "./_shared.js";
+
+export const codexAdapter: HarnessAdapter = {
+  name: "codex",
+  displayName: "Codex",
+  outputRoot: ".codex",
+  agentDirectory: "agents",
+  skillDirectory: "skills",
+  commandDirectory: "commands",
+  defaultModel: "gpt-5.1-codex",
+  notes: [
+    "Bias instructions toward patch-oriented execution and explicit constraints.",
+    "Prefer Codex model identifiers in agent metadata and output.",
+  ],
+  manifestDir: ".codex-plugin",
+  buildManifest: buildBaseManifest,
+  mcpFileName: ".mcp.json",
+  buildHookConfig: (portable) => ({ hooks: pascalMatcherHooks(portable) }),
+};

@@ -4,6 +4,8 @@ coverage/
 .cheese-flow/
 .codex/
 .claude/
+.copilot/
+.cursor/
 .vitest/
 .venv/
 __pycache__/

@@ -2,8 +2,16 @@ import type { Dirent } from "node:fs";
 import { cp, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { Eta } from "eta";
+import { harnessAdapters } from "../adapters/index.js";
+import {
+  type HarnessName,
+  type HooksSource,
+  hooksSourceSchema,
+  type PluginMetadata,
+  pluginMetadataSchema,
+} from "../domain/harness.js";
+import { emitHooks, emitMcpConfig, emitPluginManifest } from "./emit.js";
 import { parseFrontmatter } from "./frontmatter.js";
-import { type HarnessName, harnessDefinitions } from "./harnesses.js";
 import {
   type AgentFrontmatter,
   parseAgentFrontmatter,
@@ -13,6 +21,54 @@ import {
   type SkillFrontmatter,
 } from "./schemas.js";
 
+const DEFAULT_PLUGIN_METADATA: PluginMetadata = {
+  name: "cheese-flow",
+  version: "0.1.0",
+  description:
+    "Opinionated coding harness plugin scaffold for portable agents and skills.",
+  author: { name: "Paul Sorensen" },
+  license: "MIT",
+  repository: "https://github.com/paulnsorensen/cheese-flow",
+};
+
+function isFileNotFound(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    (error as { code?: unknown }).code === "ENOENT"
+  );
+}
+
+async function readPluginMetadata(
+  projectRoot: string,
+): Promise<PluginMetadata> {
+  const pluginJsonPath = path.join(
+    projectRoot,
+    ".claude-plugin",
+    "plugin.json",
+  );
+  let raw: string;
+  try {
+    raw = await readFile(pluginJsonPath, "utf8");
+  } catch (error) {
+    if (isFileNotFound(error)) return DEFAULT_PLUGIN_METADATA;
+    throw error;
+  }
+  return pluginMetadataSchema.parse(JSON.parse(raw));
+}
+
+async function readHooksSource(projectRoot: string): Promise<HooksSource> {
+  const hooksJsonPath = path.join(projectRoot, "hooks.json");
+  let raw: string;
+  try {
+    raw = await readFile(hooksJsonPath, "utf8");
+  } catch (error) {
+    if (isFileNotFound(error)) return {};
+    throw error;
+  }
+  return hooksSourceSchema.parse(JSON.parse(raw)) as HooksSource;
+}
+
 const eta = new Eta({ autoEscape: false, autoTrim: false, useWith: true });
 
 type InstallOptions = {
@@ -20,51 +76,87 @@ type InstallOptions = {
   harnesses: HarnessName[];
 };
 
+type ProcessHarnessContext = {
+  harnessName: HarnessName;
+  projectRoot: string;
+  pluginMetadata: PluginMetadata;
+  hooksSource: HooksSource;
+  skillSourceDirectory: string;
+};
+
 export async function installHarnessArtifacts(
   options: InstallOptions,
 ): Promise<string[]> {
+  const pluginMetadata = await readPluginMetadata(options.projectRoot);
+  const hooksSource = await readHooksSource(options.projectRoot);
+  const skillSourceDirectory = path.join(options.projectRoot, "skills");
   const outputs: string[] = [];
   for (const harnessName of options.harnesses) {
-    outputs.push(await processHarness(harnessName, options.projectRoot));
+    outputs.push(
+      await processHarness({
+        harnessName,
+        projectRoot: options.projectRoot,
+        pluginMetadata,
+        hooksSource,
+        skillSourceDirectory,
+      }),
+    );
   }
   return outputs;
 }
 
-async function processHarness(
-  harnessName: HarnessName,
-  projectRoot: string,
-): Promise<string> {
-  const harness = harnessDefinitions[harnessName];
-  const outputRoot = path.join(projectRoot, harness.outputRoot);
-  const agentOutputDirectory = path.join(outputRoot, harness.agentDirectory);
-  const skillOutputDirectory = path.join(outputRoot, harness.skillDirectory);
-  const commandOutputDirectory = path.join(
-    outputRoot,
-    harness.commandDirectory,
-  );
+async function processHarness(context: ProcessHarnessContext): Promise<string> {
+  const adapter = harnessAdapters[context.harnessName];
+  const outputRoot = path.join(context.projectRoot, adapter.outputRoot);
+  const agentOutputDirectory = path.join(outputRoot, adapter.agentDirectory);
+  const skillOutputDirectory = path.join(outputRoot, adapter.skillDirectory);
 
   await rm(outputRoot, { recursive: true, force: true });
   await mkdir(agentOutputDirectory, { recursive: true });
   await mkdir(skillOutputDirectory, { recursive: true });
-  await mkdir(commandOutputDirectory, { recursive: true });
 
   const agents = await compileAgents({
-    projectRoot,
-    harness: harnessName,
+    projectRoot: context.projectRoot,
+    harness: context.harnessName,
     agentOutputDirectory,
   });
-  const skills = await copySkills({ projectRoot, skillOutputDirectory });
-  const commands = await copyCommands({
-    projectRoot,
-    commandOutputDirectory,
+  const skills = await copySkills({
+    projectRoot: context.projectRoot,
+    skillOutputDirectory,
   });
 
+  let commands: string[] = [];
+  if (adapter.commandDirectory !== undefined) {
+    const commandOutputDirectory = path.join(
+      outputRoot,
+      adapter.commandDirectory,
+    );
+    await mkdir(commandOutputDirectory, { recursive: true });
+    commands = await copyCommands({
+      projectRoot: context.projectRoot,
+      commandOutputDirectory,
+    });
+  }
+
   await writeManifest(outputRoot, {
-    harness: harnessName,
+    harness: context.harnessName,
     agents,
     skills,
     commands,
   });
+
+  await emitPluginManifest(
+    context.harnessName,
+    context.pluginMetadata,
+    outputRoot,
+  );
+  await emitMcpConfig(context.harnessName, outputRoot);
+  await emitHooks(context.harnessName, context.hooksSource, outputRoot);
+
+  if (adapter.emitSurface !== undefined) {
+    await adapter.emitSurface(context.skillSourceDirectory, outputRoot);
+  }
+
   return outputRoot;
 }
 
@@ -109,14 +201,14 @@ async function compileAgents(options: CompileAgentsOptions): Promise<string[]> {
     const source = await readFile(sourcePath, "utf8");
     const parsed = parseFrontmatter<unknown>(source);
     const frontmatter = parseAgentFrontmatter(parsed.data);
-    const harness = harnessDefinitions[options.harness];
+    const adapter = harnessAdapters[options.harness];
     const outputFile = `${frontmatter.name}.md`;
     const rendered = eta.renderString(parsed.body, {
       agent: {
         ...frontmatter,
         model: resolveModel(frontmatter.models, options.harness),
       },
-      harness,
+      harness: adapter,
     }) as string;
 
     await writeFile(
@@ -241,7 +333,7 @@ export async function previewAgent(
       ...frontmatter,
       model: resolveModel(frontmatter.models, harness),
     },
-    harness: harnessDefinitions[harness],
+    harness: harnessAdapters[harness],
   }) as string;
 
   return rendered.trim();
