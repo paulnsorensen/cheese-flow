@@ -2,16 +2,16 @@ import type { Dirent } from "node:fs";
 import { cp, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { Eta } from "eta";
-import { emitCursorSurface } from "./cursor-surface.js";
-import { parseFrontmatter } from "./frontmatter.js";
-import { type HarnessName, harnessDefinitions } from "./harnesses.js";
-import { emitHooks, type HooksSource, hooksSourceSchema } from "./hooks.js";
-import { emitMcpConfig } from "./mcp.js";
+import { harnessAdapters } from "../adapters/index.js";
 import {
-  emitPluginManifest,
+  type HarnessName,
+  type HooksSource,
+  hooksSourceSchema,
   type PluginMetadata,
   pluginMetadataSchema,
-} from "./plugin-manifest.js";
+} from "../domain/harness.js";
+import { emitHooks, emitMcpConfig, emitPluginManifest } from "./emit.js";
+import { parseFrontmatter } from "./frontmatter.js";
 import {
   type AgentFrontmatter,
   parseAgentFrontmatter,
@@ -106,10 +106,10 @@ export async function installHarnessArtifacts(
 }
 
 async function processHarness(context: ProcessHarnessContext): Promise<string> {
-  const harness = harnessDefinitions[context.harnessName];
-  const outputRoot = path.join(context.projectRoot, harness.outputRoot);
-  const agentOutputDirectory = path.join(outputRoot, harness.agentDirectory);
-  const skillOutputDirectory = path.join(outputRoot, harness.skillDirectory);
+  const adapter = harnessAdapters[context.harnessName];
+  const outputRoot = path.join(context.projectRoot, adapter.outputRoot);
+  const agentOutputDirectory = path.join(outputRoot, adapter.agentDirectory);
+  const skillOutputDirectory = path.join(outputRoot, adapter.skillDirectory);
 
   await rm(outputRoot, { recursive: true, force: true });
   await mkdir(agentOutputDirectory, { recursive: true });
@@ -126,10 +126,10 @@ async function processHarness(context: ProcessHarnessContext): Promise<string> {
   });
 
   let commands: string[] = [];
-  if (harness.commandDirectory !== undefined) {
+  if (adapter.commandDirectory !== undefined) {
     const commandOutputDirectory = path.join(
       outputRoot,
-      harness.commandDirectory,
+      adapter.commandDirectory,
     );
     await mkdir(commandOutputDirectory, { recursive: true });
     commands = await copyCommands({
@@ -153,8 +153,8 @@ async function processHarness(context: ProcessHarnessContext): Promise<string> {
   await emitMcpConfig(context.harnessName, outputRoot);
   await emitHooks(context.harnessName, context.hooksSource, outputRoot);
 
-  if (context.harnessName === "cursor") {
-    await emitCursorSurface(context.skillSourceDirectory, outputRoot);
+  if (adapter.emitSurface !== undefined) {
+    await adapter.emitSurface(context.skillSourceDirectory, outputRoot);
   }
 
   return outputRoot;
@@ -201,14 +201,14 @@ async function compileAgents(options: CompileAgentsOptions): Promise<string[]> {
     const source = await readFile(sourcePath, "utf8");
     const parsed = parseFrontmatter<unknown>(source);
     const frontmatter = parseAgentFrontmatter(parsed.data);
-    const harness = harnessDefinitions[options.harness];
+    const adapter = harnessAdapters[options.harness];
     const outputFile = `${frontmatter.name}.md`;
     const rendered = eta.renderString(parsed.body, {
       agent: {
         ...frontmatter,
         model: resolveModel(frontmatter.models, options.harness),
       },
-      harness,
+      harness: adapter,
     }) as string;
 
     await writeFile(
@@ -333,7 +333,7 @@ export async function previewAgent(
       ...frontmatter,
       model: resolveModel(frontmatter.models, harness),
     },
-    harness: harnessDefinitions[harness],
+    harness: harnessAdapters[harness],
   }) as string;
 
   return rendered.trim();

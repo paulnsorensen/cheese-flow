@@ -2,7 +2,7 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { emitHooks } from "../src/lib/hooks.js";
+import { emitHooks } from "../src/lib/emit.js";
 
 const createdDirectories: string[] = [];
 
@@ -85,6 +85,25 @@ describe("emitHooks", () => {
 
     expect(config.version).toBe(1);
     expect(config.hooks.sessionStart).toBeDefined();
+  });
+
+  it("skips entries that are explicitly undefined", async () => {
+    const outputRoot = await mkdtemp(path.join(os.tmpdir(), "cheese-flow-"));
+    createdDirectories.push(outputRoot);
+
+    const source = {
+      sessionStart: [{ type: "command", command: "echo start" }],
+      preToolUse: undefined,
+    };
+
+    await emitHooks("claude-code", source, outputRoot);
+
+    const hooksPath = path.join(outputRoot, "hooks.json");
+    const content = await readFile(hooksPath, "utf8");
+    const config = JSON.parse(content);
+
+    expect(config.hooks.sessionStart).toBeDefined();
+    expect(config.hooks.preToolUse).toBeUndefined();
   });
 
   it("skips non-portable events with warn", async () => {

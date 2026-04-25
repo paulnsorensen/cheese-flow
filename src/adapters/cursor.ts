@@ -1,7 +1,12 @@
 import { mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { parseFrontmatter } from "./frontmatter.js";
-import type { SkillFrontmatter } from "./schemas.js";
+import type {
+  HarnessAdapter,
+  SurfaceEmissionResult,
+} from "../domain/harness.js";
+import { parseFrontmatter } from "../lib/frontmatter.js";
+import type { SkillFrontmatter } from "../lib/schemas.js";
+import { buildBaseManifest } from "./_shared.js";
 
 function buildRuleContent(description: string, body: string): string {
   return `---\ndescription: ${description}\nglobs:\nalwaysApply: false\n---\n${body.trim()}\n`;
@@ -44,14 +49,12 @@ async function emitSkill(
   return { rule: rulePath, command: commandPath };
 }
 
-export async function emitCursorSurface(
+async function emitCursorSkillSurface(
   skillsDir: string,
   outputRoot: string,
-): Promise<{ rules: string[]; commands: string[] }> {
+): Promise<SurfaceEmissionResult> {
   const exists = await isDirectory(skillsDir);
-  if (!exists) {
-    return { rules: [], commands: [] };
-  }
+  if (!exists) return { rules: [], commands: [] };
 
   const rulesDir = path.join(outputRoot, "rules");
   const commandsDir = path.join(outputRoot, "commands");
@@ -82,3 +85,21 @@ export async function emitCursorSurface(
 
   return { rules, commands };
 }
+
+export const cursorAdapter: HarnessAdapter = {
+  name: "cursor",
+  displayName: "Cursor",
+  outputRoot: ".cursor",
+  agentDirectory: "agents",
+  skillDirectory: "skills",
+  defaultModel: "auto",
+  notes: [
+    "Cursor exposes skills on two surfaces: ambient rules (.cursor/rules/*.mdc) and slash commands (.cursor/commands/*.md). Both are emitted from the same SKILL.md source.",
+    "MCP-only tool surface applies; Cursor does not support hooks — hook emission is skipped with an info log.",
+  ],
+  manifestDir: ".cursor-plugin",
+  buildManifest: buildBaseManifest,
+  mcpFileName: "mcp.json",
+  buildHookConfig: () => null,
+  emitSurface: emitCursorSkillSurface,
+};

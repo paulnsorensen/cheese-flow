@@ -2,13 +2,14 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { Command, InvalidArgumentError } from "commander";
+import { harnessNames } from "./adapters/index.js";
+import type { HarnessName } from "./domain/harness.js";
 import { installHarnessArtifacts } from "./lib/compiler.js";
 import {
   formatReport,
   hasBlockingFailure,
   runAllToolChecks,
 } from "./lib/doctor.js";
-import { type HarnessName, harnessDefinitions } from "./lib/harnesses.js";
 import {
   defaultClientFactory,
   defaultClientTransportFactory,
@@ -21,8 +22,6 @@ import { runMilknadoCommand } from "./lib/milknado.js";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const defaultProjectRoot = path.resolve(__dirname, "..");
-
-const harnessNames = Object.keys(harnessDefinitions) as HarnessName[];
 
 function parseHarness(value: string): HarnessName {
   if (harnessNames.includes(value as HarnessName)) {

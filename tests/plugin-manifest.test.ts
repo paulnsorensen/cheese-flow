@@ -2,7 +2,7 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { emitPluginManifest } from "../src/lib/plugin-manifest.js";
+import { emitPluginManifest } from "../src/lib/emit.js";
 
 const createdDirectories: string[] = [];
 

@@ -2,7 +2,14 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { emitCursorSurface } from "../src/lib/cursor-surface.js";
+import { cursorAdapter } from "../src/adapters/cursor.js";
+
+const emitCursorSurface = (skillsDir: string, outputRoot: string) => {
+  if (cursorAdapter.emitSurface === undefined) {
+    throw new Error("cursorAdapter.emitSurface is undefined");
+  }
+  return cursorAdapter.emitSurface(skillsDir, outputRoot);
+};
 
 const createdDirectories: string[] = [];
 

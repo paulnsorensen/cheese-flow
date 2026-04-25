@@ -2,7 +2,7 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { emitMcpConfig } from "../src/lib/mcp.js";
+import { emitMcpConfig } from "../src/lib/emit.js";
 
 const createdDirectories: string[] = [];
 

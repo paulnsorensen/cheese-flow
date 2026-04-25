@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { HarnessName } from "./harnesses.js";
+import type { HarnessName } from "../domain/harness.js";
 
 const slug = z
   .string()

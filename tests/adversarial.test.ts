@@ -14,10 +14,19 @@ import {
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { emitCursorSurface } from "../src/lib/cursor-surface.js";
-import { emitHooks } from "../src/lib/hooks.js";
-import { emitMcpConfig } from "../src/lib/mcp.js";
-import { emitPluginManifest } from "../src/lib/plugin-manifest.js";
+import { cursorAdapter } from "../src/adapters/cursor.js";
+import {
+  emitHooks,
+  emitMcpConfig,
+  emitPluginManifest,
+} from "../src/lib/emit.js";
+
+const emitCursorSurface = (skillsDir: string, outputRoot: string) => {
+  if (cursorAdapter.emitSurface === undefined) {
+    throw new Error("cursorAdapter.emitSurface is undefined");
+  }
+  return cursorAdapter.emitSurface(skillsDir, outputRoot);
+};
 
 const createdDirectories: string[] = [];
 
