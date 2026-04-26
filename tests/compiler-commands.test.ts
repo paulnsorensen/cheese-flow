@@ -137,6 +137,7 @@ describe("shipped command scaffolds", () => {
       "cheese.md",
       "culture.md",
       "debug.md",
+      "explore.md",
       "incremental.md",
       "mold.md",
       "pr-finish.md",
