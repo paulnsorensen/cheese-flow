@@ -101,3 +101,23 @@ should not need to know each target filesystem layout.
 - Add target-specific projection in `src/adapters/*`.
 - Add compiler orchestration in `src/lib/compiler.ts` only when the pipeline itself
   needs to change.
+
+## Linting
+
+Skills are linted against the [Agent Skills format](https://agentskills.io/specification):
+
+```bash
+npm run lint:skills
+# or
+npx tsx src/index.ts lint
+```
+
+The linter enforces:
+
+- A `SKILL.md` exists in every skill directory.
+- Frontmatter is valid YAML and parses against the portable schema.
+- `name` is kebab-case, 1-64 chars, with no leading/trailing/consecutive hyphens,
+  and matches the parent directory name.
+- `description` is 1-1024 characters (warns if shorter than 20).
+- `compatibility`, when present, is at most 500 characters.
+- `SKILL.md` body is at most 500 lines (warning); move overflow into `references/`.
