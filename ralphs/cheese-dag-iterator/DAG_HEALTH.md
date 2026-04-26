@@ -3,13 +3,13 @@
 Design-quality scoreboard for the cheese-flow agent + DAG ecosystem. Every
 row scored 0–100. The ralph stops when every row is >= 90.
 
-Last updated: 2026-04-26, iteration 5.
+Last updated: 2026-04-26, iteration 6.
 
 ## Flows (from Quintessential Agentic Flows for Cheese-Flow.md)
 
 | Flow | Score | Notes |
 |---|---|---|
-| 1. Spec-First (Cook → Cut → Press → Age) | 35 | Stage agents exist but no top-level command anchors this flow; spec→cook hand-off is undocumented; entry skips Culture but no agent acknowledges that. |
+| 1. Spec-First (Cook → Cut → Press → Age) | 60 | `/fromage` command added: spec-validation gate (Approach + Quality gates required) before Cook starts, Culture folded into Cook's light pre-pass with explicit no-full-repo-scan rule, parallel-atoms classifier that redirects to `/fromagerie` (>= 4 non-overlapping units) and the linear-backlog redirect to `/incremental`, three-loop Press → Age cap, and spec-invalidation halt path that recommends `/mold` when Age challenges the spec itself. Stage dispatch wiring still deferred. |
 | 2. Exploration (Culture → Cook iterative → Cut → Press → Age) | 60 | `/explore` command added: Culture↔Cook iterative loop with three-cycle cap (the cost-control gate); AskUserQuestion-gated approach lock as the hard commit boundary with three-choice menu (lock/loop/abort); per-cycle no-production-write invariant on Culture and Cook; mandatory ≥2-alternatives + "Do nothing" rule on Cook; approach-invalidation halt when Age challenges the locked approach itself; explicit redirects to `/culture`, `/mold`, `/fromage`, `/debug`. Stage dispatch wiring still deferred. |
 | 3. Debug (Culture → Cook → Press → Age) | 60 | `/debug` command added with explicit Cut-skip, stage permission table, three-loop fix cap, and Culture read-only invariant. Tool-layer enforcement and dispatch wiring still deferred. |
 | 4. PR-Finish (Culture → Cut → Press → Age) | 60 | `/pr-finish` command added: explicit Cook-skip rationale, per-stage permission table, AskUserQuestion-gated approval between Cut and Press, three-loop Press→Age fix cap, and divergent-PR redirect to `/mold`. Stage dispatch wiring still deferred. |
@@ -53,3 +53,4 @@ Last updated: 2026-04-26, iteration 5.
 - Iteration 3: add `commands/pr-finish.md` (Flow 4 entry point) — Culture→Cut→Press→Age with explicit Cook-skip rationale, AskUserQuestion-gated approval between Cut and Press, divergent-PR redirect to `/mold`, and three-loop Press→Age fix cap.
 - Iteration 4: add `commands/incremental.md` (Flow 6 entry point) — per-task Cook→Cut→Press→Age × N with Culture folded into Cook for minimal per-task grounding, JSON state file with resume semantics, three-loop Press→Age cap per task, parallel-shaped-backlog redirect to `/fromagerie`, and per-task scope constraints in every stage row.
 - Iteration 5: add `commands/explore.md` (Flow 2 entry point) — Culture↔Cook iterative loop with three-cycle cost-control cap, AskUserQuestion-gated approach lock as the hard commit boundary (lock/loop/abort), mandatory ≥2-alternatives + "Do nothing" rule on Cook, approach-invalidation halt path when Age findings undermine the locked approach, and per-stage no-production-write invariants on Culture and Cook.
+- Iteration 6: add `commands/fromage.md` (Flow 1 entry point) — Cook → Cut → Press → Age with Culture folded into Cook's light pre-pass, hard spec-validation gate (Approach + Quality gates required), parallel-atoms classifier redirecting to `/fromagerie` (>= 4 non-overlapping units) and linear-backlog redirect to `/incremental`, three-loop Press → Age cap, and spec-invalidation halt that recommends `/mold` when Age challenges the spec itself.
