@@ -140,7 +140,10 @@ def resolve_lockfile(
                 return result
 
     result["resolved"] = True
-    result["message"] = f"Took {strategy}, regenerated, and staged"
+    if strategy == "regen":
+        result["message"] = "Regenerated and staged"
+    else:
+        result["message"] = f"Took {strategy}, regenerated, and staged"
     return result
 
 
