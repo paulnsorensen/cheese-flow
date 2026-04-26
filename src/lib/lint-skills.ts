@@ -93,13 +93,7 @@ export function lintSkillSource(context: LintSourceContext): LintIssue[] {
   try {
     parsed = parseFrontmatter<unknown>(context.source);
   } catch (error) {
-    issues.push(
-      issue(
-        "error",
-        "frontmatter-parse",
-        error instanceof Error ? error.message : String(error),
-      ),
-    );
+    issues.push(issue("error", "frontmatter-parse", (error as Error).message));
     return issues;
   }
 
@@ -127,23 +121,14 @@ export function lintSkillSource(context: LintSourceContext): LintIssue[] {
       );
     }
   } catch (error) {
-    if (error instanceof z.ZodError) {
-      for (const zodIssue of error.issues) {
-        const fieldPath = zodIssue.path.join(".") || "<frontmatter>";
-        issues.push(
-          issue(
-            "error",
-            `frontmatter:${fieldPath}`,
-            `${fieldPath}: ${zodIssue.message}`,
-          ),
-        );
-      }
-    } else {
+    const zodError = error as z.ZodError;
+    for (const zodIssue of zodError.issues) {
+      const fieldPath = zodIssue.path.join(".") || "<frontmatter>";
       issues.push(
         issue(
           "error",
-          "frontmatter-invalid",
-          error instanceof Error ? error.message : String(error),
+          `frontmatter:${fieldPath}`,
+          `${fieldPath}: ${zodIssue.message}`,
         ),
       );
     }

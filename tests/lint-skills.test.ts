@@ -105,6 +105,17 @@ describe("lintSkillSource", () => {
     expect(warning?.severity).toBe("warning");
   });
 
+  it("flags scalar frontmatter with the <frontmatter> path label", () => {
+    const issues = lintSkillSource({
+      directoryName: "scalar",
+      relativeFile: "scalar/SKILL.md",
+      source: `---\n42\n---\n${validBody}`,
+    });
+    expect(
+      issues.some((entry) => entry.rule === "frontmatter:<frontmatter>"),
+    ).toBe(true);
+  });
+
   it("returns a parse error when frontmatter markers are missing", () => {
     const issues = lintSkillSource({
       directoryName: "broken",
@@ -156,6 +167,12 @@ describe("lintSkillsDirectory", () => {
     expect(report.scanned).toBe(1);
     expect(report.issues).toEqual([]);
     expect(hasErrors(report)).toBe(false);
+  });
+
+  it("formatLintReport reports a clean run when issues are empty", () => {
+    const text = formatLintReport({ scanned: 1, issues: [] });
+    expect(text).toContain("1 skill scanned");
+    expect(text).toContain("No issues found.");
   });
 
   it("formatLintReport summarizes counts", () => {
