@@ -49,7 +49,8 @@ async function lintSkillDirectory(
 
   try {
     await stat(skillFile);
-  } catch {
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
     return [
       {
         skill: directoryName,
@@ -61,7 +62,20 @@ async function lintSkillDirectory(
     ];
   }
 
-  const source = await readFile(skillFile, "utf8");
+  let source: string;
+  try {
+    source = await readFile(skillFile, "utf8");
+  } catch {
+    return [
+      {
+        skill: directoryName,
+        file: relativeFile,
+        severity: "error",
+        rule: "skill-md-required",
+        message: "SKILL.md could not be read.",
+      },
+    ];
+  }
   return lintSkillSource({
     directoryName,
     relativeFile,
