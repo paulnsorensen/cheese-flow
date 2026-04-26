@@ -1,6 +1,6 @@
 ---
 name: briesearch
-description: Multi-source research orchestrator. Routes a question across web search, library docs, and in-repo tools, writes findings to <harness>/research/<slug>.md, and returns a compact synthesis to the main context.
+description: Multi-source research orchestrator. Routes a question across Tavily, Context7 library docs, GitHub, and in-repo tools, writes findings to <harness>/research/<slug>.md, and returns a compact synthesis to the main context.
 argument-hint: "<question | library | API | dependency>"
 ---
 
@@ -12,14 +12,24 @@ multiple information sources in parallel, writes full findings to
 main context so it does not pollute the caller's window. `<harness>` is the
 active harness output root — `.claude` for Claude Code, `.codex` for Codex.
 
+## Execution
+
+Invoke the `research` skill with `$ARGUMENTS`. The skill owns source routing,
+scratch-file handling, synthesis, confidence scoring, optional report writing,
+and cleanup.
+
+Do not reimplement the fetcher workflow in this command. This command is the
+user-facing alias and contract for research; `skills/research/SKILL.md` is the
+implementation source of truth.
+
 ## Source routing
 
 | Source | Tool | Best for |
 |---|---|---|
-| General web | Tavily | Broad technical content, blog posts, long-form material |
-| SERP + facts | Serper | Up-to-date facts, product pages, vendor documentation |
+| Web + facts | Tavily | Broad technical content, recency, product pages, vendor documentation |
 | Library docs | Context7 | API reference, configuration, migration notes |
 | In-repo context | tilth, ripgrep, LSP | How the target codebase already handles related concerns |
+| Open-source examples | GitHub | How public projects solve similar problems |
 
 Each source runs in parallel where possible. Overlapping findings are
 merged; conflicts are flagged in the synthesis.
@@ -44,17 +54,3 @@ merged; conflicts are flagged in the synthesis.
 - Investigating a dependency (maturity, license, maintenance activity).
 - Pulling external context before `/mold` or `/cheese` so the spec is
   informed, not speculative.
-
-## Deferred behavior
-
-> **Scaffold notice.** Parallel source dispatch and the
-> `<harness>/research/<slug>.md` write are not yet wired. This file
-> documents the routing and output contract. The current implementation
-> should describe what `/briesearch` would do and stop — it does not yet
-> call Tavily, Serper, Context7, or the codebase tools.
-
-The next iteration will:
-
-- Dispatch the four source lookups in parallel via the `Agent` tool.
-- Merge findings, flag conflicts, and write the full report.
-- Return only the compact synthesis to the caller's context window.
