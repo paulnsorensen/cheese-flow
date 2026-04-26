@@ -3,7 +3,7 @@
 Design-quality scoreboard for the cheese-flow agent + DAG ecosystem. Every
 row scored 0–100. The ralph stops when every row is >= 90.
 
-Last updated: 2026-04-26, iteration 3.
+Last updated: 2026-04-26, iteration 4.
 
 ## Flows (from Quintessential Agentic Flows for Cheese-Flow.md)
 
@@ -14,7 +14,7 @@ Last updated: 2026-04-26, iteration 3.
 | 3. Debug (Culture → Cook → Press → Age) | 60 | `/debug` command added with explicit Cut-skip, stage permission table, three-loop fix cap, and Culture read-only invariant. Tool-layer enforcement and dispatch wiring still deferred. |
 | 4. PR-Finish (Culture → Cut → Press → Age) | 60 | `/pr-finish` command added: explicit Cook-skip rationale, per-stage permission table, AskUserQuestion-gated approval between Cut and Press, three-loop Press→Age fix cap, and divergent-PR redirect to `/mold`. Stage dispatch wiring still deferred. |
 | 5. Review (Culture → Age → loop) | 55 | /age command exists with the six-dimension contract; missing the explicit Culture-pre-pass and the Age→Press fix-loop semantics. |
-| 6. Incremental (Cook → Cut → Press → Age × N) | 20 | No incremental command. Loop boundary, per-iteration Culture minimization, and stop condition all unspecified. |
+| 6. Incremental (Cook → Cut → Press → Age × N) | 60 | `/incremental` command added: per-task Cook→Cut→Press→Age contract, Culture-folded-into-Cook for minimal per-task grounding, JSON state file with resume semantics, three-loop Press→Age cap per task, explicit `/fromagerie` redirect for parallel-shaped backlogs, and per-task scope constraints in the stage table. Stage dispatch wiring still deferred. |
 | 7. Learn (Culture only) | 60 | /culture command documents the no-write invariant and the exit criterion; enforcement is still prompt-only and the agent metadata does not declare read-only. |
 
 ## Agents (agents/*.md.eta)
@@ -51,3 +51,4 @@ Last updated: 2026-04-26, iteration 3.
 - Iteration 1: bootstrap — initial scoreboard with honest low-biased scores.
 - Iteration 2: add `commands/debug.md` (Flow 3 entry point) — Culture→Cook→Press→Age with explicit Cut-skip, per-stage permission contract, evaluator-optimizer fix loop, and stop-condition cap.
 - Iteration 3: add `commands/pr-finish.md` (Flow 4 entry point) — Culture→Cut→Press→Age with explicit Cook-skip rationale, AskUserQuestion-gated approval between Cut and Press, divergent-PR redirect to `/mold`, and three-loop Press→Age fix cap.
+- Iteration 4: add `commands/incremental.md` (Flow 6 entry point) — per-task Cook→Cut→Press→Age × N with Culture folded into Cook for minimal per-task grounding, JSON state file with resume semantics, three-loop Press→Age cap per task, parallel-shaped-backlog redirect to `/fromagerie`, and per-task scope constraints in every stage row.
