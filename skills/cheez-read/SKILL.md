@@ -1,7 +1,6 @@
 ---
 name: cheez-read
-model: haiku
-context: fork
+compatibility: Requires tilth MCP server
 allowed-tools: mcp__tilth__tilth_read, mcp__tilth__tilth_files, mcp__tilth__tilth_deps
 description: >
   Smart code reading using tilth MCP. Replaces cat/head/tail with AST-aware
@@ -10,14 +9,15 @@ description: >
   Use when: reading files, exploring code structure, understanding modules,
   checking dependencies, or preparing for edits. Do NOT use for searching
   symbols or text — use cheez-search. Do NOT use for editing — use cheez-write.
-examples:
-  - "read src/auth.ts"
-  - "show me lines 44-89 of handlers.go"
-  - "what's in this directory?"
-  - "show the dependencies of this file"
+  Examples: "read src/auth.ts", "show lines 44-89 of handlers.go", "what's
+  in this directory?", "show the dependencies of this file".
 ---
 
 # cheez-read
+
+> **Hard dependency**: If `mcp__tilth__tilth_read` is unavailable, stop immediately and report
+> "tilth MCP server is not loaded — cannot proceed." Do NOT fall back to `cat`, `Read`, `Glob`,
+> or any host tool.
 
 Smart code reading via **tilth MCP** (`tilth_read`, `tilth_files`, `tilth_deps`).
 tilth replaces cat/head/tail with AST-aware file reading that understands code structure.

@@ -1,7 +1,6 @@
 ---
 name: cheez-search
-model: haiku
-context: fork
+compatibility: Requires tilth MCP server
 allowed-tools: mcp__tilth__tilth_search, mcp__tilth__tilth_deps
 description: >
   AST-aware code search using tilth MCP. Finds definitions first, then usages.
@@ -9,15 +8,16 @@ description: >
   dependencies and call graphs. Use when: finding where symbols are defined,
   tracing call chains, understanding code structure, finding all callers of
   a function. Do NOT use for reading files — use cheez-read. Do NOT use for
-  editing — use cheez-write.
-examples:
-  - "find where handleAuth is defined"
-  - "what calls validateToken?"
-  - "trace the ServeHTTP, HandlersChain, Next functions"
-  - "find all implementations of the UserService interface"
+  editing — use cheez-write. Examples: "find where handleAuth is defined",
+  "what calls validateToken?", "trace the ServeHTTP, HandlersChain, Next
+  functions", "find all implementations of the UserService interface".
 ---
 
 # cheez-search
+
+> **Hard dependency**: If `mcp__tilth__tilth_search` is unavailable, stop immediately and report
+> "tilth MCP server is not loaded — cannot proceed." Do NOT fall back to `Grep`, `Glob`,
+> or any host tool.
 
 AST-aware code search via **tilth MCP** (`tilth_search`, `tilth_deps`).
 Tree-sitter finds where symbols are **defined** — not just where strings appear.

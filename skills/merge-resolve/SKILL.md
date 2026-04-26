@@ -1,8 +1,7 @@
 ---
 name: merge-resolve
-model: sonnet
-context: fork
-allowed-tools: Bash(git:*), Bash(mergiraf:*), Bash(python3:*), Read, Edit, Glob
+compatibility: Requires tilth MCP server (delegates file IO to cheez-read/cheez-write/cheez-search)
+allowed-tools: Bash(git:*), Bash(mergiraf:*), Bash(python3:*)
 description: >
   Resolve merge conflicts, rebase conflicts, and cherry-pick failures using mergiraf
   (AST-aware structural merge), git rerere, and kdiff3. Activate when: merge failed,
@@ -12,17 +11,23 @@ description: >
   or batch conflict resolution across multiple files. Covers the full resolution
   chain: mergiraf (structural auto-resolve) → rerere (replay remembered fixes) →
   kdiff3 (manual). Do NOT use for general git operations without conflicts — those
-  go to the commit or gh skills.
-examples:
-  - "resolve the merge conflicts"
-  - "fix the rebase conflicts"
-  - "what's conflicting after the merge?"
-  - "resolve conflicts in src/auth.ts"
+  go to the commit or gh skills. Examples: "resolve the merge conflicts", "fix the
+  rebase conflicts", "what's conflicting after the merge?", "resolve conflicts in
+  src/auth.ts".
 ---
 
 # merge-resolve
 
 Resolve merge conflicts using the structural merge chain: mergiraf → rerere → kdiff3.
+
+> **File IO delegation**: This skill does NOT hold `Read`, `Edit`, `Write`, or `Glob`. For
+> per-file conflict inspection or manual edits, delegate to:
+> - **cheez-read** — inspect conflicted files, view conflict hunks, list directory contents
+> - **cheez-search** — locate conflict markers, search for related symbols across the tree
+> - **cheez-write** — apply resolved content with hash anchors
+>
+> The bash-driven flows below (git, mergiraf, python scripts) handle the bulk of resolution.
+> Drop into the cheez skills only when you need to inspect or rewrite a specific file.
 
 ---
 
@@ -253,6 +258,7 @@ git cherry-pick --abort
 - **Commit resolved files** — use the commit skill
 - **Architectural review of merge results** — use age or code-review
 - **Abort the operation** — presents abort as an option, user decides
+- **Read, edit, or search files directly** — delegate to cheez-read / cheez-write / cheez-search
 
 ---
 

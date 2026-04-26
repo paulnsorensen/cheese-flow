@@ -1,7 +1,6 @@
 ---
 name: cheez-write
-model: haiku
-context: fork
+compatibility: Requires tilth MCP server
 allowed-tools: mcp__tilth__tilth_edit, mcp__tilth__tilth_read
 description: >
   Hash-anchored file editing using tilth MCP. Replace specific functions or
@@ -9,14 +8,15 @@ description: >
   Use when: editing code, replacing functions, deleting blocks, or making
   precise surgical changes. Always read first to get hash anchors. Do NOT
   use for reading files — use cheez-read. Do NOT use for searching — use
-  cheez-search.
-examples:
-  - "replace the validateToken function with this new implementation"
-  - "delete lines 44-89"
-  - "update the authenticate method"
+  cheez-search. Examples: "replace the validateToken function with this new
+  implementation", "delete lines 44-89", "update the authenticate method".
 ---
 
 # cheez-write
+
+> **Hard dependency**: If `mcp__tilth__tilth_edit` is unavailable, stop immediately and report
+> "tilth MCP server is not loaded — cannot proceed." Do NOT fall back to `Edit`, `Write`,
+> or any host tool.
 
 Hash-anchored file editing via **tilth MCP** (`tilth_edit`).
 Never rewrite whole files. Use hash anchors from tilth_read to make precise, surgical edits.
