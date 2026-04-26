@@ -3,7 +3,7 @@
 Design-quality scoreboard for the cheese-flow agent + DAG ecosystem. Every
 row scored 0–100. The ralph stops when every row is >= 90.
 
-Last updated: 2026-04-26, iteration 1.
+Last updated: 2026-04-26, iteration 2.
 
 ## Flows (from Quintessential Agentic Flows for Cheese-Flow.md)
 
@@ -11,7 +11,7 @@ Last updated: 2026-04-26, iteration 1.
 |---|---|---|
 | 1. Spec-First (Cook → Cut → Press → Age) | 35 | Stage agents exist but no top-level command anchors this flow; spec→cook hand-off is undocumented; entry skips Culture but no agent acknowledges that. |
 | 2. Exploration (Culture → Cook iterative → Cut → Press → Age) | 25 | Culture↔Cook loop semantics undefined; no gate between exploration and commit; iteration cap unspecified. |
-| 3. Debug (Culture → Cook → Press → Age) | 20 | No /debug command. Cut-skip path not encoded anywhere; Culture lacks a "diagnostic, no-write" submode wired to a Press handoff. |
+| 3. Debug (Culture → Cook → Press → Age) | 60 | `/debug` command added with explicit Cut-skip, stage permission table, three-loop fix cap, and Culture read-only invariant. Tool-layer enforcement and dispatch wiring still deferred. |
 | 4. PR-Finish (Culture → Cut → Press → Age) | 20 | No /pr-finish command. Cook-skip path not documented; PR/diff ingestion contract for Culture absent. |
 | 5. Review (Culture → Age → loop) | 55 | /age command exists with the six-dimension contract; missing the explicit Culture-pre-pass and the Age→Press fix-loop semantics. |
 | 6. Incremental (Cook → Cut → Press → Age × N) | 20 | No incremental command. Loop boundary, per-iteration Culture minimization, and stop condition all unspecified. |
@@ -49,3 +49,4 @@ Last updated: 2026-04-26, iteration 1.
 ## Iteration log
 
 - Iteration 1: bootstrap — initial scoreboard with honest low-biased scores.
+- Iteration 2: add `commands/debug.md` (Flow 3 entry point) — Culture→Cook→Press→Age with explicit Cut-skip, per-stage permission contract, evaluator-optimizer fix loop, and stop-condition cap.
