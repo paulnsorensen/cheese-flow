@@ -154,6 +154,21 @@ describe("lintSkillsDirectory", () => {
     expect(hasErrors(report)).toBe(true);
   });
 
+  it("reports skill-md-required when SKILL.md is unreadable", async () => {
+    const skillsRoot = await createSkillsRoot();
+    await mkdir(path.join(skillsRoot, "unreadable-skill", "SKILL.md"), {
+      recursive: true,
+    });
+
+    const report = await lintSkillsDirectory(skillsRoot);
+
+    expect(report.scanned).toBe(1);
+    expect(report.issues).toHaveLength(1);
+    expect(report.issues[0]?.rule).toBe("skill-md-required");
+    expect(report.issues[0]?.message).toBe("SKILL.md could not be read.");
+    expect(hasErrors(report)).toBe(true);
+  });
+
   it("returns a clean report when all skills validate", async () => {
     const skillsRoot = await createSkillsRoot();
     await writeSkill(

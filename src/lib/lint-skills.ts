@@ -1,6 +1,6 @@
 import { readdir, readFile, stat } from "node:fs/promises";
 import path from "node:path";
-import { z } from "zod";
+import type { z } from "zod";
 import { parseFrontmatter } from "./frontmatter.js";
 import { parseSkillFrontmatter } from "./schemas.js";
 
