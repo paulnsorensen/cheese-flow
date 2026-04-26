@@ -3,7 +3,7 @@
 Design-quality scoreboard for the cheese-flow agent + DAG ecosystem. Every
 row scored 0–100. The ralph stops when every row is >= 90.
 
-Last updated: 2026-04-26, iteration 8.
+Last updated: 2026-04-26, iteration 9.
 
 ## Flows (from Quintessential Agentic Flows for Cheese-Flow.md)
 
@@ -21,22 +21,22 @@ Last updated: 2026-04-26, iteration 8.
 
 | Agent | Score | Notes |
 |---|---|---|
-| culture | 65 | Output contract is structured and tight; missing explicit read-only permission posture, missing flow-entry guidance for Debug vs Learn vs Exploration. |
+| culture | 75 | Output contract is structured and tight; explicit Permission Contract block now declares read-only-on-production with the `$TMPDIR/fromage-culture-<slug>.md` write carve-out and a cross-harness fallback note; still missing flow-entry guidance for Debug vs Learn vs Exploration. |
 | cook | 60 | Workflow + plan-step table is solid; missing confidence scoring, missing structured summary file (orchestrator gets full body), Bash use is unconstrained. |
 | cut | 55 | Pipeline-vs-standalone duality is documented but description still says "adversarial" instead of "TDD scaffolding"; overlap with press not adjudicated. |
 | press | 55 | Confidence scoring + summary-file pattern is good; charter overlaps with cut; "guilty-until-proven" tone clear. |
-| age-safety | 75 | Charter, classify→evidence→score protocol, and disjoint-with-siblings note all present; minor: no explicit Sliced-Bread cross-link for boundary bugs. |
-| age-arch | 75 | Strong measurement protocol with cheez-search/tilth grounding; nesting-depth ladder is concrete; Sliced Bread coverage explicit. |
-| age-encap | 75 | Sliced Bread rules embedded; cheez-search "callers" + tilth_deps grounding; classification table covers the 5 leak types. |
-| age-yagni | 70 | Justification check protocol is concrete; AI_NOISE deletion fix-it-yourself rule is good; spec-cross-reference covered. |
-| age-history | 85 | Modifier-only contract is tight; one-call helper invocation now points at the real `python/tools/git_file_risk.py` (stdlib-only, plain `python3`) with a fall-through to a `git-file-risk` PATH shim; cross-harness portability note added. |
-| age-spec | 70 | Spec-first protocol with cheez-search verification; missing "no spec found" fast-exit emphasis in summary; classification table present. |
+| age-safety | 80 | Charter, classify→evidence→score protocol, and disjoint-with-siblings note all present; Permission Contract block now declares strict read-only with `Edit, Write, NotebookEdit` in disallowedTools; minor: no explicit Sliced-Bread cross-link for boundary bugs. |
+| age-arch | 80 | Strong measurement protocol with cheez-search/tilth grounding; nesting-depth ladder is concrete; Sliced Bread coverage explicit; Permission Contract block + tightened disallowedTools (Edit, Write, NotebookEdit). |
+| age-encap | 80 | Sliced Bread rules embedded; cheez-search "callers" + tilth_deps grounding; classification table covers the 5 leak types; Permission Contract block + tightened disallowedTools (Edit, Write, NotebookEdit). |
+| age-yagni | 80 | Justification check protocol is concrete; AI_NOISE deletion fix-it-yourself rule is good; spec-cross-reference covered; Permission Contract block now codifies the < 5-line annotate-with-fix-it-yourself ceiling and the self-check rule. |
+| age-history | 90 | Modifier-only contract is tight; one-call helper invocation now points at the real `python/tools/git_file_risk.py` (stdlib-only, plain `python3`) with a fall-through to a `git-file-risk` PATH shim; Permission Contract block now enumerates the helper-script carve-out vs the strict no-write/no-LSP/no-web posture. |
+| age-spec | 75 | Spec-first protocol with cheez-search verification; Permission Contract block + tightened disallowedTools (Edit, Write, NotebookEdit); missing "no spec found" fast-exit emphasis in summary. |
 
 ## Cross-cutting principles
 
 | Principle | Score | Notes |
 |---|---|---|
-| Permission model per stage | 30 | Permission posture (Culture read-only, Press full r/w, Age annotate-only) is not enforced via tools/disallowedTools; only prompt-level guidance. |
+| Permission model per stage | 60 | Source frontmatter tightened: age-safety / age-arch / age-encap / age-spec now disallow `Edit, Write, NotebookEdit` (matching age-history's exemplar); age-yagni keeps Edit/Write privileges intentionally for its < 5-line fix-it-yourself ceiling. Uniform `## Permission Contract` block embedded in all seven read-only review agents (culture + 6 age-*), each with a positive-allowed table, an explicit `**NO**` row per forbidden action, and a cross-harness fallback note. Remaining gap: compiler does not yet propagate `disallowedTools`/`permissionMode` into the rendered harness frontmatter (blocked-on-src) — the source declaration is forward-compatible but currently a no-op at runtime; Cook/Cut/Press still lack their writer-side per-stage Permission Contracts. |
 | Confidence scoring (>= 50 to surface) | 70 | Applied uniformly across the six age-* agents and press; cook + cut + culture do not score at all. |
 | Compaction seams (sub-agents return summaries, not narrative) | 55 | culture and press emit structured summaries to $TMPDIR + short returns; cook still returns full body; age-* return short tables but body lengths drift. |
 | Skill-over-tool delegation | 70 | Agents prefer cheez-* skills over raw Read/Grep; basic-agent still uses raw `read/write/bash`; no skill-or-tool routing helper is shared. |
@@ -56,3 +56,4 @@ Last updated: 2026-04-26, iteration 8.
 - Iteration 6: add `commands/fromage.md` (Flow 1 entry point) — Cook → Cut → Press → Age with Culture folded into Cook's light pre-pass, hard spec-validation gate (Approach + Quality gates required), parallel-atoms classifier redirecting to `/fromagerie` (>= 4 non-overlapping units) and linear-backlog redirect to `/incremental`, three-loop Press → Age cap, and spec-invalidation halt that recommends `/mold` when Age challenges the spec itself.
 - Iteration 7: rewrite `commands/age.md` as Flow 5 (Review) entry point — Culture pre-pass with structured brief, per-stage permission table (Culture+Age read-only-on-production, Press the only writer), `AskUserQuestion`-gated Press fix loop scoped to Age-cited files only, three-loop convergence cap, `--no-fix` flag for embedded use inside other flows, spec-invalidation halt path recommending `/mold` or `/explore`, and dual-role framing as both standalone Flow 5 and reusable review primitive.
 - Iteration 8: bootstrap `python/tools/` with `git_file_risk.py` (stdlib-only, batch JSON output) and 21 pytest cases covering staleness humanization, the three git probes, the `risk_for` aggregator, and the CLI; rewire `agents/age-history.md.eta` to invoke `python3 python/tools/git_file_risk.py …` (with the `git-file-risk` PATH shim as a fallback) and add the cross-harness portability note. Closes the orphaned-helper gap and lifts the lowest scoreboard row from 25 → 80.
+- Iteration 9: tighten the source-frontmatter `disallowedTools` for the four read-only Age dimensions (safety, arch, encap, spec) to add `Write`, matching age-history's strict exemplar; embed a uniform `## Permission Contract` block in all seven read-only review agents (culture + 6 age-*) with a positive-allowed action table, explicit `**NO**` rows for forbidden actions, and a cross-harness fallback note (Codex / Copilot CLI / Cursor honor the prompt contract since they have no per-agent disallowedTools surface). age-yagni's contract codifies the annotate-with-fix-it-yourself ceiling (< 5 lines, score >= 50, category in {DEAD_CODE, AI_NOISE}) plus a self-check rule. Lifts the lowest scoreboard row from 30 → 60. Design notes in `notes/iter-9-permission-contracts.md`.
