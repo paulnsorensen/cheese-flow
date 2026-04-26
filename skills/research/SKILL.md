@@ -3,6 +3,9 @@ name: research
 description: Multi-source research orchestrator that routes questions across Context7 library docs, Tavily web research, codebase analysis, and GitHub examples, then returns a compact synthesis with confidence scoring.
 license: MIT
 compatibility: Works in markdown-based coding harnesses with sub-agent support. Context7, Tavily, and GitHub lookups are optional source routes.
+metadata:
+  owner: cheese-flow
+  category: research
 allowed-tools:
   - read
   - write
@@ -28,19 +31,17 @@ Run the orchestration inline, but keep raw evidence out of the main context:
 3. Have fetchers write findings to scratch files under `$TMPDIR`.
 4. Have one synthesis sub-agent read those scratch files and return the final
    answer.
-5. Delete the scratch directory after synthesis, unless a report file was
-   requested.
+5. Write the full report to `<harness>/research/<slugified-topic>.md`.
+6. Delete the scratch directory after the report is written.
 
-The caller should see only the routing decision, fetcher status, synthesis, and
-optional report path.
+`<harness>` is the active harness output root — `.claude` for Claude Code,
+`.codex` for Codex, etc. The caller should see only the routing decision,
+fetcher status, synthesis, and the report path.
 
 ## Arguments
 
-Parse the request for:
-
-- `--report` or `--report <filepath>`: save a durable markdown report.
-  Default path: `<harness>/research/<slugified-topic>.md`.
-- Everything else: the research question.
+The entire request body is the research question. The skill always writes a
+full report; the caller does not pass an output path.
 
 Create a run directory:
 
@@ -251,13 +252,14 @@ Synthesis task:
 **<score>** - <justification based on source agreement and completeness>
 ```
 
-If `--report` was set, append a fenced `report-body` block containing a full
-markdown report with source URLs, file refs, and repo links. The orchestration
-layer writes that report body verbatim to the requested path.
+After the synthesis block, append a fenced `report-body` block containing a
+full markdown report with source URLs, file refs, and repo links. The
+orchestration layer writes that report body verbatim to
+`<harness>/research/<slug>.md`.
 
 ## Cleanup
 
-After synthesis and any report write:
+After the report is written:
 
 ```bash
 rm -rf "$RUN_DIR"
