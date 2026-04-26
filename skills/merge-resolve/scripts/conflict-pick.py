@@ -17,17 +17,6 @@ from git_utils import run_git
 
 
 def resolve_hunks(content: str, strategy: str, grep_pattern: Optional[str] = None) -> str:
-    """
-    Resolve conflict hunks using the specified strategy.
-    
-    Args:
-        content: File content with conflict markers
-        strategy: 'ours' or 'theirs'
-        grep_pattern: If provided, only resolve hunks matching this pattern
-    
-    Returns:
-        Resolved content
-    """
     lines = content.split("\n")
     result = []
     
@@ -53,20 +42,18 @@ def resolve_hunks(content: str, strategy: str, grep_pattern: Optional[str] = Non
         elif line.startswith(">>>>>>>") and in_conflict:
             conflict_text.append(line)
             
-            # Check if we should resolve this hunk
             should_resolve = True
             if grep_pattern:
                 full_conflict = "\n".join(conflict_text)
                 should_resolve = re.search(grep_pattern, full_conflict) is not None
-            
+
             if should_resolve:
-                # Apply resolution
                 if strategy == "ours":
                     result.extend(ours_lines)
                 else:
                     result.extend(theirs_lines)
             else:
-                # Keep conflict markers (leave for manual resolution)
+                # keep conflict markers — doesn't match grep filter
                 result.extend(conflict_text)
             
             in_conflict = False
@@ -118,36 +105,30 @@ def main():
     )
     
     args = parser.parse_args()
-    
-    # Validate strategy
+
     if args.ours and args.theirs:
         print("Error: Cannot use both --ours and --theirs")
         return 1
-    
+
     if not args.ours and not args.theirs:
         print("Error: Must specify --ours or --theirs")
         return 1
-    
+
     strategy = "ours" if args.ours else "theirs"
-    
-    # Read file
+
     try:
         content = Path(args.file).read_text()
     except FileNotFoundError:
         print(f"Error: File not found: {args.file}")
         return 1
-    
-    # Check for conflicts
+
     if "<<<<<<" not in content:
         print(f"No conflict markers found in {args.file}")
         return 0
-    
-    # Resolve
+
     resolved = resolve_hunks(content, strategy, args.grep)
-    
-    # Check if all conflicts resolved
     has_remaining = "<<<<<<" in resolved
-    
+
     if args.dry_run:
         print(resolved)
         if has_remaining:
@@ -158,7 +139,6 @@ def main():
         if has_remaining:
             print(f"Partially resolved {args.file} - some conflicts remain")
         else:
-            # Stage the file
             add_result = run_git(["add", args.file])
             if add_result.returncode != 0:
                 print(f"Error: Resolved but staging failed: {add_result.stderr.strip()}")

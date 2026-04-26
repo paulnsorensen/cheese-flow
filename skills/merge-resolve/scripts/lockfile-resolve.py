@@ -74,17 +74,6 @@ def resolve_lockfile(
     strategy: str = "theirs",
     dry_run: bool = False,
 ) -> dict:
-    """
-    Resolve a conflicted lockfile by taking a side and regenerating.
-    
-    Args:
-        lockfile_path: Path to the lockfile
-        strategy: 'ours', 'theirs', or 'regen' (just regenerate)
-        dry_run: If True, don't modify files
-    
-    Returns:
-        dict with status and message
-    """
     result = {
         "path": lockfile_path,
         "resolved": False,
@@ -101,7 +90,6 @@ def resolve_lockfile(
         result["message"] = f"No config for lockfile type: {lockfile_type}"
         return result
     
-    # Check manifest exists
     manifest_path = Path(lockfile_path).parent / config["manifest"]
     if not manifest_path.exists():
         result["message"] = f"Manifest not found: {manifest_path}"
@@ -116,7 +104,6 @@ def resolve_lockfile(
         result["message"] = f"Would take {strategy} and regenerate with: {' '.join(config['regen_cmd'])}"
         return result
     
-    # Take a side for the lockfile
     if strategy in ("ours", "theirs"):
         stage = ":2:" if strategy == "ours" else ":3:"
         git_result = run_git(["show", f"{stage}{lockfile_path}"])
@@ -127,7 +114,6 @@ def resolve_lockfile(
         
         Path(lockfile_path).write_text(git_result.stdout)
     
-    # Regenerate
     print(f"Regenerating {lockfile_path}...")
     regen_result = subprocess.run(
         config["regen_cmd"],
@@ -180,29 +166,25 @@ def main():
     )
     
     args = parser.parse_args()
-    
-    # Get lockfiles to process
+
     if args.files:
         lockfiles = args.files
     else:
-        # Auto-detect conflicted lockfiles
         all_conflicted = get_conflicted_files()
         lockfiles = [f for f in all_conflicted if detect_lockfile_type(f)]
-    
+
     if not lockfiles:
         print("No conflicted lockfiles found.")
         return 0
-    
-    # Process each lockfile
+
     results = []
     for path in lockfiles:
         result = resolve_lockfile(path, args.strategy, args.dry_run)
         results.append(result)
-        
+
         status = "✓" if result["resolved"] else "✗"
         print(f"{status} {result['path']}: {result['message']}")
-    
-    # Summary
+
     resolved = sum(1 for r in results if r["resolved"])
     print(f"\nResolved: {resolved}/{len(results)}")
     

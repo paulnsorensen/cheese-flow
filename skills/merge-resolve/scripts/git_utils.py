@@ -1,8 +1,5 @@
 #!/usr/bin/env python3
-"""
-Shared git utilities for merge-resolve skill.
-Provides conflict detection, mergiraf support checking, and stage extraction.
-"""
+"""Shared git utilities for merge-resolve skill."""
 
 import subprocess
 from pathlib import Path
@@ -10,7 +7,6 @@ from typing import List, Optional, Tuple
 
 
 def run_git(args: List[str], capture_output: bool = True) -> subprocess.CompletedProcess:
-    """Run a git command and return the result."""
     return subprocess.run(
         ["git"] + args,
         capture_output=capture_output,
@@ -19,7 +15,6 @@ def run_git(args: List[str], capture_output: bool = True) -> subprocess.Complete
 
 
 def get_conflicted_files() -> List[str]:
-    """Get list of files with merge conflicts."""
     result = run_git(["diff", "--name-only", "--diff-filter=U"])
     if result.returncode != 0:
         return []
@@ -27,46 +22,40 @@ def get_conflicted_files() -> List[str]:
 
 
 def has_conflict_markers(path: str) -> bool:
-    """Check if a file contains conflict markers."""
     try:
         content = Path(path).read_text()
         return "<<<<<<" in content or "=======" in content or ">>>>>>" in content
-    except Exception:
+    except OSError:
         return False
 
 
 def extract_stages(path: str) -> Tuple[Optional[str], Optional[str], Optional[str]]:
-    """
-    Extract the three-way merge inputs from git's stage slots.
-    Returns (base, ours, theirs) content as strings, or None if not available.
-    """
+    """Returns (base, ours, theirs) from git stage slots; None for any unavailable stage."""
     base = ours = theirs = None
-    
+
     # Stage 1 = common ancestor (base)
     result = run_git(["show", f":1:{path}"])
     if result.returncode == 0:
         base = result.stdout
-    
+
     # Stage 2 = current branch (ours/HEAD)
     result = run_git(["show", f":2:{path}"])
     if result.returncode == 0:
         ours = result.stdout
-    
+
     # Stage 3 = incoming branch (theirs)
     result = run_git(["show", f":3:{path}"])
     if result.returncode == 0:
         theirs = result.stdout
-    
+
     return base, ours, theirs
 
 
 def get_file_extension(path: str) -> str:
-    """Get the file extension without the leading dot."""
     return Path(path).suffix.lstrip(".")
 
 
 def is_mergiraf_supported(path: str) -> bool:
-    """Check if mergiraf supports the file type."""
     ext = get_file_extension(path)
     # Languages supported by mergiraf (Tree-sitter based)
     supported_extensions = {
@@ -78,10 +67,7 @@ def is_mergiraf_supported(path: str) -> bool:
 
 
 def parse_conflict_hunks(content: str) -> List[dict]:
-    """
-    Parse conflict markers in a file and return structured hunks.
-    Handles both diff3 (with base) and standard (without base) conflict markers.
-    """
+    """Handles both diff3 (with ||||||| base) and standard (without base) conflict markers."""
     lines = content.split("\n")
     hunks = []
     current_hunk = None
@@ -111,15 +97,14 @@ def parse_conflict_hunks(content: str) -> List[dict]:
             section = None
         elif current_hunk and section:
             current_hunk[section].append(line)
-    
+
     return hunks
 
 
-def get_surrounding_context(content: str, start_line: int, end_line: int, 
+def get_surrounding_context(content: str, start_line: int, end_line: int,
                             context_lines: int = 3) -> Tuple[List[str], List[str]]:
-    """Get context lines before and after a range."""
     lines = content.split("\n")
-    
+
     # Before context (avoiding conflict markers)
     before_start = max(0, start_line - context_lines - 1)
     before = []
@@ -127,22 +112,20 @@ def get_surrounding_context(content: str, start_line: int, end_line: int,
         line = lines[i]
         if not any(marker in line for marker in ["<<<<<<", "======", ">>>>>>", "||||||"]):
             before.append(f"{i+1}: {line}")
-    
-    # After context
+
     after_end = min(len(lines), end_line + context_lines)
     after = []
     for i in range(end_line, after_end):
         line = lines[i]
         if not any(marker in line for marker in ["<<<<<<", "======", ">>>>>>", "||||||"]):
             after.append(f"{i+1}: {line}")
-    
+
     return before, after
 
 
 def detect_lockfile_type(path: str) -> Optional[str]:
-    """Detect the type of lockfile for regeneration strategy."""
     filename = Path(path).name.lower()
-    
+
     lockfile_map = {
         "cargo.lock": "cargo",
         "package-lock.json": "npm",
@@ -154,5 +137,5 @@ def detect_lockfile_type(path: str) -> Optional[str]:
         "gemfile.lock": "bundler",
         "go.sum": "go",
     }
-    
+
     return lockfile_map.get(filename)
