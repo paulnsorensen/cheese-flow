@@ -15,6 +15,7 @@ const skillFrontmatterSchema = z.object({
   "allowed-tools": z
     .union([z.array(z.string().min(1)), z.string().min(1)])
     .optional(),
+  metadata: z.record(z.string(), z.unknown()).optional(),
 });
 
 const commandFrontmatterSchema = z.object({

@@ -15,7 +15,7 @@ afterEach(async () => {
 });
 
 describe("emitMcpConfig", () => {
-  it("emits .mcp.json for claude-code with tilth and tavily entries", async () => {
+  it("emits .mcp.json for claude-code with tilth, context7, and tavily entries", async () => {
     const outputRoot = await mkdtemp(path.join(os.tmpdir(), "cheese-flow-"));
     createdDirectories.push(outputRoot);
 
@@ -27,7 +27,9 @@ describe("emitMcpConfig", () => {
 
     expect(config.mcpServers).toBeDefined();
     expect(config.mcpServers.tilth).toBeDefined();
+    expect(config.mcpServers.context7).toBeDefined();
     expect(config.mcpServers.tavily).toBeDefined();
+    expect(config.mcpServers.serper).toBeUndefined();
   });
 
   it("tilth entry has npx command with --mcp and --edit flags", async () => {
@@ -59,6 +61,23 @@ describe("emitMcpConfig", () => {
     expect(config.mcpServers.tavily.env.TAVILY_API_KEY).toBeDefined();
   });
 
+  it("context7 entry uses the official npx package", async () => {
+    const outputRoot = await mkdtemp(path.join(os.tmpdir(), "cheese-flow-"));
+    createdDirectories.push(outputRoot);
+
+    await emitMcpConfig("claude-code", outputRoot);
+
+    const mcpPath = path.join(outputRoot, ".mcp.json");
+    const content = await readFile(mcpPath, "utf8");
+    const config = JSON.parse(content);
+
+    expect(config.mcpServers.context7.command).toBe("npx");
+    expect(config.mcpServers.context7.args).toEqual([
+      "-y",
+      "@upstash/context7-mcp",
+    ]);
+  });
+
   it("emits mcp.json (no leading dot) for cursor target", async () => {
     const outputRoot = await mkdtemp(path.join(os.tmpdir(), "cheese-flow-"));
     createdDirectories.push(outputRoot);
@@ -71,6 +90,7 @@ describe("emitMcpConfig", () => {
 
     expect(config.mcpServers).toBeDefined();
     expect(config.mcpServers.tilth).toBeDefined();
+    expect(config.mcpServers.context7).toBeDefined();
   });
 
   it("includes milknado MCP server entry in output", async () => {

@@ -11,6 +11,11 @@ import {
   runAllToolChecks,
 } from "./lib/doctor.js";
 import {
+  formatLintReport,
+  hasErrors,
+  lintSkillsDirectory,
+} from "./lib/lint-skills.js";
+import {
   defaultClientFactory,
   defaultClientTransportFactory,
   defaultServerFactory,
@@ -88,6 +93,28 @@ program
     const results = await runAllToolChecks();
     process.stdout.write(formatReport(results));
     if (hasBlockingFailure(results)) {
+      process.exitCode = 1;
+    }
+  });
+
+program
+  .command("lint")
+  .description(
+    "Lint skills/ against the Agent Skills format (https://agentskills.io).",
+  )
+  .option(
+    "--project-root <path>",
+    "Project root that contains ./skills.",
+    defaultProjectRoot,
+  )
+  .action(async (options: { projectRoot: string }) => {
+    const skillsDirectory = path.join(
+      path.resolve(options.projectRoot),
+      "skills",
+    );
+    const report = await lintSkillsDirectory(skillsDirectory);
+    process.stdout.write(formatLintReport(report));
+    if (hasErrors(report)) {
       process.exitCode = 1;
     }
   });

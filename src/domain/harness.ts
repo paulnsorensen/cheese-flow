@@ -54,6 +54,10 @@ export const canonicalMcpServers: Record<string, McpServerConfig> = {
     args: ["dist/index.js", "mcp"],
   },
   tilth: { command: "npx", args: ["tilth", "--mcp", "--edit"] },
+  context7: {
+    command: "npx",
+    args: ["-y", "@upstash/context7-mcp"],
+  },
   tavily: {
     command: "npx",
     args: ["-y", "tavily-mcp@latest"],
