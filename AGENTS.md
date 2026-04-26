@@ -5,7 +5,7 @@
 **Run `just build` before opening any PR.** It must pass cleanly.
 
 ```
-just build   # lint-fix -> typecheck -> build -> tests -> coverage (autofixes lint)
+just build   # full autofix + build + coverage + Python checks/tests
 ```
 
 If `just build` is red, do not open a PR. Fix failing tests or coverage gaps first.
