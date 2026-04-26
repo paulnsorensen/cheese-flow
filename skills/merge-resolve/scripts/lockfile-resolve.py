@@ -13,11 +13,10 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 
 from git_utils import (
-    get_conflicted_files,
     detect_lockfile_type,
+    get_conflicted_files,
     run_git,
 )
-
 
 # Map lockfile types to regeneration commands and manifest files
 LOCKFILE_CONFIG = {
@@ -79,24 +78,26 @@ def resolve_lockfile(
         "resolved": False,
         "message": "",
     }
-    
+
     lockfile_type = detect_lockfile_type(lockfile_path)
     if not lockfile_type:
         result["message"] = "Unknown lockfile type"
         return result
-    
+
     config = LOCKFILE_CONFIG.get(lockfile_type)
     if not config:
         result["message"] = f"No config for lockfile type: {lockfile_type}"
         return result
-    
+
     manifest_path = Path(lockfile_path).parent / config["manifest"]
     if not manifest_path.exists():
         result["message"] = f"Manifest not found: {manifest_path}"
         return result
 
     if "<<<<<<<" in manifest_path.read_text():
-        result["message"] = f"Manifest {manifest_path} has conflict markers — resolve it before regenerating"
+        result["message"] = (
+            f"Manifest {manifest_path} has conflict markers — resolve it before regenerating"
+        )
         return result
 
     if dry_run:
@@ -134,7 +135,9 @@ def resolve_lockfile(
         if go_mod.exists():
             add_mod_result = run_git(["add", str(go_mod)])
             if add_mod_result.returncode != 0:
-                result["message"] = f"regenerated but staging go.mod failed: {add_mod_result.stderr.strip()}"
+                result["message"] = (
+                    f"regenerated but staging go.mod failed: {add_mod_result.stderr.strip()}"
+                )
                 return result
 
     result["resolved"] = True

@@ -15,10 +15,10 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from git_utils import (
     get_conflicted_files,
+    get_file_extension,
+    get_surrounding_context,
     is_mergiraf_supported,
     parse_conflict_hunks,
-    get_surrounding_context,
-    get_file_extension,
 )
 
 _OURS_CAP = 5
@@ -113,7 +113,8 @@ def format_terse_output(summaries: list) -> str:
             continue
         mergiraf = "y" if s["mergiraf_supported"] else "n"
         lines.append(
-            f"{s['path']} hunks={s['hunk_count']} ext={s['extension']} mergiraf={mergiraf} rec={s['recommendation']}"
+            f"{s['path']} hunks={s['hunk_count']} ext={s['extension']} "
+            f"mergiraf={mergiraf} rec={s['recommendation']}"
         )
         for hunk in s["hunks"]:
             lines.extend(_render_hunk_terse(hunk))
@@ -164,7 +165,8 @@ def format_verbose_output(summaries: list) -> str:
         status = "supported" if summary["mergiraf_supported"] else "not supported"
         lines.append(f"## {summary['path']}")
         lines.append(
-            f"Extension: .{summary['extension']} | Mergiraf: {status} | Hunks: {summary['hunk_count']}"
+            f"Extension: .{summary['extension']} | Mergiraf: {status} | "
+            f"Hunks: {summary['hunk_count']}"
         )
         lines.append("")
 
@@ -190,9 +192,7 @@ def main():
     parser.add_argument(
         "--context", type=int, default=3, help="Lines of context to show (default: 3)."
     )
-    parser.add_argument(
-        "files", nargs="*", help="Specific files (default: all conflicted files)."
-    )
+    parser.add_argument("files", nargs="*", help="Specific files (default: all conflicted files).")
 
     args = parser.parse_args()
 

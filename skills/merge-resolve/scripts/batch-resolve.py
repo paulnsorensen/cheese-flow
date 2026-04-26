@@ -16,8 +16,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 
 from git_utils import (
-    get_conflicted_files,
     extract_stages,
+    get_conflicted_files,
     is_mergiraf_supported,
     run_git,
 )
@@ -61,8 +61,15 @@ def resolve_file(path: str, dry_run: bool = True, verbose: bool = False) -> dict
         Path(theirs_path).write_text(theirs)
 
         cmd = [
-            "mergiraf", "merge", base_path, ours_path, theirs_path,
-            "-o", merged_path, "-p", path,
+            "mergiraf",
+            "merge",
+            base_path,
+            ours_path,
+            theirs_path,
+            "-o",
+            merged_path,
+            "-p",
+            path,
         ]
 
         if verbose:
@@ -147,8 +154,12 @@ def format_verbose(results: list, dry_run: bool) -> str:
 
 def main():
     parser = argparse.ArgumentParser(description="Batch resolve conflicts using mergiraf.")
-    parser.add_argument("--apply", action="store_true", help="Apply resolutions (default is dry-run).")
-    parser.add_argument("--verbose", action="store_true", help="Markdown-formatted output and mergiraf debug logs.")
+    parser.add_argument(
+        "--apply", action="store_true", help="Apply resolutions (default is dry-run)."
+    )
+    parser.add_argument(
+        "--verbose", action="store_true", help="Markdown-formatted output and mergiraf debug logs."
+    )
     parser.add_argument("files", nargs="*", help="Specific files (default: all conflicted files).")
 
     args = parser.parse_args()

@@ -13,8 +13,12 @@ from types import ModuleType
 from unittest.mock import patch
 
 
-def make_completed(stdout: str = "", returncode: int = 0, stderr: str = "") -> subprocess.CompletedProcess:
-    return subprocess.CompletedProcess(args=["x"], returncode=returncode, stdout=stdout, stderr=stderr)
+def make_completed(
+    stdout: str = "", returncode: int = 0, stderr: str = ""
+) -> subprocess.CompletedProcess:
+    return subprocess.CompletedProcess(
+        args=["x"], returncode=returncode, stdout=stdout, stderr=stderr
+    )
 
 
 def _merged_path(cmd: list[str]) -> str:
@@ -41,9 +45,11 @@ class TestResolveFile:
             Path(_merged_path(cmd)).write_text("clean-merged-output\n")
             return make_completed()
 
-        with patch.object(batch_resolve, "extract_stages", return_value=("B", "O", "T")), \
-             patch.object(batch_resolve.subprocess, "run", side_effect=fake_run), \
-             patch.object(batch_resolve, "run_git") as git_mock:
+        with (
+            patch.object(batch_resolve, "extract_stages", return_value=("B", "O", "T")),
+            patch.object(batch_resolve.subprocess, "run", side_effect=fake_run),
+            patch.object(batch_resolve, "run_git") as git_mock,
+        ):
             result = batch_resolve.resolve_file("foo.py", dry_run=True)
         assert result["resolved"] is True
         assert result["message"] == "would resolve cleanly"
@@ -57,9 +63,11 @@ class TestResolveFile:
             Path(_merged_path(cmd)).write_text("merged-content\n")
             return make_completed()
 
-        with patch.object(batch_resolve, "extract_stages", return_value=("B", "O", "T")), \
-             patch.object(batch_resolve.subprocess, "run", side_effect=fake_run), \
-             patch.object(batch_resolve, "run_git", return_value=make_completed()):
+        with (
+            patch.object(batch_resolve, "extract_stages", return_value=("B", "O", "T")),
+            patch.object(batch_resolve.subprocess, "run", side_effect=fake_run),
+            patch.object(batch_resolve, "run_git", return_value=make_completed()),
+        ):
             result = batch_resolve.resolve_file(str(target), dry_run=False)
 
         assert result["resolved"] is True
@@ -74,9 +82,13 @@ class TestResolveFile:
             Path(_merged_path(cmd)).write_text("merged\n")
             return make_completed()
 
-        with patch.object(batch_resolve, "extract_stages", return_value=("B", "O", "T")), \
-             patch.object(batch_resolve.subprocess, "run", side_effect=fake_run), \
-             patch.object(batch_resolve, "run_git", return_value=make_completed(returncode=1, stderr="locked")):
+        with (
+            patch.object(batch_resolve, "extract_stages", return_value=("B", "O", "T")),
+            patch.object(batch_resolve.subprocess, "run", side_effect=fake_run),
+            patch.object(
+                batch_resolve, "run_git", return_value=make_completed(returncode=1, stderr="locked")
+            ),
+        ):
             result = batch_resolve.resolve_file(str(target), dry_run=False)
         assert result["resolved"] is False
         assert "staging failed" in result["message"]
@@ -86,15 +98,23 @@ class TestResolveFile:
             Path(_merged_path(cmd)).write_text("<<<<<<< x\nA\n=======\nB\n>>>>>>> y\n")
             return make_completed()
 
-        with patch.object(batch_resolve, "extract_stages", return_value=("B", "O", "T")), \
-             patch.object(batch_resolve.subprocess, "run", side_effect=fake_run):
+        with (
+            patch.object(batch_resolve, "extract_stages", return_value=("B", "O", "T")),
+            patch.object(batch_resolve.subprocess, "run", side_effect=fake_run),
+        ):
             result = batch_resolve.resolve_file("foo.py", dry_run=True)
         assert result["resolved"] is False
         assert "conflicts remain" in result["message"]
 
     def test_mergiraf_command_failure(self, batch_resolve: ModuleType) -> None:
-        with patch.object(batch_resolve, "extract_stages", return_value=("B", "O", "T")), \
-             patch.object(batch_resolve.subprocess, "run", return_value=make_completed(returncode=2, stderr="boom")):
+        with (
+            patch.object(batch_resolve, "extract_stages", return_value=("B", "O", "T")),
+            patch.object(
+                batch_resolve.subprocess,
+                "run",
+                return_value=make_completed(returncode=2, stderr="boom"),
+            ),
+        ):
             result = batch_resolve.resolve_file("foo.py", dry_run=True)
         assert result["resolved"] is False
         assert "mergiraf failed" in result["message"]
@@ -108,8 +128,10 @@ class TestResolveFile:
             Path(_merged_path(cmd)).write_text("a\n<<<<<<< ours\nx\n=======\ny\n>>>>>>> theirs\n")
             return make_completed(returncode=1)
 
-        with patch.object(batch_resolve, "extract_stages", return_value=("B", "O", "T")), \
-             patch.object(batch_resolve.subprocess, "run", side_effect=fake_run):
+        with (
+            patch.object(batch_resolve, "extract_stages", return_value=("B", "O", "T")),
+            patch.object(batch_resolve.subprocess, "run", side_effect=fake_run),
+        ):
             result = batch_resolve.resolve_file("foo.py", dry_run=True)
         assert result["resolved"] is False
         assert "conflicts remain" in result["message"]
@@ -119,7 +141,12 @@ class TestResolveFile:
 class TestFormatters:
     def test_terse_includes_status_and_summary(self, batch_resolve: ModuleType) -> None:
         results = [
-            {"path": "a.py", "resolved": True, "supported": True, "message": "would resolve cleanly"},
+            {
+                "path": "a.py",
+                "resolved": True,
+                "supported": True,
+                "message": "would resolve cleanly",
+            },
             {"path": "b.py", "resolved": False, "supported": True, "message": "conflicts remain"},
         ]
         out = batch_resolve.format_terse(results, dry_run=True)

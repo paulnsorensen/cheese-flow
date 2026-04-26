@@ -10,7 +10,9 @@ from unittest.mock import patch
 import pytest
 
 
-def make_completed(stdout: str = "", returncode: int = 0, stderr: str = "") -> subprocess.CompletedProcess:
+def make_completed(
+    stdout: str = "", returncode: int = 0, stderr: str = ""
+) -> subprocess.CompletedProcess:
     return subprocess.CompletedProcess(
         args=["git"], returncode=returncode, stdout=stdout, stderr=stderr
     )
@@ -71,15 +73,7 @@ class TestParseConflictHunks:
         assert git_utils.parse_conflict_hunks("just some\nplain text\n") == []
 
     def test_single_standard_hunk(self, git_utils: ModuleType) -> None:
-        content = (
-            "before\n"
-            "<<<<<<< HEAD\n"
-            "ours-line\n"
-            "=======\n"
-            "theirs-line\n"
-            ">>>>>>> branch\n"
-            "after\n"
-        )
+        content = "before\n<<<<<<< HEAD\nours-line\n=======\ntheirs-line\n>>>>>>> branch\nafter\n"
         hunks = git_utils.parse_conflict_hunks(content)
         assert len(hunks) == 1
         assert hunks[0]["ours"] == ["ours-line"]
@@ -89,15 +83,7 @@ class TestParseConflictHunks:
         assert hunks[0]["end_line"] == 6
 
     def test_diff3_hunk_captures_base(self, git_utils: ModuleType) -> None:
-        content = (
-            "<<<<<<< HEAD\n"
-            "ours\n"
-            "||||||| merged\n"
-            "base\n"
-            "=======\n"
-            "theirs\n"
-            ">>>>>>> other\n"
-        )
+        content = "<<<<<<< HEAD\nours\n||||||| merged\nbase\n=======\ntheirs\n>>>>>>> other\n"
         hunks = git_utils.parse_conflict_hunks(content)
         assert hunks[0]["base"] == ["base"]
         assert hunks[0]["ours"] == ["ours"]
@@ -118,29 +104,35 @@ class TestParseConflictHunks:
 class TestGetSurroundingContext:
     def test_returns_lines_before_and_after(self, git_utils: ModuleType) -> None:
         content = "\n".join(f"line{i}" for i in range(1, 11))
-        before, after = git_utils.get_surrounding_context(content, start_line=5, end_line=6, context_lines=2)
+        before, after = git_utils.get_surrounding_context(
+            content, start_line=5, end_line=6, context_lines=2
+        )
         assert before == ["3: line3", "4: line4"]
         assert after == ["7: line7", "8: line8"]
 
     def test_skips_conflict_marker_lines(self, git_utils: ModuleType) -> None:
         content = "a\nb\n<<<<<<< HEAD\nc\n=======\nd\n>>>>>>> x\ne\nf\n"
-        before, after = git_utils.get_surrounding_context(content, start_line=3, end_line=7, context_lines=2)
+        before, after = git_utils.get_surrounding_context(
+            content, start_line=3, end_line=7, context_lines=2
+        )
         assert all("<<<<<<" not in line and "======" not in line for line in before + after)
 
     def test_handles_start_at_top(self, git_utils: ModuleType) -> None:
         content = "a\nb\n"
-        before, _after = git_utils.get_surrounding_context(content, start_line=1, end_line=2, context_lines=3)
+        before, _after = git_utils.get_surrounding_context(
+            content, start_line=1, end_line=2, context_lines=3
+        )
         assert before == []
 
 
 class TestRunGit:
     def test_invokes_git_with_args(self, git_utils: ModuleType) -> None:
-        with patch.object(git_utils.subprocess, "run", return_value=make_completed(stdout="ok")) as run_mock:
+        with patch.object(
+            git_utils.subprocess, "run", return_value=make_completed(stdout="ok")
+        ) as run_mock:
             result = git_utils.run_git(["status"])
         assert result.stdout == "ok"
-        run_mock.assert_called_once_with(
-            ["git", "status"], capture_output=True, text=True
-        )
+        run_mock.assert_called_once_with(["git", "status"], capture_output=True, text=True)
 
 
 class TestGetConflictedFiles:

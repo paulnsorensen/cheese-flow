@@ -13,6 +13,7 @@ dependencies = [
 [dependency-groups]
 dev = [
   "pytest==9.0.3",
+  "ruff==0.14.5",
 ]
 
 [build-system]
@@ -26,3 +27,11 @@ package = false
 testpaths = ["tests/python"]
 pythonpath = ["python"]
 addopts = "-q"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+extend-exclude = ["dist", ".claude", ".codex"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
