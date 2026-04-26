@@ -59,7 +59,7 @@ LOCKFILE_CONFIG = {
     "bundler": {
         "manifest": "Gemfile",
         "lockfile": "Gemfile.lock",
-        "regen_cmd": ["bundle", "lock", "--update"],
+        "regen_cmd": ["bundle", "lock"],
     },
     "go": {
         "manifest": "go.mod",
@@ -106,7 +106,11 @@ def resolve_lockfile(
     if not manifest_path.exists():
         result["message"] = f"Manifest not found: {manifest_path}"
         return result
-    
+
+    if "<<<<<<<" in manifest_path.read_text():
+        result["message"] = f"Manifest {manifest_path} has conflict markers — resolve it before regenerating"
+        return result
+
     if dry_run:
         result["resolved"] = True
         result["message"] = f"Would take {strategy} and regenerate with: {' '.join(config['regen_cmd'])}"
@@ -136,9 +140,13 @@ def resolve_lockfile(
         result["message"] = f"Regeneration failed: {regen_result.stderr}"
         return result
     
-    # Stage the resolved lockfile
+    # Stage the resolved lockfile (and go.mod for Go, which go mod tidy also modifies)
     run_git(["add", lockfile_path])
-    
+    if lockfile_type == "go":
+        go_mod = Path(lockfile_path).parent / "go.mod"
+        if go_mod.exists():
+            run_git(["add", str(go_mod)])
+
     result["resolved"] = True
     result["message"] = f"Took {strategy}, regenerated, and staged"
     return result

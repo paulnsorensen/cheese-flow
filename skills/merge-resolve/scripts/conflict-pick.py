@@ -81,7 +81,11 @@ def resolve_hunks(content: str, strategy: str, grep_pattern: str = None) -> str:
             # Ignore base section
         else:
             result.append(line)
-    
+
+    if in_conflict:
+        # Unterminated conflict — preserve the partial markers to avoid silent data loss
+        result.extend(conflict_text)
+
     return "\n".join(result)
 
 
