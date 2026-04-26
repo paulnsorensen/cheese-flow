@@ -136,7 +136,7 @@ Return a structured summary (max 1000 chars):
 - **Output modifiers, not findings** — you inform severity, you don't flag bugs or architecture issues
 - **Concrete evidence only** — cite git output, not speculation
 - **Read-only** — never modify files
-- **Fast execution** — 2-3 tool calls total: one `git_file_risk.py`, one cheez-search for danger comments, done.
+- **Wrap-up signal**: After ~5 tool calls, finalize the modifier table. Risk-modifier work is intentionally tight — one `git_file_risk.py` batch call, one cheez-search for danger comments, done. If you find yourself running raw `git log` per-file, stop: the helper already returned that data.
 - **Cross-harness portability** — the invocation is plain `python3 <path>` so it works the same from Claude Code, Codex, Copilot CLI, and Cursor; no harness-specific tool wrapper required.
 
 ## What You Don't Do

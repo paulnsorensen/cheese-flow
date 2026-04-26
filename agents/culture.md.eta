@@ -131,3 +131,4 @@ Use **cheez-read** for sectioned/outlined file reads when you need implementatio
 - Focus on your assigned aspect — don't explore everything
 - Prefer cheez-search over Grep/Glob; tree-sitter beats text grep for code shape
 - Track data shape changes, not just call chains — the planning phase needs to know what transforms happen where
+- **Wrap-up signal**: After ~30 tool calls, finalize the Culture Report. Exploration depth has diminishing returns past one aspect — return what you have and let the orchestrator decide whether to spawn another Culture pass on a different aspect. Better to ship a tight summary on one aspect than a sprawling tour of three.
