@@ -1,5 +1,4 @@
 import { spawn } from "node:child_process";
-import { useEffect, useRef, useState } from "react";
 import {
   ConfirmInput,
   MultiSelect,
@@ -8,12 +7,13 @@ import {
   StatusMessage,
   TextInput,
 } from "@inkjs/ui";
-import { Box, Text, render, useApp } from "ink";
+import { Box, render, Text, useApp } from "ink";
+import { useEffect, useRef, useState } from "react";
 import { harnessAdapters } from "../adapters/index.js";
 import type { HarnessName } from "../domain/harness.js";
-import { runToolCheck, toolChecks } from "./doctor.js";
-import type { ToolResult } from "./doctor.js";
 import { installHarnessArtifacts } from "./compiler.js";
+import type { ToolResult } from "./doctor.js";
+import { runToolCheck, toolChecks } from "./doctor.js";
 
 type Step =
   | "name"
@@ -84,10 +84,10 @@ function Wizard({ projectRoot }: { projectRoot: string }) {
       let done = 0;
       const total = all.length;
 
-      for (let i = 0; i < missingTools.length; i++) {
+      for (const [i, tool] of missingTools.entries()) {
         setTasks((prev) => updateAt(prev, i, "running"));
         try {
-          await runCommand("brew", ["install", missingTools[i]!.name]);
+          await runCommand("brew", ["install", tool.name]);
           setTasks((prev) => updateAt(prev, i, "done"));
         } catch {
           setTasks((prev) => updateAt(prev, i, "error"));
@@ -96,12 +96,12 @@ function Wizard({ projectRoot }: { projectRoot: string }) {
       }
 
       const offset = missingTools.length;
-      for (let i = 0; i < harnesses.length; i++) {
+      for (const [i, harness] of harnesses.entries()) {
         setTasks((prev) => updateAt(prev, offset + i, "running"));
         try {
           await installHarnessArtifacts({
             projectRoot,
-            harnesses: [harnesses[i]!],
+            harnesses: [harness],
           });
           setTasks((prev) => updateAt(prev, offset + i, "done"));
         } catch {
@@ -146,9 +146,7 @@ function Wizard({ projectRoot }: { projectRoot: string }) {
   if (step === "harness") {
     return (
       <Box flexDirection="column" gap={1} paddingY={1}>
-        <Text bold>
-          Hey {userName}! Which harnesses should we install for?
-        </Text>
+        <Text bold>Hey {userName}! Which harnesses should we install for?</Text>
         <Text dimColor>Space to toggle · Enter to confirm</Text>
         <MultiSelect
           options={HARNESS_OPTIONS}
@@ -205,10 +203,10 @@ function Wizard({ projectRoot }: { projectRoot: string }) {
         <Text bold>Installing...</Text>
         <ProgressBar value={progress} />
         <Box flexDirection="column" marginTop={1}>
-          {tasks.map((task, i) => (
-            <Box key={i}>
+          {tasks.map((task) => (
+            <Box key={task.label}>
               {task.status === "pending" && (
-                <Text dimColor>  ○ {task.label}</Text>
+                <Text dimColor> ○ {task.label}</Text>
               )}
               {task.status === "running" && (
                 <Spinner label={`  ${task.label}`} />
@@ -247,6 +245,8 @@ function Wizard({ projectRoot }: { projectRoot: string }) {
 export async function runInitWizard(options: {
   projectRoot: string;
 }): Promise<void> {
-  const { waitUntilExit } = render(<Wizard projectRoot={options.projectRoot} />);
+  const { waitUntilExit } = render(
+    <Wizard projectRoot={options.projectRoot} />,
+  );
   await waitUntilExit();
 }

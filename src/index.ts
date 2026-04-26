@@ -10,6 +10,7 @@ import {
   hasBlockingFailure,
   runAllToolChecks,
 } from "./lib/doctor.js";
+import { runInitWizard } from "./lib/init-wizard.js";
 import {
   defaultClientFactory,
   defaultClientTransportFactory,
@@ -17,7 +18,6 @@ import {
   defaultServerTransportFactory,
   runMcpProxy,
 } from "./lib/mcp-proxy.js";
-import { runInitWizard } from "./lib/init-wizard.js";
 import { runMilknadoCommand } from "./lib/milknado.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -45,7 +45,9 @@ program
 
 program
   .command("init")
-  .description("Interactive setup wizard — pick harnesses and install dependencies.")
+  .description(
+    "Interactive setup wizard — pick harnesses and install dependencies.",
+  )
   .option(
     "--project-root <path>",
     "Project root that contains ./agents and ./skills.",
