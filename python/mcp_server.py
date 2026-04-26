@@ -8,7 +8,6 @@ avoids a fresh ``uv run`` cold-start.
 from typing import Any
 
 from mcp.server.fastmcp import FastMCP
-
 from milknado import solve_blend_plan
 
 mcp = FastMCP("cheese-flow")

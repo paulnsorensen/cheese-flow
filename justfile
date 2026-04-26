@@ -8,6 +8,8 @@ build:
     npm run typecheck
     npm run build
     rtk test npm run test:coverage
+    uv run --group dev ruff format
+    uv run --group dev ruff check --fix
     uv run --group dev pytest
 
 build-ci:
@@ -18,6 +20,8 @@ build-ci:
     npm run typecheck
     npm run build
     npm run test:coverage
+    uv run --group dev ruff format --check
+    uv run --group dev ruff check
     uv run --group dev pytest
 
 test-py:

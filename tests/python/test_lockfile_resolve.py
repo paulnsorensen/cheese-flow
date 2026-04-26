@@ -13,7 +13,9 @@ from types import ModuleType
 from unittest.mock import patch
 
 
-def make_completed(stdout: str = "", returncode: int = 0, stderr: str = "") -> subprocess.CompletedProcess:
+def make_completed(
+    stdout: str = "", returncode: int = 0, stderr: str = ""
+) -> subprocess.CompletedProcess:
     return subprocess.CompletedProcess(
         args=["x"], returncode=returncode, stdout=stdout, stderr=stderr
     )
@@ -49,8 +51,10 @@ class TestResolveLockfile:
         self, lockfile_resolve: ModuleType, tmp_path: Path
     ) -> None:
         write_clean_manifest(tmp_path)
-        with patch.object(lockfile_resolve.subprocess, "run") as run_mock, \
-             patch.object(lockfile_resolve, "run_git") as git_mock:
+        with (
+            patch.object(lockfile_resolve.subprocess, "run") as run_mock,
+            patch.object(lockfile_resolve, "run_git") as git_mock,
+        ):
             result = lockfile_resolve.resolve_lockfile(str(tmp_path / "Cargo.lock"), dry_run=True)
         assert result["resolved"] is True
         assert "would take" in result["message"]
@@ -64,8 +68,12 @@ class TestResolveLockfile:
         lockfile = tmp_path / "Cargo.lock"
         lockfile.write_text("<<<<<<< HEAD\nold\n=======\nnew\n>>>>>>> x\n")
 
-        with patch.object(lockfile_resolve, "run_git") as git_mock, \
-             patch.object(lockfile_resolve.subprocess, "run", return_value=make_completed()) as run_mock:
+        with (
+            patch.object(lockfile_resolve, "run_git") as git_mock,
+            patch.object(
+                lockfile_resolve.subprocess, "run", return_value=make_completed()
+            ) as run_mock,
+        ):
             git_mock.side_effect = [
                 make_completed(stdout="theirs-content\n"),  # git show :3:
                 make_completed(),  # git add
@@ -79,9 +87,7 @@ class TestResolveLockfile:
         assert run_mock.call_args.args[0] == ["cargo", "generate-lockfile"]
         assert git_mock.call_args_list[-1].args[0] == ["add", str(lockfile)]
 
-    def test_git_show_failure(
-        self, lockfile_resolve: ModuleType, tmp_path: Path
-    ) -> None:
+    def test_git_show_failure(self, lockfile_resolve: ModuleType, tmp_path: Path) -> None:
         write_clean_manifest(tmp_path)
         lockfile = tmp_path / "Cargo.lock"
         lockfile.write_text("doesnt matter")
@@ -97,8 +103,14 @@ class TestResolveLockfile:
         lockfile = tmp_path / "Cargo.lock"
         lockfile.write_text("ignored")
 
-        with patch.object(lockfile_resolve, "run_git", return_value=make_completed(stdout="ok")), \
-             patch.object(lockfile_resolve.subprocess, "run", return_value=make_completed(returncode=1, stderr="boom")):
+        with (
+            patch.object(lockfile_resolve, "run_git", return_value=make_completed(stdout="ok")),
+            patch.object(
+                lockfile_resolve.subprocess,
+                "run",
+                return_value=make_completed(returncode=1, stderr="boom"),
+            ),
+        ):
             result = lockfile_resolve.resolve_lockfile(str(lockfile), strategy="theirs")
 
         assert result["resolved"] is False
@@ -111,8 +123,10 @@ class TestResolveLockfile:
         lockfile = tmp_path / "Cargo.lock"
         lockfile.write_text("untouched")
 
-        with patch.object(lockfile_resolve, "run_git") as git_mock, \
-             patch.object(lockfile_resolve.subprocess, "run", return_value=make_completed()):
+        with (
+            patch.object(lockfile_resolve, "run_git") as git_mock,
+            patch.object(lockfile_resolve.subprocess, "run", return_value=make_completed()),
+        ):
             git_mock.return_value = make_completed()
             result = lockfile_resolve.resolve_lockfile(str(lockfile), strategy="regen")
 
@@ -126,8 +140,10 @@ class TestResolveLockfile:
         lockfile = tmp_path / "go.sum"
         lockfile.write_text("ignored")
 
-        with patch.object(lockfile_resolve, "run_git") as git_mock, \
-             patch.object(lockfile_resolve.subprocess, "run", return_value=make_completed()):
+        with (
+            patch.object(lockfile_resolve, "run_git") as git_mock,
+            patch.object(lockfile_resolve.subprocess, "run", return_value=make_completed()),
+        ):
             git_mock.side_effect = [
                 make_completed(stdout="theirs"),  # git show
                 make_completed(),  # git add lockfile
@@ -145,8 +161,10 @@ class TestResolveLockfile:
         lockfile = tmp_path / "Cargo.lock"
         lockfile.write_text("ignored")
 
-        with patch.object(lockfile_resolve, "run_git") as git_mock, \
-             patch.object(lockfile_resolve.subprocess, "run", return_value=make_completed()):
+        with (
+            patch.object(lockfile_resolve, "run_git") as git_mock,
+            patch.object(lockfile_resolve.subprocess, "run", return_value=make_completed()),
+        ):
             git_mock.side_effect = [
                 make_completed(stdout="theirs"),
                 make_completed(returncode=1, stderr="lock"),

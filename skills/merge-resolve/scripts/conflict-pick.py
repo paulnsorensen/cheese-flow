@@ -8,7 +8,6 @@ import argparse
 import re
 import sys
 from pathlib import Path
-from typing import Optional
 
 sys.path.insert(0, str(Path(__file__).parent))
 
@@ -20,17 +19,17 @@ def _resolve_conflict_block(
     ours_lines: list[str],
     theirs_lines: list[str],
     strategy: str,
-    grep_pattern: Optional[str],
+    grep_pattern: str | None,
 ) -> list[str]:
     if grep_pattern and not re.search(grep_pattern, "\n".join(conflict_text)):
         return conflict_text
     return ours_lines if strategy == "ours" else theirs_lines
 
 
-def resolve_hunks(content: str, strategy: str, grep_pattern: Optional[str] = None) -> str:
+def resolve_hunks(content: str, strategy: str, grep_pattern: str | None = None) -> str:
     result: list[str] = []
     in_conflict = False
-    current_section: Optional[str] = None
+    current_section: str | None = None
     ours_lines: list[str] = []
     theirs_lines: list[str] = []
     conflict_text: list[str] = []
@@ -52,9 +51,11 @@ def resolve_hunks(content: str, strategy: str, grep_pattern: Optional[str] = Non
         elif line.startswith("======="):
             current_section = "theirs"
         elif line.startswith(">>>>>>>"):
-            result.extend(_resolve_conflict_block(
-                conflict_text, ours_lines, theirs_lines, strategy, grep_pattern
-            ))
+            result.extend(
+                _resolve_conflict_block(
+                    conflict_text, ours_lines, theirs_lines, strategy, grep_pattern
+                )
+            )
             in_conflict = False
             current_section = None
         elif current_section == "ours":
@@ -73,9 +74,13 @@ def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Pick ours or theirs for conflict hunks")
     parser.add_argument("file", help="File to resolve")
     parser.add_argument("--ours", action="store_true", help="Take our changes for matching hunks")
-    parser.add_argument("--theirs", action="store_true", help="Take their changes for matching hunks")
+    parser.add_argument(
+        "--theirs", action="store_true", help="Take their changes for matching hunks"
+    )
     parser.add_argument("--grep", metavar="PATTERN", help="Only resolve hunks matching this regex")
-    parser.add_argument("--dry-run", action="store_true", help="Print resolved content without writing")
+    parser.add_argument(
+        "--dry-run", action="store_true", help="Print resolved content without writing"
+    )
     return parser.parse_args()
 
 

@@ -3,10 +3,9 @@
 
 import subprocess
 from pathlib import Path
-from typing import List, Optional, Tuple
 
 
-def run_git(args: List[str], capture_output: bool = True) -> subprocess.CompletedProcess:
+def run_git(args: list[str], capture_output: bool = True) -> subprocess.CompletedProcess:
     return subprocess.run(
         ["git"] + args,
         capture_output=capture_output,
@@ -14,7 +13,7 @@ def run_git(args: List[str], capture_output: bool = True) -> subprocess.Complete
     )
 
 
-def get_conflicted_files() -> List[str]:
+def get_conflicted_files() -> list[str]:
     result = run_git(["diff", "--name-only", "--diff-filter=U"])
     if result.returncode != 0:
         return []
@@ -29,7 +28,7 @@ def has_conflict_markers(path: str) -> bool:
         return False
 
 
-def extract_stages(path: str) -> Tuple[Optional[str], Optional[str], Optional[str]]:
+def extract_stages(path: str) -> tuple[str | None, str | None, str | None]:
     """Returns (base, ours, theirs) from git stage slots; None for any unavailable stage."""
     base = ours = theirs = None
 
@@ -59,14 +58,32 @@ def is_mergiraf_supported(path: str) -> bool:
     ext = get_file_extension(path)
     # Languages supported by mergiraf (Tree-sitter based)
     supported_extensions = {
-        "rs", "go", "py", "ts", "tsx", "js", "jsx", "java", "scala",
-        "c", "cc", "cpp", "cxx", "h", "hpp", "hxx",
-        "rb", "php", "cs", "swift", "md"
+        "rs",
+        "go",
+        "py",
+        "ts",
+        "tsx",
+        "js",
+        "jsx",
+        "java",
+        "scala",
+        "c",
+        "cc",
+        "cpp",
+        "cxx",
+        "h",
+        "hpp",
+        "hxx",
+        "rb",
+        "php",
+        "cs",
+        "swift",
+        "md",
     }
     return ext.lower() in supported_extensions
 
 
-def parse_conflict_hunks(content: str) -> List[dict]:
+def parse_conflict_hunks(content: str) -> list[dict]:
     """Handles both diff3 (with ||||||| base) and standard (without base) conflict markers."""
     lines = content.split("\n")
     hunks = []
@@ -101,8 +118,9 @@ def parse_conflict_hunks(content: str) -> List[dict]:
     return hunks
 
 
-def get_surrounding_context(content: str, start_line: int, end_line: int,
-                            context_lines: int = 3) -> Tuple[List[str], List[str]]:
+def get_surrounding_context(
+    content: str, start_line: int, end_line: int, context_lines: int = 3
+) -> tuple[list[str], list[str]]:
     lines = content.split("\n")
 
     # Before context (avoiding conflict markers)
@@ -111,19 +129,19 @@ def get_surrounding_context(content: str, start_line: int, end_line: int,
     for i in range(before_start, start_line - 1):
         line = lines[i]
         if not any(marker in line for marker in ["<<<<<<", "======", ">>>>>>", "||||||"]):
-            before.append(f"{i+1}: {line}")
+            before.append(f"{i + 1}: {line}")
 
     after_end = min(len(lines), end_line + context_lines)
     after = []
     for i in range(end_line, after_end):
         line = lines[i]
         if not any(marker in line for marker in ["<<<<<<", "======", ">>>>>>", "||||||"]):
-            after.append(f"{i+1}: {line}")
+            after.append(f"{i + 1}: {line}")
 
     return before, after
 
 
-def detect_lockfile_type(path: str) -> Optional[str]:
+def detect_lockfile_type(path: str) -> str | None:
     filename = Path(path).name.lower()
 
     lockfile_map = {

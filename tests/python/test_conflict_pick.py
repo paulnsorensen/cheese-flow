@@ -28,11 +28,7 @@ class TestResolveHunks:
         assert "A" not in result
 
     def test_resolves_multiple_hunks(self, conflict_pick: ModuleType) -> None:
-        content = (
-            _conflict(["A1"], ["B1"])
-            + "\nmiddle\n"
-            + _conflict(["A2"], ["B2"])
-        )
+        content = _conflict(["A1"], ["B1"]) + "\nmiddle\n" + _conflict(["A2"], ["B2"])
         result = conflict_pick.resolve_hunks(content, strategy="ours")
         assert "A1" in result and "A2" in result
         assert "B1" not in result and "B2" not in result
@@ -76,4 +72,6 @@ class TestResolveHunks:
     def test_no_conflicts_returns_input_unchanged(self, conflict_pick: ModuleType) -> None:
         content = "line1\nline2\nline3\n"
         # resolve_hunks splits and rejoins, so trailing newline normalization is OK.
-        assert conflict_pick.resolve_hunks(content, strategy="ours").rstrip("\n") == content.rstrip("\n")
+        assert conflict_pick.resolve_hunks(content, strategy="ours").rstrip("\n") == content.rstrip(
+            "\n"
+        )

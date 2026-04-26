@@ -10,14 +10,7 @@ import json
 from pathlib import Path
 from types import ModuleType
 
-
-CONFLICT = (
-    "<<<<<<< HEAD\n"
-    "ours-line\n"
-    "=======\n"
-    "theirs-line\n"
-    ">>>>>>> branch\n"
-)
+CONFLICT = "<<<<<<< HEAD\nours-line\n=======\ntheirs-line\n>>>>>>> branch\n"
 
 
 class TestSummarizeFile:
@@ -73,7 +66,9 @@ class TestFormatTerseOutput:
         first_line = out.splitlines()[0]
         assert first_line == "# legend: +ours |base -theirs"
 
-    def test_recommendation_uses_no_dry_run_flag(self, conflict_summary: ModuleType, tmp_path: Path) -> None:
+    def test_recommendation_uses_no_dry_run_flag(
+        self, conflict_summary: ModuleType, tmp_path: Path
+    ) -> None:
         # Regression: --dry-run flag was removed; recommendation must not mention it.
         f = tmp_path / "foo.py"
         f.write_text(CONFLICT)
