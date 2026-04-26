@@ -59,12 +59,13 @@ Run the summary script first — it replaces the need for `grep -n '<<<<<<<'` an
 python3 skills/merge-resolve/scripts/conflict-summary.py
 ```
 
-This outputs for each conflicted file:
-- Language, mergiraf support status, number of hunks
-- Each hunk with line numbers, ours/theirs/base content, and surrounding context
-- Actionable recommendation (which script to use)
+Default output is terse and LLM-oriented: one metadata line per file, then minimally-framed
+hunks. Each hunk shows up to 5 lines of ours/theirs and 3 of base, capped to keep token cost low.
 
-For JSON output (scripting): `--json`. For more context: `--context 10`.
+Flags:
+- `--json` — structured output for scripting
+- `--verbose` — markdown-formatted human view (the previous default)
+- `--context N` — context lines around each hunk (default 3)
 
 If you need raw git info too:
 
@@ -103,14 +104,14 @@ git add <path>
 For repos with many conflicted files, use the batch script:
 
 ```bash
-# Preview what can be resolved (no file changes)
-python3 skills/merge-resolve/scripts/batch-resolve.py --dry-run
+# Preview what can be resolved (no file changes; dry-run is the default)
+python3 skills/merge-resolve/scripts/batch-resolve.py
 
 # Apply all clean resolutions
 python3 skills/merge-resolve/scripts/batch-resolve.py --apply
 
-# With mergiraf debug output
-python3 skills/merge-resolve/scripts/batch-resolve.py --dry-run --verbose
+# Markdown-formatted output and mergiraf debug logs
+python3 skills/merge-resolve/scripts/batch-resolve.py --verbose
 ```
 
 The script extracts 3-way inputs for every conflicted file, runs `mergiraf merge`

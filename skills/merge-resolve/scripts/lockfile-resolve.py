@@ -101,50 +101,54 @@ def resolve_lockfile(
 
     if dry_run:
         result["resolved"] = True
-        result["message"] = f"Would take {strategy} and regenerate with: {' '.join(config['regen_cmd'])}"
+        result["message"] = f"would take {strategy} and run: {' '.join(config['regen_cmd'])}"
         return result
-    
+
     if strategy in ("ours", "theirs"):
         stage = ":2:" if strategy == "ours" else ":3:"
         git_result = run_git(["show", f"{stage}{lockfile_path}"])
-        
+
         if git_result.returncode != 0:
-            result["message"] = f"Could not extract {strategy} version"
+            result["message"] = f"could not extract {strategy} version"
             return result
-        
+
         Path(lockfile_path).write_text(git_result.stdout)
-    
-    print(f"Regenerating {lockfile_path}...")
+
     regen_result = subprocess.run(
         config["regen_cmd"],
         capture_output=True,
         text=True,
         cwd=Path(lockfile_path).parent or ".",
     )
-    
+
     if regen_result.returncode != 0:
-        result["message"] = f"Regeneration failed: {regen_result.stderr}"
+        result["message"] = f"regen failed: {regen_result.stderr.strip()}"
         return result
-    
-    # Stage the resolved lockfile (and go.mod for Go, which go mod tidy also modifies)
+
     add_result = run_git(["add", lockfile_path])
     if add_result.returncode != 0:
-        result["message"] = f"Regenerated but staging failed: {add_result.stderr.strip()}"
+        result["message"] = f"regenerated but staging failed: {add_result.stderr.strip()}"
         return result
     if lockfile_type == "go":
         go_mod = Path(lockfile_path).parent / "go.mod"
         if go_mod.exists():
             add_mod_result = run_git(["add", str(go_mod)])
             if add_mod_result.returncode != 0:
-                result["message"] = f"Regenerated but staging go.mod failed: {add_mod_result.stderr.strip()}"
+                result["message"] = f"regenerated but staging go.mod failed: {add_mod_result.stderr.strip()}"
                 return result
 
     result["resolved"] = True
     if strategy == "regen":
-        result["message"] = "Regenerated and staged"
+        result["message"] = "regenerated and staged"
     else:
-        result["message"] = f"Took {strategy}, regenerated, and staged"
+        result["message"] = f"took {strategy}, regenerated, staged"
     return result
+
+
+def _collect_lockfiles(files: list[str]) -> list[str]:
+    if files:
+        return files
+    return [f for f in get_conflicted_files() if detect_lockfile_type(f)]
 
 
 def main():
@@ -167,33 +171,25 @@ def main():
         nargs="*",
         help="Specific lockfiles to resolve (default: auto-detect)",
     )
-    
-    args = parser.parse_args()
 
-    if args.files:
-        lockfiles = args.files
-    else:
-        all_conflicted = get_conflicted_files()
-        lockfiles = [f for f in all_conflicted if detect_lockfile_type(f)]
+    args = parser.parse_args()
+    lockfiles = _collect_lockfiles(args.files)
 
     if not lockfiles:
-        print("No conflicted lockfiles found.")
+        print("no conflicted lockfiles")
         return 0
 
     results = []
     for path in lockfiles:
         result = resolve_lockfile(path, args.strategy, args.dry_run)
         results.append(result)
-
-        status = "✓" if result["resolved"] else "✗"
+        status = "ok" if result["resolved"] else "--"
         print(f"{status} {result['path']}: {result['message']}")
 
     resolved = sum(1 for r in results if r["resolved"])
-    print(f"\nResolved: {resolved}/{len(results)}")
-    
-    if args.dry_run and resolved > 0:
-        print("Run without --dry-run to apply.")
-    
+    mode = "dry-run" if args.dry_run else "apply"
+    print(f"{resolved}/{len(results)} resolved ({mode})")
+
     return 0 if resolved == len(results) else 1
 
 
