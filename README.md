@@ -4,7 +4,7 @@
 
 Opinionated scaffolding for portable agents and skills that can be compiled into harness-specific markdown bundles. Aged in TypeScript, served on Sliced Bread, paired nicely with Claude Code, Codex, Cursor, and Copilot. 🧀
 
-## Why Cheese?
+## Why Cheese? Two reasons:
 
 1. **Modeled after the gaming slang term "cheese."** The term traces back to early fighting-game culture in the late 1980s and early 1990s — Street Fighter II players coined "cheesy" wins to describe victories pulled off with cheap, repeatable, low-skill tactics (corner-trap fireball spam, throw loops, AI-pattern exploits). It spread from fighting games to RTS rush builds (StarCraft "cheese rushes"), to speedrun glitch routes, to MOBA cheese picks — anywhere a player gets a disproportionately good result for very little effort. That is exactly the design center of cheese-flow: the primary tenets are **correctness, token efficiency, and quality** — _cheap and easy_ in the best sense. Maximum result, minimum spend.
 2. **What's life without whimsy?** 🧀
