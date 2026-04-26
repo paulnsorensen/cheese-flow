@@ -32,22 +32,124 @@ cleanups) that does not belong in a bug fix.
 | Press | Verify | Run the existing test suite + add a regression test that fails before the fix and passes after | Rewriting unrelated tests; chasing flaky tests outside the bug surface |
 | Age | Review | The standard `/age` six-dimension review, scoped to the changed files | Re-opening the design conversation; widening scope |
 
-## Dispatch contract
+## Execution protocol
 
-1. **Classify** `$ARGUMENTS` to confirm it is a debug-shaped input
-   (failure, error, regression). If the input is actually a feature
-   request, redirect to `/mold` or `/cheese` instead of proceeding.
-2. **Announce** the planned flow path (`Culture → Cook → Press → Age`,
-   Cut skipped) and the read-only invariant on Culture.
-3. **Pause** for confirmation. The user may redirect or supply additional
-   reproduction context before Culture begins.
-4. **Dispatch** the four stages sequentially. Each stage hands off via
-   the structured summary contract documented on its agent
-   (`agents/<stage>.md.eta`). Culture's report MUST name the suspect
-   files and the hypothesized root cause before Cook starts.
-5. **Loop on Age failure** — if Age surfaces findings >= 50, loop back to
-   Cook (not Culture). Re-running Culture for a fix-loop is wasteful;
-   re-running Cook + Press + Age is the evaluator-optimizer cycle.
+The orchestrator runs the four stages sequentially. Each stage hands off
+via its structured-summary contract (defined on `agents/<stage>.md.eta`).
+The orchestrator works from summaries; downstream stages read the prior
+stage's full report from `$TMPDIR` only when they need deeper context.
+
+Pick a kebab-case `<slug>` from the failure summary at step 1 and reuse
+it across every $TMPDIR path for the run.
+
+### Step 1 — classify and confirm
+
+1. Inspect `$ARGUMENTS`. Confirm it is debug-shaped (failure, error,
+   stack trace, regression, failing test). If it is a feature request,
+   stop and redirect to `/mold` or `/cheese`.
+2. Derive a kebab-case `<slug>` from the failure summary (e.g.
+   `null-deref-in-login-handler`).
+3. Announce the planned path — `Culture → Cook → Press → Age`, Cut
+   skipped, Culture is read-only — and the slug.
+4. Use `AskUserQuestion` to gate-check before any sub-agent spawns. The
+   user may redirect, narrow scope, or supply extra reproduction context.
+
+### Step 2 — Culture (read-only diagnosis)
+
+Spawn the `culture` sub-agent in diagnostic mode. Culture is forbidden
+from writing to production files (its source frontmatter disallows
+`Edit`/`NotebookEdit`; the `Write` carve-out is `$TMPDIR` only).
+
+```
+Agent(
+  subagent_type="culture",
+  description="Diagnose <bug summary>",
+  prompt="Debug Flow (Flow 3) Culture pre-pass for slug=<slug>.\n\n
+Failure under investigation:\n<verbatim $ARGUMENTS + any extra repro the user supplied at step 1>\n\n
+Deliverable: write the full Culture Report to $TMPDIR/fromage-culture-<slug>.md and return the structured Culture Summary (max 2000 chars, per agents/culture.md.eta).\n\n
+Required findings before Cook may run:\n
+- Suspect files (file:line for each).\n
+- Hypothesized root cause with confidence 0-100.\n
+- The minimal change surface — *which files Cook is allowed to touch*. Cook MUST NOT widen beyond this list."
+)
+```
+
+If Culture's confidence < 50 on the root cause, halt the flow. Return
+the diagnostic summary to the user; do not proceed to Cook.
+
+### Step 3 — Cook (targeted fix)
+
+Spawn the `cook` sub-agent against Culture's identified files only.
+
+```
+Agent(
+  subagent_type="cook",
+  description="Apply targeted fix for <bug summary>",
+  prompt="Debug Flow (Flow 3) Cook step for slug=<slug>.\n\n
+Read Culture's full report from $TMPDIR/fromage-culture-<slug>.md before doing anything else. The 'Suspect files' section enumerates the only files you may modify.\n\n
+Plan and implement the smallest production change that closes the gap. Cut is skipped because this is a targeted bug fix, not a feature decomposition.\n\n
+Hard constraints:\n
+- Edit only files Culture explicitly named.\n
+- No new features, no refactors, no 'while we're here' cleanups.\n
+- Per your Permission Contract you do not modify test files — that is press's job at step 4.\n
+- Write your full Cook Report to $TMPDIR/fromage-cook-<slug>.md and return the short summary (max 1500 chars, per agents/cook.md.eta)."
+)
+```
+
+If Cook returns `partial` or `skipped` for the relevant plan step,
+surface the blocker and pause for user direction before continuing.
+
+### Step 4 — Press (verify + regression test)
+
+Spawn the `press` sub-agent to add a regression test that fails before
+the fix and passes after, then run the suite.
+
+```
+Agent(
+  subagent_type="press",
+  description="Verify fix and add regression test for <bug summary>",
+  prompt="Debug Flow (Flow 3) Press step for slug=<slug>.\n\n
+Read both prior reports first:\n
+- $TMPDIR/fromage-culture-<slug>.md (root cause + suspect files)\n
+- $TMPDIR/fromage-cook-<slug>.md (what changed)\n\n
+Required: write at least one regression test that *would have failed* against the pre-fix code and now passes against Cook's change. Run the project's test command and capture failures only.\n\n
+Per your Permission Contract you do not edit production code. If a failure suggests Cook's fix is incomplete, surface it as a finding (>= 50) and let the orchestrator route the next iteration.\n\n
+Write your full Press Report to $TMPDIR/fromage-press-<slug>.md and return the short summary (max 1500 chars, per agents/press.md.eta)."
+)
+```
+
+### Step 5 — Age (review, no-fix mode)
+
+Invoke the `age` skill in `--no-fix` mode so the Debug orchestrator
+stays in control of the fix loop. `/age` would otherwise prompt for its
+own Press cycle and double-spawn it.
+
+```
+Skill(
+  skill="age",
+  args="--no-fix --scope <files-touched-by-cook-or-press>"
+)
+```
+
+The age skill writes its merged Age Report to `$TMPDIR/age-<slug>.md`
+and returns a structured summary listing findings >= 50.
+
+### Step 6 — fix loop or success
+
+Inspect the Age summary returned at step 5.
+
+- **No findings >= 50 and Press is green** → success. Surface the
+  cumulative summary (Culture's root-cause line + Cook's diff stat +
+  Press's regression test name + Age's "clean") and stop.
+- **One or more findings >= 50** → use `AskUserQuestion` to ask the
+  user whether to continue the fix loop. On confirm, repeat **Step 3
+  (Cook)** scoped to the cited files only, then **Step 4 (Press)** and
+  **Step 5 (Age)**. Re-running Culture for a fix-loop is wasteful — the
+  root cause was already identified at step 2.
+- **Loop counter** — track loop count starting at 1. After the **third**
+  full Cook → Press → Age loop without convergence, halt and return
+  cumulative findings. Further work needs human direction or a fresh
+  `/explore` to revisit the approach.
 
 ## Stop conditions
 
@@ -64,22 +166,55 @@ cleanups) that does not belong in a bug fix.
 
 Each stage returns a compact summary to the orchestrator (per the
 agent-level summary contracts) and writes its full report to
-`$TMPDIR/<stage>-<slug>.md`. The orchestrator works from summaries; the
-next stage may read the prior stage's full report if it needs deeper
+`$TMPDIR`. The exact paths the agents use:
+
+| Stage | Full report path |
+|---|---|
+| Culture | `$TMPDIR/fromage-culture-<slug>.md` |
+| Cook | `$TMPDIR/fromage-cook-<slug>.md` |
+| Press | `$TMPDIR/fromage-press-<slug>.md` |
+| Age (skill) | `$TMPDIR/age-<slug>.md` |
+
+The orchestrator works from the short summaries; downstream stages read
+the prior stage's full report from `$TMPDIR` only when they need deeper
 context. This keeps the orchestrator's window small across the four
-stages.
+stages even through three Cook → Press → Age fix loops.
+
+## Cross-harness portability
+
+The protocol is written in the canonical Claude Code vocabulary
+(`Agent(subagent_type=...)`, `Skill(...)`, `AskUserQuestion`).
+
+- **Codex** has no `Agent` tool; the four stages are then expressed as
+  sequential turns with the user supplying each handoff. The slug,
+  $TMPDIR seam, and report formats are unchanged — only the spawn
+  mechanism degrades.
+- **Copilot CLI** has agent metadata but no parallel-spawn tool; the
+  protocol's strict sequential handoff already matches that constraint.
+- **Cursor** has no per-agent allowlist; the read-only invariant on
+  Culture is enforced solely by prompt on Cursor (the `culture` agent's
+  Permission Contract block is the backstop).
+
+In every harness, the four stage agents (`culture`, `cook`, `press`,
+plus the `age` skill) ARE the portable surface — the Agent/Skill
+invocations are the Claude-flavored binding.
 
 ## Deferred behavior
 
-> **Scaffold notice.** Stage dispatch and the Cook→Press→Age fix loop are
-> not yet wired. This file documents the contract. The current
-> implementation should announce the planned flow, pause for
-> confirmation, and stop — it does not yet spawn the stage agents.
+The dispatch protocol above is now wired. Two enforcement gaps remain
+and are blocked on TS source changes (out of scope for this loop):
 
-The next iteration will:
+- **Tool-layer permission enforcement** — Culture's no-production-write
+  invariant is currently enforced only by the agent's Permission
+  Contract prompt and the source-frontmatter `disallowedTools` list.
+  The compiler does not yet propagate `disallowedTools` /
+  `permissionMode` into the rendered harness frontmatter, so on
+  Claude Code the invariant is currently prompt-only at runtime.
+- **Loop counter persistence** — the three-loop cap is enforced by the
+  orchestrator tracking loop count in-context. There is no durable
+  counter file; if the Debug session is resumed in a fresh context the
+  cap resets. Persisting loop state under `$TMPDIR/fromage-debug-<slug>-state.json`
+  would close this gap.
 
-- Wire the four-stage dispatch via the `Skill` / `Agent` tools.
-- Enforce Culture's read-only invariant at the tool layer (no `Edit`,
-  `Write`, `NotebookEdit`, or git-mutating Bash) — not just by prompt.
-- Implement the three-loop cap on Cook → Press → Age and halt with
-  cumulative findings if convergence fails.
+Both gaps lower **Cross-cutting principle: Permission model per stage**
+on the scoreboard, not Flow 3 itself.
