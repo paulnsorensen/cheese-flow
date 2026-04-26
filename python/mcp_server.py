@@ -1,17 +1,31 @@
-"""Cheese-flow Python MCP server — Milknado graph tools (stubbed).
+"""Cheese-flow Python MCP server — milknado graph tools (stubbed).
 
-Exposes Milknado graph capabilities as MCP tools for a TypeScript MCP proxy to
-forward. The proxy keeps this process alive across calls so each tool invocation
-avoids a fresh ``uv run`` cold-start.
-
-These tool implementations are stubs: they expose the correct MCP interface so
-harnesses and agents can call them, but return placeholder data until the full
-Milknado graph back-end is wired in.
+Thin shim: validates inputs, delegates to ``milknado.*`` slices. The slices
+are stubs until the real solver and sqlite graph back-end are pulled in from
+``~/Dev/milknado``; replacing each stub does not change this file.
 """
 
-from mcp.server.fastmcp import FastMCP
+from __future__ import annotations
 
-mcp = FastMCP("milknado")
+# Upstream milknado uses the standalone ``fastmcp`` package; cheese-flow uses
+# the FastMCP shipped inside the official ``mcp`` SDK. The class is the same.
+from mcp.server.fastmcp import FastMCP
+from milknado.config import project_root
+from milknado.domains.graph import add_node_stub, graph_summary_stub
+from milknado.domains.planning import (
+    dict_to_file_change,
+    dict_to_new_relationship,
+    plan_batches_stub,
+    plan_to_dict,
+)
+
+mcp = FastMCP(
+    "milknado",
+    instructions=(
+        "Mikado graph tools: list nodes and add prerequisite nodes. "
+        "Set MILKNADO_PROJECT_ROOT or pass project_root to target a repo."
+    ),
+)
 
 
 @mcp.tool()
@@ -22,7 +36,8 @@ def milknado_graph_summary(project_root: str = "") -> str:
         project_root: Absolute path to the project. Defaults to cwd or
             ``MILKNADO_PROJECT_ROOT`` environment variable.
     """
-    return "(stub: empty graph — milknado back-end not yet wired)"
+    root = _resolve_root(project_root)
+    return graph_summary_stub(root)
 
 
 @mcp.tool()
@@ -39,15 +54,21 @@ def milknado_add_node(
         project_root: Absolute path to the project. Defaults to cwd or
             ``MILKNADO_PROJECT_ROOT`` environment variable.
     """
-    parent_info = f" parent={parent_id}" if parent_id is not None else ""
-    return f"(stub) created node id=0 description={description!r}{parent_info}"
+    root = _resolve_root(project_root)
+    try:
+        return add_node_stub(description, parent_id, root)
+    except NotImplementedError:
+        parent_info = f" parent={parent_id}" if parent_id is not None else ""
+        return (
+            f"(stub) milknado_add_node not yet wired; "
+            f"would have created description={description!r}{parent_info}"
+        )
 
 
 @mcp.tool()
 def milknado_plan_batches(
     changes: list[dict],
     budget: int = 70_000,
-    project_root: str = "",
     new_relationships: list[dict] | None = None,
 ) -> dict:
     """Compute token-budgeted, precedence-respecting batches for changes.
@@ -55,25 +76,20 @@ def milknado_plan_batches(
     Args:
         changes: List of file-change dicts with keys id, path, edit_kind,
             symbols, and depends_on.
-        budget: Token budget per batch (default 70 000).
-        project_root: Absolute path to the project. Defaults to cwd or
-            ``MILKNADO_PROJECT_ROOT`` environment variable.
+        budget: Token budget per batch (default 70 000). Currently unused by
+            the stub.
         new_relationships: Optional list of additional dependency edges to
-            inject, each with source_change_id, dependant_change_id, and reason.
+            inject, each with source_change_id, dependant_change_id, and
+            reason.
     """
-    change_ids = [c.get("id", f"_fallback_{i}") for i, c in enumerate(changes)]
-    return {
-        "batches": [
-            {
-                "index": 0,
-                "change_ids": change_ids,
-                "depends_on": [],
-                "oversized": False,
-            }
-        ],
-        "spread_report": [],
-        "solver_status": "STUB",
-    }
+    file_changes = [dict_to_file_change(c) for c in changes]
+    rels = tuple(dict_to_new_relationship(r) for r in (new_relationships or []))
+    plan = plan_batches_stub(file_changes, budget, rels)
+    return plan_to_dict(plan)
+
+
+def _resolve_root(explicit: str):
+    return project_root(explicit or None)
 
 
 if __name__ == "__main__":
