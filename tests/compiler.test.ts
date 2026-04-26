@@ -173,7 +173,15 @@ describe("installHarnessArtifacts", () => {
     ) as { agents: string[]; skills: string[]; commands: string[] };
 
     expect(manifest.agents).toEqual(["basic-agent.md"]);
-    expect(manifest.skills).toEqual(["basic-skill", "nested-dir"]);
+    expect(manifest.skills).toEqual([
+      "basic-skill",
+      "cheez-read",
+      "cheez-search",
+      "cheez-write",
+      "gh",
+      "merge-resolve",
+      "nested-dir",
+    ]);
     expect(manifest.commands).toEqual([]);
   });
 
