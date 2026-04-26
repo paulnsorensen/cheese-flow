@@ -246,7 +246,7 @@ describe("emitMcpConfig — edge cases", () => {
     expect(config.mcpServers).toBeDefined();
   });
 
-  it("__TODO_milknado__ is NOT inside mcpServers", async () => {
+  it("milknado MCP server is inside mcpServers", async () => {
     const outputRoot = await mkdtemp(path.join(os.tmpdir(), "cf-adv-"));
     createdDirectories.push(outputRoot);
 
@@ -254,8 +254,8 @@ describe("emitMcpConfig — edge cases", () => {
     const content = await readFile(path.join(outputRoot, ".mcp.json"), "utf8");
     const config = JSON.parse(content);
 
-    expect(config.mcpServers.__TODO_milknado__).toBeUndefined();
-    expect(config.__TODO_milknado__).toBeDefined();
+    expect(config.mcpServers.milknado).toBeDefined();
+    expect(config.__TODO_milknado__).toBeUndefined();
   });
 
   it("emitted JSON parses back cleanly", async () => {
@@ -609,12 +609,12 @@ describe("Root manifest files — validity", () => {
     expect(typeof config.mcpServers).toBe("object");
   });
 
-  it(".mcp.json: __TODO_milknado__ is NOT inside mcpServers", async () => {
+  it(".mcp.json: milknado is inside mcpServers", async () => {
     const raw = await readFile(path.join(repoRoot, ".mcp.json"), "utf8");
     const config = JSON.parse(raw);
 
-    expect(config.mcpServers.__TODO_milknado__).toBeUndefined();
-    expect(config.__TODO_milknado__).toBeDefined();
+    expect(config.mcpServers.milknado).toBeDefined();
+    expect(config.__TODO_milknado__).toBeUndefined();
   });
 });
 

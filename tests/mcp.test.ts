@@ -73,7 +73,7 @@ describe("emitMcpConfig", () => {
     expect(config.mcpServers.tilth).toBeDefined();
   });
 
-  it("includes milknado TODO marker in output", async () => {
+  it("includes milknado MCP server entry in output", async () => {
     const outputRoot = await mkdtemp(path.join(os.tmpdir(), "cheese-flow-"));
     createdDirectories.push(outputRoot);
 
@@ -81,7 +81,10 @@ describe("emitMcpConfig", () => {
 
     const mcpPath = path.join(outputRoot, ".mcp.json");
     const content = await readFile(mcpPath, "utf8");
+    const config = JSON.parse(content);
 
+    expect(config.mcpServers.milknado).toBeDefined();
+    expect(config.mcpServers.milknado.command).toBeDefined();
     expect(content).toContain("milknado");
   });
 });
