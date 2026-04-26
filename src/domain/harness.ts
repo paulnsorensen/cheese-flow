@@ -50,8 +50,8 @@ export type McpServerConfig = {
 
 export const canonicalMcpServers: Record<string, McpServerConfig> = {
   milknado: {
-    command: "node",
-    args: ["dist/index.js", "mcp"],
+    command: "npx",
+    args: ["tsx", "src/index.ts", "mcp"],
   },
   tilth: { command: "npx", args: ["tilth", "--mcp", "--edit"] },
   context7: {

@@ -1,6 +1,6 @@
 ---
 name: milknado-executor
-description: Executes a single ready Milknado node — applies file changes, runs quality gates, and marks the node done via MCP tools.
+description: Executes a single ready Milknado node — applies file changes, runs quality gates, and reports completion status.
 models:
   default: gpt-5.1-codex
   claude-code: claude-sonnet-4-5

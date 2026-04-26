@@ -14,6 +14,15 @@ from .change import FileChange, NewRelationship, RelationshipReason, SymbolRef
 _VALID_REASONS = frozenset({"new_file", "new_import", "new_call", "new_type_use"})
 
 
+def _require_str(d: dict, field: str) -> str:
+    if field not in d:
+        raise ValueError(f"missing required field {field!r}")
+    value = d[field]
+    if not isinstance(value, str):
+        raise ValueError(f"{field} must be a string, got {type(value).__name__!r}")
+    return value
+
+
 def _parse_symbol(i: int, s: object) -> SymbolRef:
     if not isinstance(s, dict):
         raise ValueError(f"symbols[{i}] must be a dict")
@@ -25,7 +34,7 @@ def _parse_symbol(i: int, s: object) -> SymbolRef:
 
 
 def dict_to_file_change(d: dict) -> FileChange:
-    path = d["path"]
+    path = _require_str(d, "path")
     if Path(path).is_absolute() or ".." in Path(path).parts:
         raise ValueError(f"path must be repo-relative without traversal, got {path!r}")
     raw_symbols = d.get("symbols") or []
@@ -33,7 +42,7 @@ def dict_to_file_change(d: dict) -> FileChange:
         raise ValueError("symbols must be a list of dicts")
     symbols = tuple(_parse_symbol(i, s) for i, s in enumerate(raw_symbols))
     return FileChange(
-        id=d["id"],
+        id=_require_str(d, "id"),
         path=path,
         edit_kind=d.get("edit_kind", "modify"),
         symbols=symbols,
@@ -42,13 +51,11 @@ def dict_to_file_change(d: dict) -> FileChange:
 
 
 def dict_to_new_relationship(d: dict) -> NewRelationship:
-    reason = d["reason"]
-    if not isinstance(reason, str):
-        raise ValueError(f"reason must be a string, got {type(reason).__name__!r}")
+    reason = _require_str(d, "reason")
     if reason not in _VALID_REASONS:
         raise ValueError(f"invalid reason: {reason!r}; expected one of {sorted(_VALID_REASONS)}")
     return NewRelationship(
-        source_change_id=d["source_change_id"],
-        dependant_change_id=d["dependant_change_id"],
+        source_change_id=_require_str(d, "source_change_id"),
+        dependant_change_id=_require_str(d, "dependant_change_id"),
         reason=cast(RelationshipReason, reason),
     )
