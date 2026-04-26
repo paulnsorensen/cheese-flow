@@ -1,5 +1,5 @@
 set shell := ["bash", "-c", "set -euo pipefail; if r=$(rtk rewrite \"$0\" 2>/dev/null); then eval \"$r\"; else eval \"$0\"; fi"]
-set dotenv-load := true
+set dotenv-load := false
 
 # Show all available recipes
 default:
@@ -8,7 +8,7 @@ default:
 # Install all dependencies (npm + uv)
 install:
     npm install
-    uv sync
+    uv sync --group dev
 
 # Full build with autofix: format -> lint -> typecheck -> build -> tests (for devs before PRs)
 build:
