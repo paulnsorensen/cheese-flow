@@ -8,14 +8,16 @@ const slug = z
   .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/u, "Must be lowercase kebab-case.");
 
 const skillFrontmatterSchema = z.object({
-  name: slug,
-  description: z.string().min(1).max(1024),
   license: z.string().min(1).optional(),
   compatibility: z.string().min(1).max(500).optional(),
   "allowed-tools": z
     .union([z.array(z.string().min(1)), z.string().min(1)])
     .optional(),
   metadata: z.record(z.string(), z.unknown()).optional(),
+  name: slug,
+  description: z.string().min(1).max(1024),
+  model: z.string().min(1).optional(),
+  context: z.string().min(1).optional(),
 });
 
 const commandFrontmatterSchema = z.object({
@@ -32,11 +34,20 @@ const harnessModelSchema = z.object({
   "copilot-cli": z.string().min(1).optional(),
 });
 
+export const effortLevelSchema = z.enum(["low", "medium", "high"]);
+export const permissionModeSchema = z.enum(["plan", "acceptEdits", "default"]);
+
 const agentFrontmatterSchema = z.object({
   name: slug,
   description: z.string().min(1).max(1024),
   models: harnessModelSchema,
   tools: z.array(z.string().min(1)).default([]),
+  skills: z.array(slug).default([]),
+  color: z.string().min(1).optional(),
+  effort: effortLevelSchema.optional(),
+  disallowedTools: z.array(z.string().min(1)).default([]),
+  permissionMode: permissionModeSchema.optional(),
+  metadata: z.record(z.string(), z.unknown()).optional(),
 });
 
 export type SkillFrontmatter = z.infer<typeof skillFrontmatterSchema>;
