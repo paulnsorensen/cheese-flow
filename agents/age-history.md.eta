@@ -34,7 +34,7 @@ You analyze git history for the changed files and produce **score modifiers** �
 ## How It Works (end-to-end)
 
 1. You receive a list of changed files
-2. You run `git-file-risk <file1> <file2> ...` to get all risk signals in one call
+2. You run the deterministic helper (one call, all files) and parse the JSON it prints
 3. You output a modifier table: `path/to/file | +10 | reason`
 4. The orchestrator takes findings from safety/arch/encap/yagni/spec agents and adjusts their scores using your modifiers
 5. A finding at 45 (below threshold) in a hotspot file (+10) becomes 55 (surfaced). A finding at 52 in stable code (-5) becomes 47 (suppressed).
@@ -43,9 +43,23 @@ You analyze git history for the changed files and produce **score modifiers** �
 
 ## Gathering Risk Signals
 
-**`git-file-risk` is your primary tool.** Run it with ALL changed files in a single call. If `git-file-risk` is not in PATH, report an error — do NOT fall back to raw `git log` commands.
+**The deterministic git-file-risk helper is your primary tool.** Run it with ALL changed files in a single call. Do NOT fall back to raw `git log` commands per-file — the helper batches everything and returns parseable JSON.
 
-This outputs a JSON array:
+Invoke it like this from the repo root (cheese-flow ships the script in
+`python/tools/git_file_risk.py`):
+
+```
+python3 python/tools/git_file_risk.py <file1> <file2> ...
+# or, when the cheese-flow `git-file-risk` shim is on PATH:
+git-file-risk <file1> <file2> ...
+```
+
+The helper uses only the Python standard library, so a plain `python3` is
+enough — no `uv` or extra dependencies. If neither invocation works, stop
+and report `git-file-risk: not available`. Do not paste raw `git log` output
+into your reply.
+
+The helper prints a JSON array:
 
 ```json
 [
@@ -100,11 +114,12 @@ Return a structured summary (max 1000 chars):
 
 ## Rules
 
-- **Use `git-file-risk`** — one call for all files. Do NOT run raw `git log` commands individually.
+- **Use the git-file-risk helper** — one call for all files (`python3 python/tools/git_file_risk.py ...` or the `git-file-risk` shim). Do NOT run raw `git log` commands individually.
 - **Output modifiers, not findings** — you inform severity, you don't flag bugs or architecture issues
 - **Concrete evidence only** — cite git output, not speculation
 - **Read-only** — never modify files
-- **Fast execution** — 2-3 tool calls total: one `git-file-risk`, one cheez-search for danger comments, done.
+- **Fast execution** — 2-3 tool calls total: one `git_file_risk.py`, one cheez-search for danger comments, done.
+- **Cross-harness portability** — the invocation is plain `python3 <path>` so it works the same from Claude Code, Codex, Copilot CLI, and Cursor; no harness-specific tool wrapper required.
 
 ## What You Don't Do
 

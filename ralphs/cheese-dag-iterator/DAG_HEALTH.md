@@ -3,7 +3,7 @@
 Design-quality scoreboard for the cheese-flow agent + DAG ecosystem. Every
 row scored 0–100. The ralph stops when every row is >= 90.
 
-Last updated: 2026-04-26, iteration 7.
+Last updated: 2026-04-26, iteration 8.
 
 ## Flows (from Quintessential Agentic Flows for Cheese-Flow.md)
 
@@ -29,7 +29,7 @@ Last updated: 2026-04-26, iteration 7.
 | age-arch | 75 | Strong measurement protocol with cheez-search/tilth grounding; nesting-depth ladder is concrete; Sliced Bread coverage explicit. |
 | age-encap | 75 | Sliced Bread rules embedded; cheez-search "callers" + tilth_deps grounding; classification table covers the 5 leak types. |
 | age-yagni | 70 | Justification check protocol is concrete; AI_NOISE deletion fix-it-yourself rule is good; spec-cross-reference covered. |
-| age-history | 80 | Modifier-only contract is tight; one-call git-file-risk discipline; cap at +15/-5 prevents stacking. |
+| age-history | 85 | Modifier-only contract is tight; one-call helper invocation now points at the real `python/tools/git_file_risk.py` (stdlib-only, plain `python3`) with a fall-through to a `git-file-risk` PATH shim; cross-harness portability note added. |
 | age-spec | 70 | Spec-first protocol with cheez-search verification; missing "no spec found" fast-exit emphasis in summary; classification table present. |
 
 ## Cross-cutting principles
@@ -44,7 +44,7 @@ Last updated: 2026-04-26, iteration 7.
 | Stop conditions per phase | 60 | Most agents declare a "wrap-up signal" tool-call cap; culture, age-history, and basic-agent do not. |
 | Cross-harness portability | 65 | Tool names + skills are in the canonical Claude vocabulary; Claude-only fields (disallowedTools, permissionMode) are tolerated by the compiler; no inline notes in eta about Codex/Copilot/Cursor approximations. |
 | Sliced Bread organization | 50 | skills/ has flat one-folder-per-skill layout; no `index`/crust convention surfaced for skills with helper files; no documented growth pattern. |
-| Deterministic Python tooling | 25 | python/tools/ directory does not exist; only one external helper referenced (`git-file-risk`) with no source-of-truth or test in this repo. |
+| Deterministic Python tooling | 80 | `python/tools/` bootstrapped with `git_file_risk.py` (stdlib-only, batch JSON output) plus 21 pytest cases in `tests/python/tools/test_git_file_risk.py` covering `humanize_staleness`, the three git probes, the aggregate `risk_for`, and CLI behaviour. The age-history agent is wired to call it in the same iteration — no orphan tool. Future tools (eta-frontmatter validator, harness translation matrix) still pending. |
 
 ## Iteration log
 
@@ -55,3 +55,4 @@ Last updated: 2026-04-26, iteration 7.
 - Iteration 5: add `commands/explore.md` (Flow 2 entry point) — Culture↔Cook iterative loop with three-cycle cost-control cap, AskUserQuestion-gated approach lock as the hard commit boundary (lock/loop/abort), mandatory ≥2-alternatives + "Do nothing" rule on Cook, approach-invalidation halt path when Age findings undermine the locked approach, and per-stage no-production-write invariants on Culture and Cook.
 - Iteration 6: add `commands/fromage.md` (Flow 1 entry point) — Cook → Cut → Press → Age with Culture folded into Cook's light pre-pass, hard spec-validation gate (Approach + Quality gates required), parallel-atoms classifier redirecting to `/fromagerie` (>= 4 non-overlapping units) and linear-backlog redirect to `/incremental`, three-loop Press → Age cap, and spec-invalidation halt that recommends `/mold` when Age challenges the spec itself.
 - Iteration 7: rewrite `commands/age.md` as Flow 5 (Review) entry point — Culture pre-pass with structured brief, per-stage permission table (Culture+Age read-only-on-production, Press the only writer), `AskUserQuestion`-gated Press fix loop scoped to Age-cited files only, three-loop convergence cap, `--no-fix` flag for embedded use inside other flows, spec-invalidation halt path recommending `/mold` or `/explore`, and dual-role framing as both standalone Flow 5 and reusable review primitive.
+- Iteration 8: bootstrap `python/tools/` with `git_file_risk.py` (stdlib-only, batch JSON output) and 21 pytest cases covering staleness humanization, the three git probes, the `risk_for` aggregator, and the CLI; rewire `agents/age-history.md.eta` to invoke `python3 python/tools/git_file_risk.py …` (with the `git-file-risk` PATH shim as a fallback) and add the cross-harness portability note. Closes the orphaned-helper gap and lifts the lowest scoreboard row from 25 → 80.
