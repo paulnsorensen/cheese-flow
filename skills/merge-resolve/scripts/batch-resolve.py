@@ -88,22 +88,26 @@ def resolve_file(path: str, dry_run: bool = True, verbose: bool = False) -> dict
             result["message"] = "Mergiraf did not produce output file"
             return result
         
-        has_conflicts = "<<<<<<" in merged_content or "======" in merged_content
-        
+        has_conflicts = "<<<<<<<" in merged_content or "=======" in merged_content
+
         if has_conflicts:
             result["message"] = "Mergiraf could not fully resolve - conflicts remain"
             return result
-        
+
         # Clean merge - apply if not dry run
         result["resolved"] = True
-        
+
         if dry_run:
             result["message"] = "Would resolve cleanly (dry run)"
         else:
             Path(path).write_text(merged_content)
-            run_git(["add", path])
-            result["message"] = "Resolved and staged"
-    
+            add_result = run_git(["add", path])
+            if add_result.returncode != 0:
+                result["resolved"] = False
+                result["message"] = f"Resolved but staging failed: {add_result.stderr.strip()}"
+            else:
+                result["message"] = "Resolved and staged"
+
     return result
 
 

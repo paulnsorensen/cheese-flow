@@ -141,11 +141,17 @@ def resolve_lockfile(
         return result
     
     # Stage the resolved lockfile (and go.mod for Go, which go mod tidy also modifies)
-    run_git(["add", lockfile_path])
+    add_result = run_git(["add", lockfile_path])
+    if add_result.returncode != 0:
+        result["message"] = f"Regenerated but staging failed: {add_result.stderr.strip()}"
+        return result
     if lockfile_type == "go":
         go_mod = Path(lockfile_path).parent / "go.mod"
         if go_mod.exists():
-            run_git(["add", str(go_mod)])
+            add_mod_result = run_git(["add", str(go_mod)])
+            if add_mod_result.returncode != 0:
+                result["message"] = f"Regenerated but staging go.mod failed: {add_mod_result.stderr.strip()}"
+                return result
 
     result["resolved"] = True
     result["message"] = f"Took {strategy}, regenerated, and staged"

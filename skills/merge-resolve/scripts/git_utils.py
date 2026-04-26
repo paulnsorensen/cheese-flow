@@ -5,7 +5,6 @@ Provides conflict detection, mergiraf support checking, and stage extraction.
 """
 
 import subprocess
-import re
 from pathlib import Path
 from typing import List, Optional, Tuple
 
@@ -87,8 +86,7 @@ def parse_conflict_hunks(content: str) -> List[dict]:
     hunks = []
     current_hunk = None
     section = None
-    start_line = 0
-    
+
     for i, line in enumerate(lines, 1):
         if line.startswith("<<<<<<<"):
             current_hunk = {
@@ -101,7 +99,6 @@ def parse_conflict_hunks(content: str) -> List[dict]:
                 "marker_theirs": None,
             }
             section = "ours"
-            start_line = i
         elif line.startswith("|||||||") and current_hunk:
             section = "base"
         elif line.startswith("=======") and current_hunk:

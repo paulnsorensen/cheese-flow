@@ -8,14 +8,15 @@ import argparse
 import re
 import sys
 from pathlib import Path
+from typing import Optional
 
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent))
 
-from git_utils import run_git, parse_conflict_hunks
+from git_utils import run_git
 
 
-def resolve_hunks(content: str, strategy: str, grep_pattern: str = None) -> str:
+def resolve_hunks(content: str, strategy: str, grep_pattern: Optional[str] = None) -> str:
     """
     Resolve conflict hunks using the specified strategy.
     
@@ -35,16 +36,14 @@ def resolve_hunks(content: str, strategy: str, grep_pattern: str = None) -> str:
     ours_lines = []
     theirs_lines = []
     conflict_text = []  # Full conflict text for grep matching
-    conflict_start = 0
-    
-    for i, line in enumerate(lines):
+
+    for line in lines:
         if line.startswith("<<<<<<<"):
             in_conflict = True
             current_section = "ours"
             ours_lines = []
             theirs_lines = []
             conflict_text = [line]
-            conflict_start = i
         elif line.startswith("|||||||") and in_conflict:
             current_section = "base"
             conflict_text.append(line)
@@ -160,7 +159,10 @@ def main():
             print(f"Partially resolved {args.file} - some conflicts remain")
         else:
             # Stage the file
-            run_git(["add", args.file])
+            add_result = run_git(["add", args.file])
+            if add_result.returncode != 0:
+                print(f"Error: Resolved but staging failed: {add_result.stderr.strip()}")
+                return 1
             print(f"Resolved and staged {args.file}")
     
     return 0

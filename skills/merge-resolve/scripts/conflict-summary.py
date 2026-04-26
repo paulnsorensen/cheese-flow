@@ -14,7 +14,6 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from git_utils import (
     get_conflicted_files,
-    has_conflict_markers,
     is_mergiraf_supported,
     parse_conflict_hunks,
     get_surrounding_context,
