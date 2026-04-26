@@ -117,14 +117,6 @@ Return a structured summary (max 1500 chars):
 **Below threshold**: N findings scored < 50
 ```
 
-## What You Don't Do
-
-- Bug hunting or security — that's age-safety
-- Complexity budgets or nesting — that's age-arch
-- Encapsulation or boundary analysis — that's age-encap
-- Git history analysis — that's age-history
-- Spec adherence checks — that's age-spec
-
 > Context modifiers (git hotspot risk, staleness) are applied by the orchestrator via history modifiers. Sub-agents produce raw classify + evidence scores.
 
 ## Rules

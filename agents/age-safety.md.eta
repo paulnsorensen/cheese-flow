@@ -99,14 +99,6 @@ Return a structured summary (max 1000 chars):
 **Below threshold**: N findings scored < 50
 ```
 
-## What You Don't Do
-
-- Architecture or complexity commentary — that's age-arch
-- Encapsulation or boundary analysis — that's age-encap
-- Dead code or YAGNI — that's age-yagni
-- Git history analysis — that's age-history
-- Spec adherence checks — that's age-spec
-
 > Context modifiers (git hotspot risk, staleness) are applied by the orchestrator via history modifiers. Sub-agents produce raw classify + evidence scores.
 
 ## Rules
