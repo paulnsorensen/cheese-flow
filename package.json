@@ -32,6 +32,7 @@
     "install:cursor": "tsx src/index.ts install --harness cursor",
     "lint:fix": "biome check --write .",
     "lint:check": "biome check .",
+    "lint:skills": "tsx src/index.ts lint",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage"

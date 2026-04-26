@@ -5,6 +5,7 @@ build:
     npm install
     npm run format
     npm run lint:fix
+    npm run lint:skills
     npm run typecheck
     npm run build
     rtk test npm run test:coverage
@@ -17,6 +18,7 @@ build-ci:
     npm ci
     npm run format:check
     npm run lint:check
+    npm run lint:skills
     npm run typecheck
     npm run build
     npm run test:coverage
