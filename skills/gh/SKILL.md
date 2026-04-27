@@ -1,6 +1,6 @@
 ---
 name: gh
-allowed-tools: Bash(git log:*), Bash(git diff:*), Bash(git status:*), Bash(gh:*)
+allowed-tools: bash
 description: >
   Complete GitHub tasks using the gh CLI. Use for any GitHub operation —
   PRs, issues, CI checks, repo management, releases, code search.

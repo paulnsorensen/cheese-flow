@@ -139,6 +139,93 @@ describe("lintSkillSource", () => {
       ),
     ).toBe(true);
   });
+
+  it("warns when allowed-tools uses Claude Code permission-glob syntax", () => {
+    const issues = lintSkillSource({
+      directoryName: "claude-perms",
+      relativeFile: "claude-perms/SKILL.md",
+      source: `---\nname: claude-perms\ndescription: A perfectly fine description that is long enough for discovery.\nallowed-tools: Bash(git diff:*), Read\n---\n${validBody}`,
+    });
+    const finding = issues.find(
+      (entry) => entry.rule === "allowed-tools-claude-permission-syntax",
+    );
+    expect(finding?.severity).toBe("warning");
+    expect(finding?.message).toContain("Bash(git diff:*)");
+  });
+
+  it("warns when allowed-tools is an array using Claude permission-glob", () => {
+    const issues = lintSkillSource({
+      directoryName: "claude-perms-array",
+      relativeFile: "claude-perms-array/SKILL.md",
+      source: `---\nname: claude-perms-array\ndescription: A perfectly fine description that is long enough for discovery.\nallowed-tools:\n  - Bash(gh:*)\n  - Read\n---\n${validBody}`,
+    });
+    expect(
+      issues.some(
+        (entry) => entry.rule === "allowed-tools-claude-permission-syntax",
+      ),
+    ).toBe(true);
+  });
+
+  it("does not warn on bare tool names in allowed-tools", () => {
+    const issues = lintSkillSource({
+      directoryName: "bare-tools",
+      relativeFile: "bare-tools/SKILL.md",
+      source: `---\nname: bare-tools\ndescription: A perfectly fine description that is long enough for discovery.\nallowed-tools:\n  - read\n  - write\n  - bash\n---\n${validBody}`,
+    });
+    expect(
+      issues.some((entry) =>
+        entry.rule.startsWith("allowed-tools-claude-permission-syntax"),
+      ),
+    ).toBe(false);
+  });
+
+  it("warns when body references Claude-only Agent(...) tool", () => {
+    const issues = lintSkillSource({
+      directoryName: "agent-call",
+      relativeFile: "agent-call/SKILL.md",
+      source: `---\nname: agent-call\ndescription: A perfectly fine description that is long enough for discovery.\n---\n# Body\nUse Agent(subagent_type="foo") to spawn a sub-agent.\n`,
+    });
+    const finding = issues.find(
+      (entry) => entry.rule === "body-claude-only-tool",
+    );
+    expect(finding?.severity).toBe("warning");
+    expect(finding?.message).toContain("Agent");
+  });
+
+  it("warns when body references Claude-only Task(...) tool", () => {
+    const issues = lintSkillSource({
+      directoryName: "task-call",
+      relativeFile: "task-call/SKILL.md",
+      source: `---\nname: task-call\ndescription: A perfectly fine description that is long enough for discovery.\n---\n# Body\nDispatch via Task(...)\n`,
+    });
+    expect(issues.some((entry) => entry.rule === "body-claude-only-tool")).toBe(
+      true,
+    );
+  });
+
+  it("warns when body references PascalCase hook event names", () => {
+    const issues = lintSkillSource({
+      directoryName: "pascal-hook",
+      relativeFile: "pascal-hook/SKILL.md",
+      source: `---\nname: pascal-hook\ndescription: A perfectly fine description that is long enough for discovery.\n---\n# Body\nFires on SessionStart and PreToolUse events.\n`,
+    });
+    const findings = issues.filter(
+      (entry) => entry.rule === "body-pascal-hook-event",
+    );
+    expect(findings).toHaveLength(2);
+    expect(findings.every((f) => f.severity === "warning")).toBe(true);
+  });
+
+  it("does not flag camelCase hook event names in body", () => {
+    const issues = lintSkillSource({
+      directoryName: "camel-hook",
+      relativeFile: "camel-hook/SKILL.md",
+      source: `---\nname: camel-hook\ndescription: A perfectly fine description that is long enough for discovery.\n---\n# Body\nFires on sessionStart and preToolUse events.\n`,
+    });
+    expect(
+      issues.some((entry) => entry.rule === "body-pascal-hook-event"),
+    ).toBe(false);
+  });
 });
 
 describe("lintSkillsDirectory", () => {
@@ -182,6 +269,42 @@ describe("lintSkillsDirectory", () => {
     expect(report.scanned).toBe(1);
     expect(report.issues).toEqual([]);
     expect(hasErrors(report)).toBe(false);
+  });
+
+  it("runs compile-test against harness adapters with emitSurface", async () => {
+    const skillsRoot = await createSkillsRoot();
+    await writeSkill(
+      skillsRoot,
+      "good-skill",
+      `---\nname: good-skill\ndescription: A perfectly fine description that is long enough for discovery.\n---\n${validBody}`,
+    );
+
+    const report = await lintSkillsDirectory(skillsRoot);
+
+    expect(
+      report.issues.some((entry) => entry.rule.startsWith("compile-")),
+    ).toBe(false);
+  });
+
+  it("skips compile-test when source has errors", async () => {
+    const skillsRoot = await createSkillsRoot();
+    // Malformed YAML causes a frontmatter-parse source error. The early
+    // return in lintSkillDirectory should prevent compile-test from running,
+    // so only the source error is reported (not duplicate adapter failures).
+    await writeSkill(
+      skillsRoot,
+      "bad-yaml",
+      `---\nname: bad-yaml\ndescription: A perfectly fine description that is long enough for discovery.\nallowed-tools: { unclosed: brace\n---\n${validBody}`,
+    );
+
+    const report = await lintSkillsDirectory(skillsRoot);
+
+    expect(report.issues.some((entry) => entry.severity === "error")).toBe(
+      true,
+    );
+    expect(
+      report.issues.some((entry) => entry.rule.startsWith("compile-")),
+    ).toBe(false);
   });
 
   it("formatLintReport reports a clean run when issues are empty", () => {
