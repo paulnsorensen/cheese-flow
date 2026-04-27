@@ -60,6 +60,8 @@ class RebaseResult:
 
 @dataclass(frozen=True)
 class TilthMap:
+    """A scope and token budget paired with extracted analysis data."""
+
     scope: Path
     budget_tokens: int
     data: dict[str, object]
@@ -67,6 +69,8 @@ class TilthMap:
 
 @dataclass(frozen=True)
 class DegradationMarker:
+    """Records when a degraded fallback path was used and why."""
+
     source: str
     reason: str
     detail: str = ""

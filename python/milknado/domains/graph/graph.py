@@ -18,6 +18,8 @@ from milknado.domains.graph._persistence import (
     row_to_node,
 )
 
+MAX_SUMMARY_DESCRIPTION_LENGTH = 120
+
 
 class MikadoGraph:
     def __init__(self, db_path: Path) -> None:
@@ -56,7 +58,7 @@ class MikadoGraph:
         self._conn.commit()
         node_id = cur.lastrowid
         if node_id is None:
-            raise ValueError("Failed to insert node")
+            raise ValueError(f"Failed to insert node with description={description!r}")
         if parent_id is not None:
             self.add_edge(parent_id, node_id)
         row = self._conn.execute("SELECT * FROM nodes WHERE id = ?", (node_id,)).fetchone()
@@ -179,7 +181,9 @@ def graph_summary(root: Path) -> str:
         if not nodes:
             return "(empty graph)"
         return "\n".join(
-            f"id={node.id} status={node.status.value} desc={node.description[:120]!r}"
+            "id="
+            f"{node.id} status={node.status.value} "
+            f"desc={node.description[:MAX_SUMMARY_DESCRIPTION_LENGTH]!r}"
             for node in nodes
         )
     finally:
