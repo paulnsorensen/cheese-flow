@@ -99,8 +99,9 @@ class MikadoGraph:
     def get_root(self) -> MikadoNode | None:
         row = self._conn.execute(
             "SELECT * FROM nodes "
-            "WHERE id NOT IN (SELECT DISTINCT child_id FROM edges) "
-            "ORDER BY id LIMIT 1"
+            "WHERE id NOT IN ("
+            "SELECT DISTINCT child_id FROM edges"
+            ") ORDER BY id LIMIT 1"
         ).fetchone()
         return row_to_node(row) if row else None
 
