@@ -181,8 +181,7 @@ def graph_summary(root: Path) -> str:
         if not nodes:
             return "(empty graph)"
         return "\n".join(
-            "id="
-            f"{node.id} status={node.status.value} "
+            f"id={node.id} status={node.status.value} "
             f"desc={node.description[:MAX_SUMMARY_DESCRIPTION_LENGTH]!r}"
             for node in nodes
         )
