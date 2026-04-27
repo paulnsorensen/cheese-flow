@@ -176,8 +176,12 @@ describe("installHarnessArtifacts", () => {
     ) as { agents: string[]; skills: string[]; commands: string[] };
 
     expect(manifest.agents).toContain("basic-agent.md");
+    expect(manifest.agents).toContain("milknado-executor.md");
+    expect(manifest.agents).toContain("milknado-planner.md");
     expect(manifest.agents).not.toContain("README.txt");
     expect(manifest.skills).toContain("basic-skill");
+    expect(manifest.skills).toContain("milknado-execute");
+    expect(manifest.skills).toContain("milknado-plan");
     expect(manifest.skills).toContain("nested-dir");
     expect(manifest.skills).not.toContain("notes.txt");
     expect(manifest.commands).toEqual([]);
