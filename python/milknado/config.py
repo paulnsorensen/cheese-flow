@@ -21,3 +21,8 @@ def project_root(explicit: str | None) -> Path:
     if env:
         return Path(env).expanduser().resolve()
     return Path.cwd().resolve()
+
+
+def graph_db_path(root: Path) -> Path:
+    """Return the default graph database path for a project root."""
+    return root / ".milknado" / "milknado.db"

@@ -23,10 +23,12 @@ them with quality gates, and reports the outcome.
 
 ## Steps
 
-1. **Read the graph** — call `milknado_graph_summary` to find nodes with
-   `pending` or `ready` status that have no unfinished prerequisites.
+1. **Read the graph** — call `milknado_graph_summary` to find `pending` nodes
+   whose prerequisites are all `done`. (Eligibility is computed by the engine;
+   there is no stored `ready` status — the summary only shows the persisted
+   `pending`/`running`/`done`/`blocked`/`failed` values.)
 2. **Select a node** — use the provided node id, or pick the highest-priority
-   ready node. Read its description carefully — it is the primary context.
+   eligible `pending` node. Read its description carefully — it is the primary context.
 3. **Inspect files** — read all files relevant to the node before writing
    anything.
 4. **Apply changes** — follow the `edit_kind` in the node description
@@ -45,7 +47,7 @@ them with quality gates, and reports the outcome.
 
 | Tool | Purpose |
 |---|---|
-| `milknado_graph_summary` | Read the graph to find ready nodes. |
+| `milknado_graph_summary` | Read the graph to find pending nodes whose prerequisites are done. |
 | `milknado_add_node` | Record a newly discovered blocker as a prerequisite node. |
 
 ## Execution constraints

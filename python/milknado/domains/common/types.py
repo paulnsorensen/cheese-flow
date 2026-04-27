@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from enum import Enum
+from types import MappingProxyType
 
 
 class NodeStatus(Enum):
@@ -11,6 +13,24 @@ class NodeStatus(Enum):
     DONE = "done"
     BLOCKED = "blocked"
     FAILED = "failed"
+
+
+VALID_TRANSITIONS: Mapping[NodeStatus, frozenset[NodeStatus]] = MappingProxyType(
+    {
+        NodeStatus.PENDING: frozenset({NodeStatus.RUNNING, NodeStatus.BLOCKED, NodeStatus.FAILED}),
+        NodeStatus.RUNNING: frozenset(
+            {
+                NodeStatus.DONE,
+                NodeStatus.FAILED,
+                NodeStatus.BLOCKED,
+                NodeStatus.PENDING,
+            }
+        ),
+        NodeStatus.BLOCKED: frozenset({NodeStatus.PENDING}),
+        NodeStatus.FAILED: frozenset({NodeStatus.PENDING}),
+        NodeStatus.DONE: frozenset(),
+    }
+)
 
 
 @dataclass(frozen=True)
@@ -28,3 +48,9 @@ class MikadoNode:
     oversized: bool = False
     batch_index: int | None = None
     completion_duration_seconds: float | None = None
+
+
+@dataclass(frozen=True)
+class MikadoEdge:
+    parent_id: int
+    child_id: int
