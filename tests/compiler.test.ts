@@ -175,7 +175,11 @@ describe("installHarnessArtifacts", () => {
       ),
     ) as { agents: string[]; skills: string[]; commands: string[] };
 
-    expect(manifest.agents).toEqual(["basic-agent.md"]);
+    expect(manifest.agents).toEqual([
+      "basic-agent.md",
+      "milknado-executor.md",
+      "milknado-planner.md",
+    ]);
     expect(manifest.skills).toEqual([
       "basic-skill",
       "cheez-read",
@@ -183,6 +187,8 @@ describe("installHarnessArtifacts", () => {
       "cheez-write",
       "gh",
       "merge-resolve",
+      "milknado-execute",
+      "milknado-plan",
       "nested-dir",
       "research",
     ]);
