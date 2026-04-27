@@ -56,6 +56,19 @@ def test_invalid_transition_raises(tmp_path: Path) -> None:
         graph.close()
 
 
+def test_done_node_is_terminal(tmp_path: Path) -> None:
+    graph = _graph(tmp_path)
+    try:
+        node = graph.add_node("task")
+        graph.mark_running(node.id)
+        graph.mark_done(node.id)
+
+        with pytest.raises(InvalidTransition, match="cannot transition"):
+            graph.mark_running(node.id)
+    finally:
+        graph.close()
+
+
 def test_add_node_requires_existing_parent(tmp_path: Path) -> None:
     graph = _graph(tmp_path)
     try:

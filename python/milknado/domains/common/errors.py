@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any
+from .types import NodeStatus
 
 
 class MilknadoError(Exception):
@@ -11,9 +11,9 @@ class InvalidTransition(MilknadoError, ValueError):
     def __init__(
         self,
         node_id: int,
-        current: Any,
-        target: Any,
-        valid_targets: tuple[Any, ...],
+        current: NodeStatus,
+        target: NodeStatus,
+        valid_targets: tuple[NodeStatus, ...],
     ) -> None:
         self.node_id = node_id
         self.current = current

@@ -57,7 +57,7 @@ def ensure_schema(conn: sqlite3.Connection) -> None:
 
 def row_to_node(row: sqlite3.Row) -> MikadoNode:
     keys = row.keys()
-    completed_at_raw = row["completed_at"]
+    completed_at_raw = row["completed_at"] if "completed_at" in keys else None
     dispatched_at_raw = row["dispatched_at"] if "dispatched_at" in keys else None
     completion_duration = (
         row["completion_duration_seconds"] if "completion_duration_seconds" in keys else None

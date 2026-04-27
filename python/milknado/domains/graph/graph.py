@@ -58,7 +58,10 @@ class MikadoGraph:
         self._conn.commit()
         node_id = cur.lastrowid
         if node_id is None:
-            raise ValueError(f"Failed to insert node with description={description!r}")
+            raise ValueError(
+                f"Failed to insert node with description={description!r}: "
+                "database did not return a row id"
+            )
         if parent_id is not None:
             self.add_edge(parent_id, node_id)
         row = self._conn.execute("SELECT * FROM nodes WHERE id = ?", (node_id,)).fetchone()
