@@ -9,7 +9,7 @@ export type HarnessCompatFinding = {
   message: string;
 };
 
-const CLAUDE_PERMISSION_GLOB = /\b([A-Z]\w*)\(([^)]*:[^)]*)\)/u;
+const CLAUDE_PERMISSION_GLOB = /\b([A-Za-z]\w*)\(([^)]*:[^)]*)\)/u;
 const CLAUDE_ONLY_TOOL_NAMES = ["Agent", "Task"] as const;
 const PASCAL_HOOK_EVENTS = [
   "SessionStart",
@@ -24,15 +24,15 @@ export function checkAllowedToolsPortability(
   const text = Array.isArray(allowedTools)
     ? allowedTools.join(", ")
     : allowedTools;
-  const match = CLAUDE_PERMISSION_GLOB.exec(text);
-  if (match === null) return [];
-  return [
-    {
-      rule: "allowed-tools-claude-permission-syntax",
-      severity: "warning",
-      message: `allowed-tools entry "${match[0]}" uses Claude Code permission-glob syntax; Cursor, Codex, and Copilot CLI do not parse it. Drop the "(...:...)" suffix or list bare tool names for portability.`,
-    },
-  ];
+  const matches = Array.from(
+    text.matchAll(new RegExp(CLAUDE_PERMISSION_GLOB.source, "gu")),
+  );
+  if (matches.length === 0) return [];
+  return matches.map((match) => ({
+    rule: "allowed-tools-claude-permission-syntax",
+    severity: "warning",
+    message: `allowed-tools entry "${match[0]}" uses Claude Code permission-glob syntax; Cursor, Codex, and Copilot CLI do not parse it. Drop the "(...:...)" suffix or list bare tool names for portability.`,
+  }));
 }
 
 export function checkBodyHarnessIdioms(body: string): HarnessCompatFinding[] {
@@ -84,7 +84,7 @@ export async function compileTestSkill(
         findings.push({
           rule: `compile-${adapter.name}-failed`,
           severity: "error",
-          message: `${adapter.displayName} adapter failed to emit: ${(error as Error).message}`,
+          message: `${adapter.displayName} adapter failed to emit: ${error instanceof Error ? error.message : String(error)}`,
         });
       }
     }

@@ -81,20 +81,28 @@ async function lintSkillDirectory(
       },
     ];
   }
+  const compileFindings = await compileTestSkill(directoryName, source);
+  const compileIssues: LintIssue[] = [];
+  for (const finding of compileFindings) {
+    compileIssues.push({
+      skill: directoryName,
+      file: relativeFile,
+      severity: finding.severity,
+      rule: finding.rule,
+      message: finding.message,
+    });
+  }
+
   const sourceIssues = lintSkillSource({
     directoryName,
     relativeFile,
     source,
   });
 
-  const compileFindings = await compileTestSkill(directoryName, source);
-  const compileIssues: LintIssue[] = compileFindings.map((finding) => ({
-    skill: directoryName,
-    file: relativeFile,
-    severity: finding.severity,
-    rule: finding.rule,
-    message: finding.message,
-  }));
+  // Suppress compile issues when source has errors to avoid duplicate noise.
+  if (sourceIssues.some((issue) => issue.severity === "error")) {
+    return sourceIssues;
+  }
 
   return [...sourceIssues, ...compileIssues];
 }

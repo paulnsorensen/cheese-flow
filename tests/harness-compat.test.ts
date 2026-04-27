@@ -33,6 +33,19 @@ describe("checkAllowedToolsPortability", () => {
     expect(findings).toHaveLength(1);
     expect(findings[0]?.message).toContain("Bash(gh:*)");
   });
+
+  it("flags all occurrences when multiple permission-globs are present", () => {
+    const findings = checkAllowedToolsPortability("Bash(git:*), Bash(gh:*)");
+    expect(findings).toHaveLength(2);
+    expect(findings[0]?.message).toContain("Bash(git:*)");
+    expect(findings[1]?.message).toContain("Bash(gh:*)");
+  });
+
+  it("flags lowercase permission-glob syntax", () => {
+    const findings = checkAllowedToolsPortability("bash(git diff:*)");
+    expect(findings).toHaveLength(1);
+    expect(findings[0]?.rule).toBe("allowed-tools-claude-permission-syntax");
+  });
 });
 
 describe("checkBodyHarnessIdioms", () => {

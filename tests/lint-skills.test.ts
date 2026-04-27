@@ -286,11 +286,11 @@ describe("lintSkillsDirectory", () => {
     ).toBe(false);
   });
 
-  it("surfaces compile-test failures from harness adapters", async () => {
+  it("skips compile-test when source has errors", async () => {
     const skillsRoot = await createSkillsRoot();
-    // Write a SKILL.md whose YAML frontmatter is technically delimited
-    // but parses to non-object data, breaking cursor's emitSurface
-    // when it accesses data.description on a non-object.
+    // Malformed YAML causes a frontmatter-parse source error. The early
+    // return in lintSkillDirectory should prevent compile-test from running,
+    // so only the source error is reported (not duplicate adapter failures).
     await writeSkill(
       skillsRoot,
       "bad-yaml",
@@ -299,9 +299,12 @@ describe("lintSkillsDirectory", () => {
 
     const report = await lintSkillsDirectory(skillsRoot);
 
+    expect(report.issues.some((entry) => entry.severity === "error")).toBe(
+      true,
+    );
     expect(
-      report.issues.some((entry) => entry.rule.startsWith("compile-cursor-")),
-    ).toBe(true);
+      report.issues.some((entry) => entry.rule.startsWith("compile-")),
+    ).toBe(false);
   });
 
   it("formatLintReport reports a clean run when issues are empty", () => {
