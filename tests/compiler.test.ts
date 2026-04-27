@@ -185,6 +185,7 @@ describe("installHarnessArtifacts", () => {
       "cheez-read",
       "cheez-search",
       "cheez-write",
+      "diff",
       "gh",
       "merge-resolve",
       "milknado-execute",
