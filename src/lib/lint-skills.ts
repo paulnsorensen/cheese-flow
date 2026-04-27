@@ -1,31 +1,23 @@
 import { readdir, readFile, stat } from "node:fs/promises";
 import path from "node:path";
-import type { z } from "zod";
-import { parseFrontmatter } from "./frontmatter.js";
 import {
-  checkAllowedToolsPortability,
-  checkBodyHarnessIdioms,
   compileTestSkill,
+  type HarnessCompatFinding,
 } from "./harness-compat.js";
-import { parseSkillFrontmatter } from "./schemas.js";
+import {
+  type IssueFactory,
+  type LintIssue,
+  lintSkillSource,
+  makeIssueFactory,
+} from "./lint-skill-rules.js";
 
-export type LintSeverity = "error" | "warning";
-
-export type LintIssue = {
-  skill: string;
-  file: string;
-  severity: LintSeverity;
-  rule: string;
-  message: string;
-};
+export type { LintIssue, LintSeverity } from "./lint-skill-rules.js";
+export { lintSkillSource };
 
 export type LintReport = {
   scanned: number;
   issues: LintIssue[];
 };
-
-const RECOMMENDED_BODY_LINE_LIMIT = 500;
-const MIN_DESCRIPTION_LENGTH = 20;
 
 export async function lintSkillsDirectory(
   skillsRoot: string,
@@ -48,152 +40,87 @@ async function lintSkillDirectory(
   skillsRoot: string,
   directoryName: string,
 ): Promise<LintIssue[]> {
-  const skillDirectory = path.join(skillsRoot, directoryName);
-  const skillFile = path.join(skillDirectory, "SKILL.md");
+  const skillFile = path.join(skillsRoot, directoryName, "SKILL.md");
   const relativeFile = path.relative(skillsRoot, skillFile);
+  const issue = makeIssueFactory(directoryName, relativeFile);
 
-  try {
-    await stat(skillFile);
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-    return [
-      {
-        skill: directoryName,
-        file: relativeFile,
-        severity: "error",
-        rule: "skill-md-required",
-        message: "SKILL.md is required at the skill directory root.",
-      },
-    ];
-  }
-
-  let source: string;
-  try {
-    source = await readFile(skillFile, "utf8");
-  } catch {
-    return [
-      {
-        skill: directoryName,
-        file: relativeFile,
-        severity: "error",
-        rule: "skill-md-required",
-        message: "SKILL.md could not be read.",
-      },
-    ];
-  }
-  const compileFindings = await compileTestSkill(directoryName, source);
-  const compileIssues: LintIssue[] = [];
-  for (const finding of compileFindings) {
-    compileIssues.push({
-      skill: directoryName,
-      file: relativeFile,
-      severity: finding.severity,
-      rule: finding.rule,
-      message: finding.message,
-    });
-  }
+  const sourceOrIssue = await readSkillSource(skillFile, issue);
+  if ("issues" in sourceOrIssue) return sourceOrIssue.issues;
 
   const sourceIssues = lintSkillSource({
     directoryName,
     relativeFile,
-    source,
+    source: sourceOrIssue.source,
   });
 
-  // Suppress compile issues when source has errors to avoid duplicate noise.
+  // Skip the cross-harness compile-trip when the source itself has errors.
+  // The compile step would re-surface the same parse/name failures four times,
+  // one per adapter, drowning out the real source issue.
   if (sourceIssues.some((issue) => issue.severity === "error")) {
     return sourceIssues;
   }
 
+  const compileFindings = await compileTestSkill(
+    directoryName,
+    sourceOrIssue.source,
+  );
+  const compileIssues = compileFindings.map((finding) =>
+    findingToIssue(finding, directoryName, relativeFile),
+  );
+
   return [...sourceIssues, ...compileIssues];
 }
 
-type LintSourceContext = {
-  directoryName: string;
-  relativeFile: string;
-  source: string;
-};
+type SourceOk = { source: string };
+type SourceFailed = { issues: LintIssue[] };
 
-export function lintSkillSource(context: LintSourceContext): LintIssue[] {
-  const issues: LintIssue[] = [];
-  const issue = (
-    severity: LintSeverity,
-    rule: string,
-    message: string,
-  ): LintIssue => ({
-    skill: context.directoryName,
-    file: context.relativeFile,
-    severity,
-    rule,
-    message,
-  });
-
-  let parsed: { data: unknown; body: string };
+async function readSkillSource(
+  skillFile: string,
+  issue: IssueFactory,
+): Promise<SourceOk | SourceFailed> {
   try {
-    parsed = parseFrontmatter<unknown>(context.source);
+    await stat(skillFile);
   } catch (error) {
-    issues.push(issue("error", "frontmatter-parse", (error as Error).message));
-    return issues;
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    return {
+      issues: [
+        issue(
+          "error",
+          "skill-md-required",
+          "SKILL.md is required at the skill directory root.",
+        ),
+      ],
+    };
   }
 
   try {
-    const frontmatter = parseSkillFrontmatter(parsed.data);
-
-    if (frontmatter.name !== context.directoryName) {
-      issues.push(
-        issue(
-          "error",
-          "name-matches-directory",
-          `frontmatter name "${frontmatter.name}" must match parent directory "${context.directoryName}".`,
-        ),
-      );
-    }
-
-    const description = frontmatter.description.trim();
-    if (description.length < MIN_DESCRIPTION_LENGTH) {
-      issues.push(
-        issue(
-          "warning",
-          "description-too-short",
-          `description is ${description.length} chars; aim for at least ${MIN_DESCRIPTION_LENGTH} so agents can match it during discovery.`,
-        ),
-      );
-    }
-
-    for (const finding of checkAllowedToolsPortability(
-      frontmatter["allowed-tools"],
-    )) {
-      issues.push(issue(finding.severity, finding.rule, finding.message));
-    }
+    return { source: await readFile(skillFile, "utf8") };
   } catch (error) {
-    const zodError = error as z.ZodError;
-    for (const zodIssue of zodError.issues) {
-      const fieldPath = zodIssue.path.join(".") || "<frontmatter>";
-      issues.push(
+    return {
+      issues: [
         issue(
           "error",
-          `frontmatter:${fieldPath}`,
-          `${fieldPath}: ${zodIssue.message}`,
+          "skill-md-unreadable",
+          `SKILL.md could not be read: ${error instanceof Error ? error.message : String(error)}`,
         ),
-      );
-    }
+      ],
+    };
   }
+}
 
-  const bodyLineCount = parsed.body.split(/\r?\n/u).length;
-  if (bodyLineCount > RECOMMENDED_BODY_LINE_LIMIT) {
-    issues.push(
-      issue(
-        "warning",
-        "body-too-long",
-        `SKILL.md body is ${bodyLineCount} lines; the spec recommends staying under ${RECOMMENDED_BODY_LINE_LIMIT}. Move detail into references/.`,
-      ),
-    );
-  }
-
-  for (const finding of checkBodyHarnessIdioms(parsed.body)) {
-    issues.push(issue(finding.severity, finding.rule, finding.message));
-  }
-
-  return issues;
+function findingToIssue(
+  finding: HarnessCompatFinding,
+  directoryName: string,
+  relativeFile: string,
+): LintIssue {
+  return {
+    skill: directoryName,
+    file: relativeFile,
+    severity: finding.severity,
+    rule: finding.rule,
+    message: finding.message,
+    ...(finding.line !== undefined ? { line: finding.line } : {}),
+  };
 }
 
 export function formatLintReport(report: LintReport): string {
@@ -209,7 +136,9 @@ export function formatLintReport(report: LintReport): string {
 
   for (const item of report.issues) {
     const tag = item.severity === "error" ? "ERROR" : "WARN";
-    lines.push(`[${tag}] ${item.file} (${item.rule}): ${item.message}`);
+    const anchor =
+      item.line !== undefined ? `${item.file}:${item.line}` : item.file;
+    lines.push(`[${tag}] ${anchor} (${item.rule}): ${item.message}`);
   }
 
   const errorCount = report.issues.filter(
