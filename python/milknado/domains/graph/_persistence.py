@@ -59,7 +59,9 @@ def row_to_node(row: sqlite3.Row) -> MikadoNode:
     keys = row.keys()
     completed_at_raw = row["completed_at"]
     dispatched_at_raw = row["dispatched_at"] if "dispatched_at" in keys else None
-    duration = row["completion_duration_seconds"] if "completion_duration_seconds" in keys else None
+    completion_duration = (
+        row["completion_duration_seconds"] if "completion_duration_seconds" in keys else None
+    )
     return MikadoNode(
         id=row["id"],
         description=row["description"],
@@ -73,5 +75,5 @@ def row_to_node(row: sqlite3.Row) -> MikadoNode:
         dispatched_at=(datetime.fromisoformat(dispatched_at_raw) if dispatched_at_raw else None),
         oversized=bool(row["oversized"]) if "oversized" in keys else False,
         batch_index=row["batch_index"] if "batch_index" in keys else None,
-        completion_duration_seconds=duration,
+        completion_duration_seconds=completion_duration,
     )

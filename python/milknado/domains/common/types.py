@@ -4,7 +4,6 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from enum import Enum
 from pathlib import Path
-from typing import Any
 
 
 class NodeStatus(Enum):
@@ -63,7 +62,7 @@ class RebaseResult:
 class TilthMap:
     scope: Path
     budget_tokens: int
-    data: dict[str, Any]
+    data: dict[str, object]
 
 
 @dataclass(frozen=True)

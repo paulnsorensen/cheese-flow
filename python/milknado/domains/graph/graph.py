@@ -55,11 +55,13 @@ class MikadoGraph:
         )
         self._conn.commit()
         node_id = cur.lastrowid
-        assert node_id is not None
+        if node_id is None:
+            raise ValueError("Failed to insert node")
         if parent_id is not None:
             self.add_edge(parent_id, node_id)
         row = self._conn.execute("SELECT * FROM nodes WHERE id = ?", (node_id,)).fetchone()
-        assert row is not None
+        if row is None:
+            raise ValueError(f"Node {node_id} not found after insertion")
         return row_to_node(row)
 
     def add_edge(self, parent_id: int, child_id: int) -> MikadoEdge:
