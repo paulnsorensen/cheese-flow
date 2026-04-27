@@ -1,7 +1,7 @@
 ---
 name: merge-resolve
 compatibility: Requires tilth MCP server (delegates file IO to cheez-read/cheez-write/cheez-search)
-allowed-tools: Bash(git:*), Bash(mergiraf:*), Bash(python3:*)
+allowed-tools: Bash
 description: >
   Resolve merge conflicts, rebase conflicts, and cherry-pick failures using mergiraf
   (AST-aware structural merge), git rerere, and kdiff3. Activate when: merge failed,
