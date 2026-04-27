@@ -6,13 +6,6 @@ Modeled on Ally Piechowski's "The Git Commands I Run Before Reading Any Code"
 hotspots, bus factor, bug clusters, velocity, and firefighting frequency.
 Plus a per-file `risk` subcommand for the age-history modifier loop.
 
-Used by:
-  - culture agent: `git_diagnose.py orient` once on first invocation for
-    repo-wide context before tracing.
-  - age-history agent: `risk <file>...` for per-file signals plus `orient`
-    (or the individual `hotspots` / `bug-clusters`) to flag changed files
-    that intersect with repo-wide trouble lists.
-
 Stdlib-only. JSON-on-stdout. No third-party deps. Each subcommand prints a
 single JSON document so callers can parse without context-polluting raw
 git log output.
@@ -45,6 +38,8 @@ FIREFIGHT_RE = re.compile(r"\b(revert|hotfix|emergency|rollback)\b", re.IGNORECA
 
 def _run_git(args: list[str]) -> str:
     result = subprocess.run(["git", *args], capture_output=True, text=True, check=False)
+    if result.returncode != 0:
+        raise RuntimeError(f"git {args[0]} failed: {result.stderr.strip()}")
     return result.stdout
 
 
@@ -58,21 +53,23 @@ def hotspots(since: str = DEFAULT_SINCE, limit: int = DEFAULT_LIMIT) -> list[dic
     return [{"file": f, "changes": n} for f, n in counts.most_common(limit)]
 
 
+def _parse_shortlog_line(raw: str) -> tuple[int, str] | None:
+    line = raw.strip()
+    if not line:
+        return None
+    count_str, _, author = line.partition("\t")
+    try:
+        return int(count_str.strip()), author.strip()
+    except ValueError:
+        return None
+
+
 def bus_factor(limit: int = DEFAULT_BUS_LIMIT) -> list[dict[str, object]]:
     """Contributors by commit count with % share (Piechowski cmd 2: bus factor)."""
     output = _run_git(["shortlog", "-sn", "--no-merges", "--all"])
-    rows: list[tuple[int, str]] = []
-    for raw in output.splitlines():
-        line = raw.strip()
-        if not line:
-            continue
-        count_str, _, author = line.partition("\t")
-        try:
-            rows.append((int(count_str.strip()), author.strip()))
-        except ValueError:
-            continue
+    parsed = [_parse_shortlog_line(raw) for raw in output.splitlines()]
+    rows = sorted((r for r in parsed if r is not None), reverse=True)
     total = sum(n for n, _ in rows) or 1
-    rows.sort(reverse=True)
     return [
         {"author": author, "commits": n, "percent": round(100 * n / total, 1)}
         for n, author in rows[:limit]
@@ -96,29 +93,29 @@ def velocity() -> list[dict[str, object]]:
 def firefighting(since: str = DEFAULT_SINCE) -> list[dict[str, object]]:
     """Revert/hotfix/emergency/rollback commits in window (Piechowski cmd 5)."""
     output = _run_git(["log", "--oneline", f"--since={since}"])
-    rows: list[dict[str, object]] = []
-    for line in output.splitlines():
-        sha, _, subject = line.partition(" ")
-        if subject and FIREFIGHT_RE.search(subject):
-            rows.append({"sha": sha, "subject": subject})
-    return rows
+    return [
+        {"sha": sha, "subject": subject}
+        for line in output.splitlines()
+        for sha, _, subject in [line.partition(" ")]
+        if subject and FIREFIGHT_RE.search(subject)
+    ]
 
 
 # ─── per-file risk (consumed by age-history) ─────────────────────────────────
 
 
-def authors_and_changes_90d(path: str) -> tuple[int, int]:
+def _authors_and_changes_90d(path: str) -> tuple[int, int]:
     output = _run_git(["log", "--since=90.days.ago", "--format=%ae", "--", path])
     emails = [line for line in output.splitlines() if line]
     return len(set(emails)), len(emails)
 
 
-def revert_count(path: str) -> int:
+def _revert_count(path: str) -> int:
     output = _run_git(["log", "--format=%s", "--", path])
     return sum(1 for line in output.splitlines() if line.startswith("Revert"))
 
 
-def last_change_days(path: str, now_ts: int | None = None) -> int | None:
+def _last_change_days(path: str, now_ts: int | None = None) -> int | None:
     output = _run_git(["log", "-1", "--format=%ct", "--", path]).strip()
     if not output:
         return None
@@ -127,7 +124,7 @@ def last_change_days(path: str, now_ts: int | None = None) -> int | None:
     return max(0, (now - last) // SECONDS_PER_DAY)
 
 
-def humanize_staleness(days: int | None) -> str:
+def _humanize_staleness(days: int | None) -> str:
     if days is None:
         return "untracked"
     if days == 0:
@@ -144,15 +141,15 @@ def humanize_staleness(days: int | None) -> str:
 
 
 def risk_for(path: str, now_ts: int | None = None) -> dict[str, object]:
-    authors, changes = authors_and_changes_90d(path)
-    days = last_change_days(path, now_ts=now_ts)
+    authors, changes = _authors_and_changes_90d(path)
+    days = _last_change_days(path, now_ts=now_ts)
     return {
         "file": path,
         "authors_90d": authors,
         "changes_90d": changes,
-        "reverts": revert_count(path),
+        "reverts": _revert_count(path),
         "last_change_days": -1 if days is None else days,
-        "staleness": humanize_staleness(days),
+        "staleness": _humanize_staleness(days),
     }
 
 
@@ -166,8 +163,8 @@ def orient() -> dict[str, object]:
     bc = bug_clusters()
     vel = velocity()
     ff = firefighting()
-    hotspot_files: set[str] = {str(row["file"]) for row in h}
-    bug_files: set[str] = {str(row["file"]) for row in bc}
+    hotspot_files = {str(row["file"]) for row in h}
+    bug_files = {str(row["file"]) for row in bc}
     intersect = sorted(hotspot_files & bug_files)
     top_pct = bf[0]["percent"] if bf else 0.0
     return {
@@ -223,7 +220,6 @@ def _dispatch(ns: argparse.Namespace) -> object:
         return [risk_for(p) for p in ns.paths]
     if ns.cmd == "orient":
         return orient()
-    raise SystemExit(f"unknown command: {ns.cmd}")
 
 
 def main(argv: list[str]) -> int:

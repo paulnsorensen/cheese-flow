@@ -1,8 +1,6 @@
-"""Pure-function tests for tools.git_diagnose. Subprocess paths mocked."""
+"""Pure-function tests for tools.git_diagnose core functions. Subprocess paths mocked."""
 
 from __future__ import annotations
-
-import json
 
 import pytest
 from tools import git_diagnose as gd
@@ -157,30 +155,30 @@ class TestFirefighting:
 
 class TestHumanizeStaleness:
     def test_untracked_when_none(self) -> None:
-        assert gd.humanize_staleness(None) == "untracked"
+        assert gd._humanize_staleness(None) == "untracked"
 
     def test_today_when_zero(self) -> None:
-        assert gd.humanize_staleness(0) == "today"
+        assert gd._humanize_staleness(0) == "today"
 
     def test_singular_day(self) -> None:
-        assert gd.humanize_staleness(1) == "1 day ago"
+        assert gd._humanize_staleness(1) == "1 day ago"
 
     @pytest.mark.parametrize("days,expected", [(2, "2 days ago"), (29, "29 days ago")])
     def test_plural_days_under_month(self, days: int, expected: str) -> None:
-        assert gd.humanize_staleness(days) == expected
+        assert gd._humanize_staleness(days) == expected
 
     @pytest.mark.parametrize(
         "days,expected",
         [(30, "1 month ago"), (60, "2 months ago"), (200, "7 months ago")],
     )
     def test_months(self, days: int, expected: str) -> None:
-        assert gd.humanize_staleness(days) == expected
+        assert gd._humanize_staleness(days) == expected
 
     @pytest.mark.parametrize(
         "days,expected", [(365, "1 year ago"), (730, "2 years ago"), (1825, "5 years ago")]
     )
     def test_years(self, days: int, expected: str) -> None:
-        assert gd.humanize_staleness(days) == expected
+        assert gd._humanize_staleness(days) == expected
 
 
 class TestAuthorsAndChanges90d:
@@ -192,7 +190,7 @@ class TestAuthorsAndChanges90d:
             return "alice@x\nbob@x\nalice@x\n"
 
         monkeypatch.setattr(gd, "_run_git", fake)
-        authors, changes = gd.authors_and_changes_90d("foo.py")
+        authors, changes = gd._authors_and_changes_90d("foo.py")
         assert authors == 2
         assert changes == 3
         assert captured["args"] == [
@@ -205,38 +203,38 @@ class TestAuthorsAndChanges90d:
 
     def test_zero_when_no_history(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(gd, "_run_git", lambda args: "")
-        assert gd.authors_and_changes_90d("foo.py") == (0, 0)
+        assert gd._authors_and_changes_90d("foo.py") == (0, 0)
 
 
 class TestRevertCount:
     def test_counts_revert_subjects(self, monkeypatch: pytest.MonkeyPatch) -> None:
         log = 'feat: x\nRevert "bad"\nRevert "another"\nfix: y\n'
         monkeypatch.setattr(gd, "_run_git", lambda args: log)
-        assert gd.revert_count("foo.py") == 2
+        assert gd._revert_count("foo.py") == 2
 
     def test_zero_when_no_reverts(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(gd, "_run_git", lambda args: "feat: x\nfix: y\n")
-        assert gd.revert_count("foo.py") == 0
+        assert gd._revert_count("foo.py") == 0
 
     def test_does_not_match_substring(self, monkeypatch: pytest.MonkeyPatch) -> None:
         # "covert" contains "vert" but does not start with "Revert"
         monkeypatch.setattr(gd, "_run_git", lambda args: "covert refactor\n")
-        assert gd.revert_count("foo.py") == 0
+        assert gd._revert_count("foo.py") == 0
 
 
 class TestLastChangeDays:
     def test_computes_days_from_unix_ts(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(gd, "_run_git", lambda args: "1700000000\n")
-        days = gd.last_change_days("foo.py", now_ts=1700000000 + 5 * gd.SECONDS_PER_DAY)
+        days = gd._last_change_days("foo.py", now_ts=1700000000 + 5 * gd.SECONDS_PER_DAY)
         assert days == 5
 
     def test_clamps_negative_to_zero(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(gd, "_run_git", lambda args: "1700000100\n")
-        assert gd.last_change_days("foo.py", now_ts=1700000000) == 0
+        assert gd._last_change_days("foo.py", now_ts=1700000000) == 0
 
     def test_returns_none_for_untracked(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(gd, "_run_git", lambda args: "")
-        assert gd.last_change_days("missing.py") is None
+        assert gd._last_change_days("missing.py") is None
 
 
 class TestRiskFor:
@@ -262,11 +260,14 @@ class TestRiskFor:
     def test_untracked_file_emits_negative_one(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(gd, "_run_git", lambda args: "")
         result = gd.risk_for("ghost.py")
-        assert result["last_change_days"] == -1
-        assert result["staleness"] == "untracked"
-        assert result["authors_90d"] == 0
-        assert result["changes_90d"] == 0
-        assert result["reverts"] == 0
+        assert result == {
+            "file": "ghost.py",
+            "authors_90d": 0,
+            "changes_90d": 0,
+            "reverts": 0,
+            "last_change_days": -1,
+            "staleness": "untracked",
+        }
 
 
 # ─── orient bundle ───────────────────────────────────────────────────────────
@@ -305,8 +306,11 @@ class TestOrient:
             "top_author_pct": 75.0,
             "firefighting_count": 1,
         }
-        assert result["hotspots"][0]["file"] == "src/a.ts"
-        assert result["bus_factor"][0]["author"] == "Alice"
+        assert result["hotspots"] == [
+            {"file": "src/a.ts", "changes": 30},
+            {"file": "src/b.ts", "changes": 12},
+        ]
+        assert result["bus_factor"] == [{"author": "Alice", "commits": 90, "percent": 75.0}]
 
     def test_empty_bus_factor_yields_zero_pct(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(gd, "hotspots", list)
@@ -317,78 +321,3 @@ class TestOrient:
         result = gd.orient()
         assert result["summary"]["top_author_pct"] == 0.0
         assert result["summary"]["intersect_hotspot_bug"] == []
-
-
-# ─── CLI dispatch ────────────────────────────────────────────────────────────
-
-
-class TestMain:
-    def test_no_args_exits_with_argparse_error(self, capsys: pytest.CaptureFixture[str]) -> None:
-        with pytest.raises(SystemExit):
-            gd.main([])
-
-    def test_hotspots_subcommand(
-        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
-    ) -> None:
-        captured: dict[str, object] = {}
-
-        def fake_hotspots(since: str = gd.DEFAULT_SINCE, limit: int = gd.DEFAULT_LIMIT):
-            captured["since"] = since
-            captured["limit"] = limit
-            return [{"file": "x.ts", "changes": 5}]
-
-        monkeypatch.setattr(gd, "hotspots", fake_hotspots)
-        rc = gd.main(["hotspots", "--since", "6.months.ago", "--limit", "3"])
-        out = capsys.readouterr().out.strip()
-        assert rc == 0
-        assert json.loads(out) == [{"file": "x.ts", "changes": 5}]
-        assert captured == {"since": "6.months.ago", "limit": 3}
-
-    def test_bus_factor_subcommand(
-        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
-    ) -> None:
-        monkeypatch.setattr(
-            gd, "bus_factor", lambda limit=10: [{"author": "A", "commits": 1, "percent": 100.0}]
-        )
-        rc = gd.main(["bus-factor"])
-        assert rc == 0
-        assert json.loads(capsys.readouterr().out.strip())[0]["author"] == "A"
-
-    def test_velocity_subcommand(
-        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
-    ) -> None:
-        monkeypatch.setattr(gd, "velocity", lambda: [{"month": "2025-01", "commits": 1}])
-        rc = gd.main(["velocity"])
-        assert rc == 0
-        assert json.loads(capsys.readouterr().out.strip()) == [{"month": "2025-01", "commits": 1}]
-
-    def test_firefighting_subcommand(
-        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
-    ) -> None:
-        monkeypatch.setattr(
-            gd, "firefighting", lambda since=gd.DEFAULT_SINCE: [{"sha": "abc", "subject": "x"}]
-        )
-        rc = gd.main(["firefighting"])
-        assert rc == 0
-        assert json.loads(capsys.readouterr().out.strip()) == [{"sha": "abc", "subject": "x"}]
-
-    def test_risk_subcommand_emits_array_per_path(
-        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
-    ) -> None:
-        monkeypatch.setattr(gd, "risk_for", lambda p, now_ts=None: {"file": p, "marker": True})
-        rc = gd.main(["risk", "a.py", "b.py"])
-        out = capsys.readouterr().out.strip()
-        assert rc == 0
-        assert json.loads(out) == [
-            {"file": "a.py", "marker": True},
-            {"file": "b.py", "marker": True},
-        ]
-
-    def test_orient_subcommand(
-        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
-    ) -> None:
-        monkeypatch.setattr(gd, "orient", lambda: {"hotspots": [], "summary": {"hotspot_count": 0}})
-        rc = gd.main(["orient"])
-        assert rc == 0
-        payload = json.loads(capsys.readouterr().out.strip())
-        assert payload["summary"]["hotspot_count"] == 0
