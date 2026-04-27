@@ -3,7 +3,6 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-
 from milknado.config import graph_db_path
 from milknado.domains.common import InvalidTransition, NodeStatus
 from milknado.domains.graph import MikadoGraph, graph_summary

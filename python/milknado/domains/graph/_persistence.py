@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from datetime import datetime
 import sqlite3
+from datetime import datetime
 
 from milknado.domains.common import MikadoNode, NodeStatus
 
@@ -59,11 +59,7 @@ def row_to_node(row: sqlite3.Row) -> MikadoNode:
     keys = row.keys()
     completed_at_raw = row["completed_at"]
     dispatched_at_raw = row["dispatched_at"] if "dispatched_at" in keys else None
-    duration = (
-        row["completion_duration_seconds"]
-        if "completion_duration_seconds" in keys
-        else None
-    )
+    duration = row["completion_duration_seconds"] if "completion_duration_seconds" in keys else None
     return MikadoNode(
         id=row["id"],
         description=row["description"],
@@ -73,12 +69,8 @@ def row_to_node(row: sqlite3.Row) -> MikadoNode:
         branch_name=row["branch_name"],
         run_id=row["run_id"] if "run_id" in keys else None,
         created_at=datetime.fromisoformat(row["created_at"]),
-        completed_at=(
-            datetime.fromisoformat(completed_at_raw) if completed_at_raw else None
-        ),
-        dispatched_at=(
-            datetime.fromisoformat(dispatched_at_raw) if dispatched_at_raw else None
-        ),
+        completed_at=(datetime.fromisoformat(completed_at_raw) if completed_at_raw else None),
+        dispatched_at=(datetime.fromisoformat(dispatched_at_raw) if dispatched_at_raw else None),
         oversized=bool(row["oversized"]) if "oversized" in keys else False,
         batch_index=row["batch_index"] if "batch_index" in keys else None,
         completion_duration_seconds=duration,
