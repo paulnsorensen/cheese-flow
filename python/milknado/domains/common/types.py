@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from enum import Enum
+from pathlib import Path
+from typing import Any
 
 
 class NodeStatus(Enum):
@@ -11,6 +13,20 @@ class NodeStatus(Enum):
     DONE = "done"
     BLOCKED = "blocked"
     FAILED = "failed"
+
+
+VALID_TRANSITIONS: dict[NodeStatus, set[NodeStatus]] = {
+    NodeStatus.PENDING: {NodeStatus.RUNNING, NodeStatus.BLOCKED, NodeStatus.FAILED},
+    NodeStatus.RUNNING: {
+        NodeStatus.DONE,
+        NodeStatus.FAILED,
+        NodeStatus.BLOCKED,
+        NodeStatus.PENDING,
+    },
+    NodeStatus.BLOCKED: {NodeStatus.PENDING},
+    NodeStatus.FAILED: {NodeStatus.PENDING},
+    NodeStatus.DONE: set(),
+}
 
 
 @dataclass(frozen=True)
@@ -28,3 +44,30 @@ class MikadoNode:
     oversized: bool = False
     batch_index: int | None = None
     completion_duration_seconds: float | None = None
+
+
+@dataclass(frozen=True)
+class MikadoEdge:
+    parent_id: int
+    child_id: int
+
+
+@dataclass(frozen=True)
+class RebaseResult:
+    success: bool
+    conflicting_files: tuple[str, ...] = ()
+    detail: str = ""
+
+
+@dataclass(frozen=True)
+class TilthMap:
+    scope: Path
+    budget_tokens: int
+    data: dict[str, Any]
+
+
+@dataclass(frozen=True)
+class DegradationMarker:
+    source: str
+    reason: str
+    detail: str = ""

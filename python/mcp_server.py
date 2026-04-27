@@ -1,17 +1,10 @@
-"""Cheese-flow Python MCP server — milknado graph tools (stubbed).
-
-Thin shim: validates inputs, delegates to ``milknado.*`` slices. The slices
-are stubs until the real solver and sqlite graph back-end are pulled in from
-``~/Dev/milknado``; replacing each stub does not change this file.
-"""
+"""Cheese-flow Python MCP server for the extracted milknado slices."""
 
 from __future__ import annotations
 
-# Upstream milknado uses the standalone ``fastmcp`` package; cheese-flow uses
-# the FastMCP shipped inside the official ``mcp`` SDK. The class is the same.
 from mcp.server.fastmcp import FastMCP
 from milknado.config import project_root
-from milknado.domains.graph import add_node_stub, graph_summary_stub
+from milknado.domains.graph import add_node, graph_summary
 from milknado.domains.planning import (
     dict_to_file_change,
     dict_to_new_relationship,
@@ -37,7 +30,7 @@ def milknado_graph_summary(project_root: str = "") -> str:
             ``MILKNADO_PROJECT_ROOT`` environment variable.
     """
     root = _resolve_root(project_root)
-    return graph_summary_stub(root)
+    return graph_summary(root)
 
 
 @mcp.tool()
@@ -55,14 +48,7 @@ def milknado_add_node(
             ``MILKNADO_PROJECT_ROOT`` environment variable.
     """
     root = _resolve_root(project_root)
-    try:
-        return add_node_stub(description, parent_id, root)
-    except NotImplementedError:
-        parent_info = f" parent={parent_id}" if parent_id is not None else ""
-        return (
-            f"(stub) milknado_add_node not yet wired; "
-            f"would have created description={description!r}{parent_info}"
-        )
+    return add_node(description, parent_id, root)
 
 
 @mcp.tool()

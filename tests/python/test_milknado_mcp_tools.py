@@ -30,11 +30,34 @@ def test_mcp_plan_batches_validates_inputs() -> None:
     assert result["batches"][0]["change_ids"] == ["c1"]
 
 
-def test_mcp_graph_summary_returns_empty_string() -> None:
-    assert _call(milknado_graph_summary) == "(empty graph)"
+def test_mcp_graph_summary_returns_empty_string(tmp_path) -> None:
+    assert _call(milknado_graph_summary, project_root=str(tmp_path)) == "(empty graph)"
 
 
-def test_mcp_add_node_returns_stub_marker() -> None:
-    out = _call(milknado_add_node, description="ship the milknado solver")
-    assert out.startswith("(stub)")
-    assert "ship the milknado solver" in out
+def test_mcp_add_node_returns_created_node(tmp_path) -> None:
+    out = _call(
+        milknado_add_node,
+        description="ship the milknado solver",
+        project_root=str(tmp_path),
+    )
+    assert out == "created node id=1 description='ship the milknado solver'"
+
+
+def test_mcp_add_node_links_to_parent(tmp_path) -> None:
+    parent = _call(
+        milknado_add_node,
+        description="parent node",
+        project_root=str(tmp_path),
+    )
+    child = _call(
+        milknado_add_node,
+        description="child node",
+        parent_id=1,
+        project_root=str(tmp_path),
+    )
+    summary = _call(milknado_graph_summary, project_root=str(tmp_path))
+
+    assert parent == "created node id=1 description='parent node'"
+    assert child == "created node id=2 description='child node'"
+    assert "id=1 status=pending desc='parent node'" in summary
+    assert "id=2 status=pending desc='child node'" in summary

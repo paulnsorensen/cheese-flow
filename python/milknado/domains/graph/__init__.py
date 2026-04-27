@@ -1,3 +1,3 @@
-from .stub import add_node_stub, graph_summary_stub
+from .graph import MikadoGraph, add_node, graph_summary
 
-__all__ = ["add_node_stub", "graph_summary_stub"]
+__all__ = ["MikadoGraph", "add_node", "graph_summary"]
