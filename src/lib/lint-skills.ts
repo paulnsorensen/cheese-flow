@@ -2,6 +2,11 @@ import { readdir, readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import type { z } from "zod";
 import { parseFrontmatter } from "./frontmatter.js";
+import {
+  checkAllowedToolsPortability,
+  checkBodyHarnessIdioms,
+  compileTestSkill,
+} from "./harness-compat.js";
 import { parseSkillFrontmatter } from "./schemas.js";
 
 export type LintSeverity = "error" | "warning";
@@ -76,11 +81,30 @@ async function lintSkillDirectory(
       },
     ];
   }
-  return lintSkillSource({
+  const compileFindings = await compileTestSkill(directoryName, source);
+  const compileIssues: LintIssue[] = [];
+  for (const finding of compileFindings) {
+    compileIssues.push({
+      skill: directoryName,
+      file: relativeFile,
+      severity: finding.severity,
+      rule: finding.rule,
+      message: finding.message,
+    });
+  }
+
+  const sourceIssues = lintSkillSource({
     directoryName,
     relativeFile,
     source,
   });
+
+  // Suppress compile issues when source has errors to avoid duplicate noise.
+  if (sourceIssues.some((issue) => issue.severity === "error")) {
+    return sourceIssues;
+  }
+
+  return [...sourceIssues, ...compileIssues];
 }
 
 type LintSourceContext = {
@@ -134,6 +158,12 @@ export function lintSkillSource(context: LintSourceContext): LintIssue[] {
         ),
       );
     }
+
+    for (const finding of checkAllowedToolsPortability(
+      frontmatter["allowed-tools"],
+    )) {
+      issues.push(issue(finding.severity, finding.rule, finding.message));
+    }
   } catch (error) {
     const zodError = error as z.ZodError;
     for (const zodIssue of zodError.issues) {
@@ -157,6 +187,10 @@ export function lintSkillSource(context: LintSourceContext): LintIssue[] {
         `SKILL.md body is ${bodyLineCount} lines; the spec recommends staying under ${RECOMMENDED_BODY_LINE_LIMIT}. Move detail into references/.`,
       ),
     );
+  }
+
+  for (const finding of checkBodyHarnessIdioms(parsed.body)) {
+    issues.push(issue(finding.severity, finding.rule, finding.message));
   }
 
   return issues;
