@@ -37,7 +37,10 @@ FIREFIGHT_RE = re.compile(r"\b(revert|hotfix|emergency|rollback)\b", re.IGNORECA
 
 
 def _run_git(args: list[str]) -> str:
-    result = subprocess.run(["git", *args], capture_output=True, text=True, check=False)
+    try:
+        result = subprocess.run(["git", *args], capture_output=True, text=True, check=False)
+    except OSError as exc:
+        raise RuntimeError(f"git not found: {exc}") from exc
     if result.returncode != 0:
         raise RuntimeError(f"git {args[0]} failed: {result.stderr.strip()}")
     return result.stdout
@@ -78,7 +81,16 @@ def bus_factor(limit: int = DEFAULT_BUS_LIMIT) -> list[dict[str, object]]:
 
 def bug_clusters(limit: int = DEFAULT_LIMIT) -> list[dict[str, object]]:
     """Top files touched by fix/bug/broken commits (Piechowski cmd 3)."""
-    output = _run_git(["log", "-i", "-E", "--grep=fix|bug|broken", "--format=", "--name-only"])
+    output = _run_git(
+        [
+            "log",
+            "-i",
+            "-E",
+            "--grep=(^|[^[:alnum:]_])(fix(ed|es|ing)?|bug(s)?|broken)([^[:alnum:]_]|$)",
+            "--format=",
+            "--name-only",
+        ]
+    )
     counts = Counter(line for line in output.splitlines() if line.strip())
     return [{"file": f, "bug_changes": n} for f, n in counts.most_common(limit)]
 

@@ -88,7 +88,7 @@ class TestBugClusters:
             "log",
             "-i",
             "-E",
-            "--grep=fix|bug|broken",
+            "--grep=(^|[^[:alnum:]_])(fix(ed|es|ing)?|bug(s)?|broken)([^[:alnum:]_]|$)",
             "--format=",
             "--name-only",
         ]
