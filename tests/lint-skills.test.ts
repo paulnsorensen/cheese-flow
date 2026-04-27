@@ -1,13 +1,15 @@
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import * as harnessCompat from "../src/lib/harness-compat.js";
 import {
   formatLintReport,
   hasErrors,
   lintSkillSource,
   lintSkillsDirectory,
 } from "../src/lib/lint-skills.js";
+import * as schemas from "../src/lib/schemas.js";
 
 const createdDirectories: string[] = [];
 
@@ -226,6 +228,126 @@ describe("lintSkillSource", () => {
       issues.some((entry) => entry.rule === "body-pascal-hook-event"),
     ).toBe(false);
   });
+
+  it("stringifies non-Error throws from parseSkillFrontmatter", () => {
+    const spy = vi
+      .spyOn(schemas, "parseSkillFrontmatter")
+      .mockImplementationOnce(() => {
+        const stringyDoom: unknown = "stringy doom";
+        throw stringyDoom;
+      });
+
+    try {
+      const issues = lintSkillSource({
+        directoryName: "stringy",
+        relativeFile: "stringy/SKILL.md",
+        source: `---\nname: stringy\ndescription: A perfectly fine description that is long enough for discovery.\n---\n${validBody}`,
+      });
+      const finding = issues.find(
+        (entry) => entry.rule === "frontmatter-parse",
+      );
+      expect(finding?.message).toBe("stringy doom");
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it("ignores allowed-tools when it is neither string nor array", () => {
+    // YAML that produces a number for allowed-tools — the portability check
+    // must short-circuit to undefined and not crash.
+    const issues = lintSkillSource({
+      directoryName: "weird-tools",
+      relativeFile: "weird-tools/SKILL.md",
+      source: `---\nname: weird-tools\ndescription: A perfectly fine description that is long enough for discovery.\nallowed-tools: 42\n---\n${validBody}`,
+    });
+    expect(
+      issues.some(
+        (entry) => entry.rule === "allowed-tools-claude-permission-syntax",
+      ),
+    ).toBe(false);
+  });
+
+  it("converts a non-ZodError throw from parseSkillFrontmatter to frontmatter-parse", () => {
+    const spy = vi
+      .spyOn(schemas, "parseSkillFrontmatter")
+      .mockImplementationOnce(() => {
+        throw new Error("synthetic non-zod failure");
+      });
+
+    try {
+      const issues = lintSkillSource({
+        directoryName: "weird-throw",
+        relativeFile: "weird-throw/SKILL.md",
+        source: `---\nname: weird-throw\ndescription: A perfectly fine description that is long enough for discovery.\n---\n${validBody}`,
+      });
+      const finding = issues.find(
+        (entry) => entry.rule === "frontmatter-parse",
+      );
+      expect(finding?.message).toContain("synthetic non-zod failure");
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it("flags Claude-only frontmatter fields with the dedicated rule", () => {
+    const issues = lintSkillSource({
+      directoryName: "claude-only-fields",
+      relativeFile: "claude-only-fields/SKILL.md",
+      source: `---\nname: claude-only-fields\ndescription: A perfectly fine description that is long enough for discovery.\nmodel: opus\ncontext: fork\n---\n${validBody}`,
+    });
+    const claudeOnly = issues.filter(
+      (entry) => entry.rule === "frontmatter-claude-only-field",
+    );
+    expect(claudeOnly).toHaveLength(2);
+    expect(claudeOnly.every((entry) => entry.severity === "warning")).toBe(
+      true,
+    );
+  });
+
+  it("does not flag context: inline because it is the portable default", () => {
+    const issues = lintSkillSource({
+      directoryName: "inline-context",
+      relativeFile: "inline-context/SKILL.md",
+      source: `---\nname: inline-context\ndescription: A perfectly fine description that is long enough for discovery.\ncontext: inline\n---\n${validBody}`,
+    });
+    expect(
+      issues.some((entry) => entry.rule === "frontmatter-claude-only-field"),
+    ).toBe(false);
+  });
+
+  it("runs portability checks even when frontmatter validation fails", () => {
+    // name is uppercase (fails kebab-case), but the body still contains an
+    // Agent(...) reference and the frontmatter sets context: fork. Both
+    // portability findings must surface alongside the Zod error.
+    const issues = lintSkillSource({
+      directoryName: "BadName",
+      relativeFile: "BadName/SKILL.md",
+      source: `---\nname: BadName\ndescription: A perfectly fine description that is long enough for discovery.\ncontext: fork\n---\n# Body\nUse Agent(...) for sub-agent dispatch.\n`,
+    });
+    expect(
+      issues.some((entry) => entry.rule.startsWith("frontmatter:name")),
+    ).toBe(true);
+    expect(
+      issues.some((entry) => entry.rule === "context-fork-claude-only"),
+    ).toBe(true);
+    expect(issues.some((entry) => entry.rule === "body-claude-only-tool")).toBe(
+      true,
+    );
+  });
+
+  it("attaches an absolute SKILL.md line number to body findings", () => {
+    const issues = lintSkillSource({
+      directoryName: "agent-line",
+      relativeFile: "agent-line/SKILL.md",
+      source: `---\nname: agent-line\ndescription: A perfectly fine description that is long enough for discovery.\n---\nfirst body line\nsecond line uses Agent(...)\n`,
+    });
+    const finding = issues.find(
+      (entry) => entry.rule === "body-claude-only-tool",
+    );
+    // Frontmatter spans SKILL.md lines 1-4 (`---`, name, description, `---`).
+    // Body line 2 is the Agent(...) line, so absolute = 4 + 2 = 6.
+    expect(finding?.line).toBe(6);
+  });
 });
 
 describe("lintSkillsDirectory", () => {
@@ -241,7 +363,7 @@ describe("lintSkillsDirectory", () => {
     expect(hasErrors(report)).toBe(true);
   });
 
-  it("reports skill-md-required when SKILL.md is unreadable", async () => {
+  it("reports skill-md-unreadable when SKILL.md exists but cannot be read", async () => {
     const skillsRoot = await createSkillsRoot();
     await mkdir(path.join(skillsRoot, "unreadable-skill", "SKILL.md"), {
       recursive: true,
@@ -251,8 +373,8 @@ describe("lintSkillsDirectory", () => {
 
     expect(report.scanned).toBe(1);
     expect(report.issues).toHaveLength(1);
-    expect(report.issues[0]?.rule).toBe("skill-md-required");
-    expect(report.issues[0]?.message).toBe("SKILL.md could not be read.");
+    expect(report.issues[0]?.rule).toBe("skill-md-unreadable");
+    expect(report.issues[0]?.message).toContain("SKILL.md could not be read");
     expect(hasErrors(report)).toBe(true);
   });
 
@@ -307,10 +429,99 @@ describe("lintSkillsDirectory", () => {
     ).toBe(false);
   });
 
+  it("returns no issues when source is clean and every adapter compiles", async () => {
+    const skillsRoot = await createSkillsRoot();
+    await writeSkill(
+      skillsRoot,
+      "good-skill",
+      `---\nname: good-skill\ndescription: A perfectly fine description that is long enough for discovery.\n---\n${validBody}`,
+    );
+    const report = await lintSkillsDirectory(skillsRoot);
+    expect(report.issues).toEqual([]);
+  });
+
   it("formatLintReport reports a clean run when issues are empty", () => {
     const text = formatLintReport({ scanned: 1, issues: [] });
     expect(text).toContain("1 skill scanned");
     expect(text).toContain("No issues found.");
+  });
+
+  it("formatLintReport anchors body findings with file:line", () => {
+    const text = formatLintReport({
+      scanned: 1,
+      issues: [
+        {
+          skill: "x",
+          file: "x/SKILL.md",
+          severity: "warning",
+          rule: "body-claude-only-tool",
+          message: "agent-only",
+          line: 42,
+        },
+      ],
+    });
+    expect(text).toContain("x/SKILL.md:42");
+  });
+
+  it("converts compile-trip findings into LintIssues when source is clean", async () => {
+    const skillsRoot = await createSkillsRoot();
+    await writeSkill(
+      skillsRoot,
+      "clean-skill",
+      `---\nname: clean-skill\ndescription: A perfectly fine description that is long enough for discovery.\n---\n${validBody}`,
+    );
+
+    const spy = vi
+      .spyOn(harnessCompat, "compileTestSkill")
+      .mockResolvedValueOnce([
+        {
+          rule: "compile-cursor-failed",
+          severity: "error",
+          message: "synthetic adapter failure",
+        },
+        {
+          rule: "compile-codex-warned",
+          severity: "warning",
+          message: "synthetic adapter warning at body line 3",
+          line: 3,
+        },
+      ]);
+
+    try {
+      const report = await lintSkillsDirectory(skillsRoot);
+      const compileIssue = report.issues.find(
+        (entry) => entry.rule === "compile-cursor-failed",
+      );
+      expect(compileIssue?.severity).toBe("error");
+      expect(compileIssue?.message).toContain("synthetic adapter failure");
+      expect(compileIssue?.skill).toBe("clean-skill");
+      expect(compileIssue?.line).toBeUndefined();
+
+      const linedIssue = report.issues.find(
+        (entry) => entry.rule === "compile-codex-warned",
+      );
+      expect(linedIssue?.line).toBe(3);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it("emits skill-md-unreadable when SKILL.md is a directory (EISDIR)", async () => {
+    const skillsRoot = await createSkillsRoot();
+    // Sibling skill with a regular SKILL.md — should produce no issues.
+    const skillDir = path.join(skillsRoot, "blocked-skill");
+    await mkdir(skillDir, { recursive: true });
+    await writeFile(path.join(skillDir, "SKILL.md"), "ok\n", "utf8");
+    // Force readFile(EISDIR) by making SKILL.md a directory. stat() succeeds
+    // (it's a real entry), but readFile rejects with EISDIR — exercising the
+    // non-ENOENT branch in the SKILL.md loader.
+    const other = path.join(skillsRoot, "dir-as-file");
+    await mkdir(path.join(other, "SKILL.md"), { recursive: true });
+
+    const report = await lintSkillsDirectory(skillsRoot);
+    expect(
+      report.issues.some((issue) => issue.rule === "skill-md-unreadable"),
+    ).toBe(true);
   });
 
   it("formatLintReport summarizes counts", () => {
