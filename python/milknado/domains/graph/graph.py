@@ -18,6 +18,8 @@ from milknado.domains.graph._persistence import (
     row_to_node,
 )
 
+# Keep MCP summaries readable in a single line while still exposing enough detail
+# for agents to disambiguate nearby work items.
 MAX_SUMMARY_DESCRIPTION_LENGTH = 120
 
 
@@ -59,14 +61,16 @@ class MikadoGraph:
         node_id = cur.lastrowid
         if node_id is None:
             raise ValueError(
-                f"Failed to insert node with description={description!r}: "
-                "database did not return a row id"
+                "Internal error: database did not return a row id after "
+                f"inserting node with description={description!r}"
             )
         if parent_id is not None:
             self.add_edge(parent_id, node_id)
         row = self._conn.execute("SELECT * FROM nodes WHERE id = ?", (node_id,)).fetchone()
         if row is None:
-            raise ValueError(f"Node {node_id} not found after insertion")
+            raise ValueError(
+                f"Internal error: node {node_id} not found immediately after insertion"
+            )
         return row_to_node(row)
 
     def add_edge(self, parent_id: int, child_id: int) -> MikadoEdge:
@@ -161,6 +165,7 @@ class MikadoGraph:
             )
 
     def _creates_cycle(self, parent_id: int, child_id: int) -> bool:
+        """Return True when adding parent_id→child_id would introduce a cycle."""
         visited: set[int] = set()
         stack = [parent_id]
         while stack:

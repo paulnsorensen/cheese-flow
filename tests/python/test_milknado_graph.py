@@ -47,11 +47,11 @@ def test_invalid_transition_raises(tmp_path: Path) -> None:
     graph = _graph(tmp_path)
     try:
         node = graph.add_node("task")
-        with pytest.raises(InvalidTransition, match="cannot transition") as error:
+        with pytest.raises(InvalidTransition, match="cannot transition") as exc_info:
             graph.mark_done(node.id)
 
-        assert error.value.current == NodeStatus.PENDING
-        assert error.value.target == NodeStatus.DONE
+        assert exc_info.value.current == NodeStatus.PENDING
+        assert exc_info.value.target == NodeStatus.DONE
     finally:
         graph.close()
 
