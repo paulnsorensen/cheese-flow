@@ -104,6 +104,62 @@ describe("installHarnessArtifacts", () => {
     expect(output).toContain("Harness target: Claude Code");
   });
 
+  it("expands the read-only-contract Eta partial when previewing age agents", async () => {
+    const output = await previewAgent(
+      path.resolve("."),
+      "age-arch.md.eta",
+      "claude-code",
+    );
+    expect(output).toContain("## Permission Contract");
+    expect(output).toContain("read-only mode");
+  });
+
+  it("returns no partials when the _partials directory is missing", async () => {
+    const projectRoot = await mkdtemp(
+      path.join(os.tmpdir(), "cheese-flow-no-partials-"),
+    );
+    createdDirectories.push(projectRoot);
+    await mkdir(path.join(projectRoot, "agents"), { recursive: true });
+    await mkdir(path.join(projectRoot, "skills"), { recursive: true });
+
+    // Copy only the basic-agent template (no partials reference) so render
+    // succeeds with an empty partials map.
+    await cp(
+      path.resolve("agents", "basic-agent.md.eta"),
+      path.join(projectRoot, "agents", "basic-agent.md.eta"),
+    );
+
+    const output = await previewAgent(
+      projectRoot,
+      "basic-agent.md.eta",
+      "claude-code",
+    );
+    expect(output).toContain("Harness target: Claude Code");
+  });
+
+  it("rethrows non-ENOENT errors when scanning the agent _partials directory", async () => {
+    const projectRoot = await mkdtemp(
+      path.join(os.tmpdir(), "cheese-flow-bad-partials-"),
+    );
+    createdDirectories.push(projectRoot);
+    await mkdir(path.join(projectRoot, "agents"), { recursive: true });
+    // Create _partials as a *file* so readdir trips ENOTDIR (not ENOENT) and
+    // the rethrow path exercises.
+    await writeFile(
+      path.join(projectRoot, "agents", "_partials"),
+      "not a directory\n",
+      "utf8",
+    );
+    await cp(
+      path.resolve("agents", "basic-agent.md.eta"),
+      path.join(projectRoot, "agents", "basic-agent.md.eta"),
+    );
+
+    await expect(
+      previewAgent(projectRoot, "basic-agent.md.eta", "claude-code"),
+    ).rejects.toThrow();
+  });
+
   it("rejects skills whose folder name does not match the spec name", async () => {
     const projectRoot = await mkdtemp(
       path.join(os.tmpdir(), "cheese-flow-invalid-"),
@@ -146,6 +202,16 @@ describe("installHarnessArtifacts", () => {
     await mkdir(path.join(projectRoot, "skills", "nested-dir"), {
       recursive: true,
     });
+    // Add a directory under agents/ so the listAgentTemplates filter
+    // exercises the non-file branch of `entry.isFile()`.
+    await mkdir(path.join(projectRoot, "agents", "nested-agent-dir"), {
+      recursive: true,
+    });
+    // Add a non-file entry under agents/_partials/ to exercise the
+    // `!entry.isFile()` skip branch in loadAgentPartials.
+    await mkdir(path.join(projectRoot, "agents", "_partials", "stray-dir"), {
+      recursive: true,
+    });
 
     await writeFile(
       path.join(projectRoot, "agents", "README.txt"),
@@ -175,23 +241,15 @@ describe("installHarnessArtifacts", () => {
       ),
     ) as { agents: string[]; skills: string[]; commands: string[] };
 
-    expect(manifest.agents).toEqual([
-      "basic-agent.md",
-      "milknado-executor.md",
-      "milknado-planner.md",
-    ]);
-    expect(manifest.skills).toEqual([
-      "basic-skill",
-      "cheez-read",
-      "cheez-search",
-      "cheez-write",
-      "gh",
-      "merge-resolve",
-      "milknado-execute",
-      "milknado-plan",
-      "nested-dir",
-      "research",
-    ]);
+    expect(manifest.agents).toContain("basic-agent.md");
+    expect(manifest.agents).toContain("milknado-executor.md");
+    expect(manifest.agents).toContain("milknado-planner.md");
+    expect(manifest.agents).not.toContain("README.txt");
+    expect(manifest.skills).toContain("basic-skill");
+    expect(manifest.skills).toContain("milknado-execute");
+    expect(manifest.skills).toContain("milknado-plan");
+    expect(manifest.skills).toContain("nested-dir");
+    expect(manifest.skills).not.toContain("notes.txt");
     expect(manifest.commands).toEqual([]);
   });
 

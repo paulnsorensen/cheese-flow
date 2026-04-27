@@ -1,7 +1,6 @@
 import type { Dirent } from "node:fs";
 import { cp, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { Eta } from "eta";
 import { harnessAdapters } from "../adapters/index.js";
 import {
   type HarnessName,
@@ -10,16 +9,16 @@ import {
   type PluginMetadata,
   pluginMetadataSchema,
 } from "../domain/harness.js";
+import { compileAgents } from "./compile-agents.js";
 import { emitHooks, emitMcpConfig, emitPluginManifest } from "./emit.js";
 import { parseFrontmatter } from "./frontmatter.js";
 import {
-  type AgentFrontmatter,
-  parseAgentFrontmatter,
   parseCommandFrontmatter,
   parseSkillFrontmatter,
-  resolveModel,
   type SkillFrontmatter,
 } from "./schemas.js";
+
+export { previewAgent } from "./compile-agents.js";
 
 const DEFAULT_PLUGIN_METADATA: PluginMetadata = {
   name: "cheese-flow",
@@ -68,8 +67,6 @@ async function readHooksSource(projectRoot: string): Promise<HooksSource> {
   }
   return hooksSourceSchema.parse(JSON.parse(raw)) as HooksSource;
 }
-
-const eta = new Eta({ autoEscape: false, autoTrim: false, useWith: true });
 
 type InstallOptions = {
   projectRoot: string;
@@ -179,49 +176,6 @@ async function writeManifest(
   );
 }
 
-type CompileAgentsOptions = {
-  projectRoot: string;
-  harness: HarnessName;
-  agentOutputDirectory: string;
-};
-
-async function compileAgents(options: CompileAgentsOptions): Promise<string[]> {
-  const sourceDirectory = path.join(options.projectRoot, "agents");
-  const entries = (await readdir(sourceDirectory, { withFileTypes: true }))
-    .slice()
-    .sort((a, b) => a.name.localeCompare(b.name));
-  const compiled: string[] = [];
-
-  for (const entry of entries) {
-    if (!entry.isFile() || !entry.name.endsWith(".md.eta")) {
-      continue;
-    }
-
-    const sourcePath = path.join(sourceDirectory, entry.name);
-    const source = await readFile(sourcePath, "utf8");
-    const parsed = parseFrontmatter<unknown>(source);
-    const frontmatter = parseAgentFrontmatter(parsed.data);
-    const adapter = harnessAdapters[options.harness];
-    const outputFile = `${frontmatter.name}.md`;
-    const rendered = eta.renderString(parsed.body, {
-      agent: {
-        ...frontmatter,
-        model: resolveModel(frontmatter.models, options.harness),
-      },
-      harness: adapter,
-    }) as string;
-
-    await writeFile(
-      path.join(options.agentOutputDirectory, outputFile),
-      rendered.trimStart(),
-      "utf8",
-    );
-    compiled.push(outputFile);
-  }
-
-  return compiled;
-}
-
 type CopySkillsOptions = {
   projectRoot: string;
   skillOutputDirectory: string;
@@ -317,26 +271,6 @@ async function copyCommands(options: CopyCommandsOptions): Promise<string[]> {
   }
 
   return copied;
-}
-
-export async function previewAgent(
-  projectRoot: string,
-  agentFile: string,
-  harness: HarnessName,
-): Promise<string> {
-  const sourcePath = path.join(projectRoot, "agents", agentFile);
-  const source = await readFile(sourcePath, "utf8");
-  const parsed = parseFrontmatter<unknown>(source);
-  const frontmatter: AgentFrontmatter = parseAgentFrontmatter(parsed.data);
-  const rendered = eta.renderString(parsed.body, {
-    agent: {
-      ...frontmatter,
-      model: resolveModel(frontmatter.models, harness),
-    },
-    harness: harnessAdapters[harness],
-  }) as string;
-
-  return rendered.trim();
 }
 
 export async function readSkill(
