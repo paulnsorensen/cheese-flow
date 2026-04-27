@@ -59,5 +59,5 @@ def test_mcp_add_node_links_to_parent(tmp_path) -> None:
 
     assert parent == "created node id=1 description='parent node'"
     assert child == "created node id=2 description='child node'"
-    assert "id=1 status=pending desc='parent node'" in summary
-    assert "id=2 status=pending desc='child node'" in summary
+    assert "id=1 status=pending description='parent node'" in summary
+    assert "id=2 status=pending description='child node'" in summary

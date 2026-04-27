@@ -1,11 +1,10 @@
 from .errors import InvalidTransition
-from .types import VALID_TRANSITIONS, MikadoEdge, MikadoNode, NodeStatus, RebaseResult
+from .types import VALID_TRANSITIONS, MikadoEdge, MikadoNode, NodeStatus
 
 __all__ = [
     "InvalidTransition",
     "MikadoEdge",
     "MikadoNode",
     "NodeStatus",
-    "RebaseResult",
     "VALID_TRANSITIONS",
 ]

@@ -3,13 +3,12 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from milknado.config import graph_db_path
 from milknado.domains.common import InvalidTransition, NodeStatus
 from milknado.domains.graph import MikadoGraph, graph_summary
 
 
 def _graph(root: Path) -> MikadoGraph:
-    return MikadoGraph(graph_db_path(root))
+    return MikadoGraph(root)
 
 
 def test_graph_summary_reports_empty_graph(tmp_path: Path) -> None:
@@ -74,5 +73,15 @@ def test_add_node_requires_existing_parent(tmp_path: Path) -> None:
     try:
         with pytest.raises(ValueError, match="Parent node 999 not found"):
             graph.add_node("child", parent_id=999)
+    finally:
+        graph.close()
+
+
+@pytest.mark.parametrize("description", ["", "   ", "\t\n"])
+def test_add_node_rejects_empty_description(tmp_path: Path, description: str) -> None:
+    graph = _graph(tmp_path)
+    try:
+        with pytest.raises(ValueError, match="description must be non-empty"):
+            graph.add_node(description)
     finally:
         graph.close()

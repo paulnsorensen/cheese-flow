@@ -3,11 +3,7 @@ from __future__ import annotations
 from .types import NodeStatus
 
 
-class MilknadoError(Exception):
-    """Base for milknado-specific exceptions."""
-
-
-class InvalidTransition(MilknadoError, ValueError):
+class InvalidTransition(ValueError):
     def __init__(
         self,
         node_id: int,

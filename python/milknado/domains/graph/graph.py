@@ -12,26 +12,21 @@ from milknado.domains.common import (
     MikadoNode,
     NodeStatus,
 )
-from milknado.domains.graph._persistence import (
-    create_tables,
-    ensure_schema,
-    row_to_node,
-)
 
-# Keep MCP summaries readable in a single line while still exposing enough detail
-# for agents to disambiguate nearby work items.
+from ._persistence import create_tables, row_to_node
+
 MAX_SUMMARY_DESCRIPTION_LENGTH = 120
 
 
 class MikadoGraph:
-    def __init__(self, db_path: Path) -> None:
+    def __init__(self, root: Path) -> None:
+        db_path = graph_db_path(root)
         db_path.parent.mkdir(parents=True, exist_ok=True)
         self._conn = sqlite3.connect(str(db_path))
         self._conn.row_factory = sqlite3.Row
         self._conn.execute("PRAGMA journal_mode=WAL")
         self._conn.execute("PRAGMA foreign_keys=ON")
         create_tables(self._conn)
-        ensure_schema(self._conn)
 
     def add_node(
         self,
@@ -41,8 +36,27 @@ class MikadoGraph:
         oversized: bool = False,
         batch_index: int | None = None,
     ) -> MikadoNode:
+        if not description or not description.strip():
+            raise ValueError("description must be non-empty")
         if parent_id is not None and self.get_node(parent_id) is None:
             raise ValueError(f"Parent node {parent_id} not found")
+        node_id = self._insert_node_row(description, parent_id, oversized, batch_index)
+        if parent_id is not None:
+            self.add_edge(parent_id, node_id)
+        row = self._conn.execute("SELECT * FROM nodes WHERE id = ?", (node_id,)).fetchone()
+        if row is None:
+            raise ValueError(
+                f"Internal error: node {node_id} not found immediately after insertion"
+            )
+        return row_to_node(row)
+
+    def _insert_node_row(
+        self,
+        description: str,
+        parent_id: int | None,
+        oversized: bool,
+        batch_index: int | None,
+    ) -> int:
         now = datetime.now(UTC).isoformat()
         cur = self._conn.execute(
             "INSERT INTO nodes "
@@ -64,14 +78,7 @@ class MikadoGraph:
                 "Internal error: database did not return a row id after "
                 f"inserting node with description={description!r}"
             )
-        if parent_id is not None:
-            self.add_edge(parent_id, node_id)
-        row = self._conn.execute("SELECT * FROM nodes WHERE id = ?", (node_id,)).fetchone()
-        if row is None:
-            raise ValueError(
-                f"Internal error: node {node_id} not found immediately after insertion"
-            )
-        return row_to_node(row)
+        return node_id
 
     def add_edge(self, parent_id: int, child_id: int) -> MikadoEdge:
         if self._creates_cycle(parent_id, child_id):
@@ -155,7 +162,7 @@ class MikadoGraph:
         node = self.get_node(node_id)
         if node is None:
             raise ValueError(f"Node {node_id} not found")
-        allowed = VALID_TRANSITIONS.get(node.status, set())
+        allowed = VALID_TRANSITIONS.get(node.status, frozenset())
         if target not in allowed:
             raise InvalidTransition(
                 node_id=node_id,
@@ -184,14 +191,14 @@ class MikadoGraph:
 
 
 def graph_summary(root: Path) -> str:
-    graph = MikadoGraph(graph_db_path(root))
+    graph = MikadoGraph(root)
     try:
         nodes = graph.get_all_nodes()
         if not nodes:
             return "(empty graph)"
         return "\n".join(
             f"id={node.id} status={node.status.value} "
-            f"desc={node.description[:MAX_SUMMARY_DESCRIPTION_LENGTH]!r}"
+            f"description={node.description[:MAX_SUMMARY_DESCRIPTION_LENGTH]!r}"
             for node in nodes
         )
     finally:
@@ -199,7 +206,7 @@ def graph_summary(root: Path) -> str:
 
 
 def add_node(description: str, parent_id: int | None, root: Path) -> str:
-    graph = MikadoGraph(graph_db_path(root))
+    graph = MikadoGraph(root)
     try:
         node = graph.add_node(description, parent_id=parent_id)
         return f"created node id={node.id} description={node.description!r}"
