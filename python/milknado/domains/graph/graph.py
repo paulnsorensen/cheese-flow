@@ -81,6 +81,10 @@ class MikadoGraph:
         return node_id
 
     def add_edge(self, parent_id: int, child_id: int) -> MikadoEdge:
+        if self.get_node(parent_id) is None:
+            raise ValueError(f"Node {parent_id} not found")
+        if self.get_node(child_id) is None:
+            raise ValueError(f"Node {child_id} not found")
         if self._creates_cycle(parent_id, child_id):
             raise ValueError(f"Edge {parent_id}->{child_id} would create a cycle")
         self._conn.execute(
