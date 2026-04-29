@@ -23,7 +23,9 @@ describe("Fromage TDD flow artifacts", () => {
     expect(command.name).toBe("fromage");
     expect(parsed.body).toContain("Cut → Cook → Press");
     expect(parsed.body).toContain("Cheez skills");
-    expect(parsed.body).not.toMatch(/\b(batch|batching|fleet|parallel worktree)\b/iu);
+    expect(parsed.body).not.toMatch(
+      /\b(batch|batching|fleet|parallel worktree)\b/iu,
+    );
   });
 
   it("binds cut, cook, and press agents to Cheez and TDD skills", async () => {
@@ -53,7 +55,9 @@ describe("Fromage TDD flow artifacts", () => {
     expect(parsed.body).toContain(
       "https://github.com/obra/superpowers/tree/main/skills/test-driven-development",
     );
-    expect(parsed.body).toContain("No production code without a failing test first");
+    expect(parsed.body).toContain(
+      "No production code without a failing test first",
+    );
     expect(parsed.body).toContain("Self-evaluation checklist");
   });
 });

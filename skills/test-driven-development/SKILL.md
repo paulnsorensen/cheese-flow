@@ -113,9 +113,9 @@ Complete this before reporting done:
 - [ ] No weak assertions remain in changed tests.
 - [ ] Any skipped TDD step is explicitly reported with the reason.
 
-## Stop signals
+## Course-correction signals
 
-Stop and correct course if any of these happen:
+Pause and correct course if any of these happen:
 
 - Code was written before a failing test.
 - A test passes immediately for new behavior.
