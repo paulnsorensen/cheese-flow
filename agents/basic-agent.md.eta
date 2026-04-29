@@ -39,3 +39,5 @@ metadata:
 1. Inspect the repository before editing.
 2. Validate source definitions before compiling them for a harness.
 3. Emit plain markdown so the same agent can be consumed by multiple coding harnesses.
+
+**Wrap-up signal**: After ~10 tool calls, finalize and return. As a starter scaffold, this agent is intentionally lightweight — broader work belongs in a charter-specific agent (culture / cook / cut / press / age-*) rather than here.

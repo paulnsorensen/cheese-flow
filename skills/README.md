@@ -55,6 +55,85 @@ harness:
 ## Sliced Bread Organization
 
 Each skill directory is a **vertical slice**. The same crust/internals discipline that
+applies to source code under `src/` (see `~/Dev/dotfiles/claude/reference/sliced-bread.md`)
+applies here, with the skill domain mapping as follows:
+
+| Sliced Bread role | In `skills/<name>/` | Loaded by |
+|---|---|---|
+| Crust (public API) | `SKILL.md` | every harness directly |
+| Internal implementation | `scripts/`, `references/`, any other subfolder | only the parent `SKILL.md` |
+| Shared kernel | none yet — there is no `skills/common/` slice | n/a |
+
+### The crust rule
+
+`SKILL.md` is the ONLY contract a harness loader, an agent, or another skill is
+allowed to depend on. Internals (`scripts/foo.py`, `references/bar.md`) are
+implementation details — they can be renamed, split, or deleted without breaking
+external callers.
+
+```text
+# BAD — reaching past the crust into another skill's internals
+"run skills/merge-resolve/scripts/batch-resolve.py --apply" (from age/SKILL.md)
+
+# GOOD — delegate to the crust; the target skill decides how to do its job
+"delegate to merge-resolve" (the calling skill picks merge-resolve up by name and
+the target's SKILL.md owns how the work is performed)
+```
+
+The agents/skill loader follows the same rule: a sub-agent's `skills: [merge-resolve]`
+attaches the crust; the agent never names a path under `scripts/`.
+
+### Growth pattern
+
+Start with a single `SKILL.md`. Add structure only when the file pushes back:
+
+1. **One `SKILL.md`** — every skill begins here. Frontmatter + protocol body.
+2. **Extract `scripts/`** when bash blocks repeat, exceed ~10 lines, or need
+   value-equality test coverage. The Python tooling rules from `AGENTS.md`
+   apply: stdlib-only when feasible, ruff-formatted, max-40-line functions,
+   pytest in `tests/python/skills/<name>/`.
+3. **Extract `references/`** when prose overflows the 500-line `SKILL.md`
+   warning the linter emits. References are reading material, not code —
+   keep procedure in `SKILL.md`, examples and rationale in references.
+4. **Stay in `SKILL.md`** until either trigger fires. A six-line script
+   inlined as a fenced bash block is fine; do not pre-create `scripts/`.
+
+Concrete example: `merge-resolve` grew `scripts/` because four conflict-resolution
+flows (`conflict-summary`, `batch-resolve`, `conflict-pick`, `lockfile-resolve`)
+each needed multi-step Python with deterministic exit codes. `cheez-read`,
+`cheez-write`, `cheez-search`, `gh`, `diff`, `age`, and `research` are all single
+`SKILL.md` files because nothing has crowded them out yet.
+
+### Anti-patterns
+
+- **Premature `scripts/`** — creating `skills/foo/scripts/` for a single 3-line
+  bash invocation. Inline it until pressure forces extraction.
+- **Cross-skill internal imports** — one skill's body referencing another skill's
+  `scripts/` or `references/` directly. Always delegate via the crust.
+- **Helper code in `SKILL.md`** — Python or bash that needs unit tests does not
+  belong in fenced markdown blocks. Move to `scripts/` and add tests.
+- **`references/` as a dumping ground** — references are markdown, scoped to a
+  single topic, named for what they explain. They are not "stuff that wouldn't
+  fit elsewhere".
+
+### Cross-harness contract
+
+Skills are the **only** isomorphic surface across all four target harnesses
+(Claude Code, Codex, Copilot CLI, Cursor). The Sliced Bread crust matters more
+here than for agents:
+
+- Harness adapters copy `SKILL.md` plus `scripts/` and `references/` as opaque
+  assets. They do not parse internals.
+- A skill that depends on another skill must do so through the **name** in its
+  frontmatter `compatibility:` or via documented delegation in the body — never
+  via a hardcoded path that includes `scripts/` or `references/`.
+- When `just build` wipes the per-harness output directories
+  (`.claude/`, `.codex/`, `.cursor/`, `.copilot/`), the crust + internals get
+  re-emitted as a unit. The source `skills/` tree is the durable record.
+
+## Sliced Bread Organization
+
+Each skill directory is a **vertical slice**. The same crust/internals discipline that
 applies to source code under `src/` (see [references/sliced-bread.md](../references/sliced-bread.md))
 applies here, with the skill domain mapping as follows:
 
