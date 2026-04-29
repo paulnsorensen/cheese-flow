@@ -71,6 +71,27 @@ export type SurfaceEmissionResult = {
   commands: string[];
 };
 
+export type AgentFrontmatterFields = {
+  name: string;
+  description: string;
+  tools: string[];
+  skills: string[];
+  color?: string | undefined;
+  effort?: string | undefined;
+  disallowedTools: string[];
+  permissionMode?: string | undefined;
+};
+
+export type AgentArtifactInput = {
+  frontmatter: AgentFrontmatterFields;
+  resolvedModel: string;
+};
+
+export type AgentArtifact = {
+  frontmatter: Record<string, unknown>;
+  appendix: string;
+};
+
 export type HarnessCapabilities = {
   skillFrontmatterKeys: ReadonlySet<string>;
   agentFrontmatterKeys: ReadonlySet<string>;
@@ -94,6 +115,8 @@ export interface HarnessAdapter {
   mcpFileName: string;
 
   buildHookConfig(portable: PortableHooks): Record<string, unknown> | null;
+
+  buildAgentArtifact(input: AgentArtifactInput): AgentArtifact;
 
   emitSurface?: (
     skillsDir: string,

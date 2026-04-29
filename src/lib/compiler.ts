@@ -2,8 +2,10 @@ import type { Dirent } from "node:fs";
 import { cp, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { Eta } from "eta";
+import { stringify as stringifyYaml } from "yaml";
 import { harnessAdapters } from "../adapters/index.js";
 import {
+  type HarnessAdapter,
   type HarnessName,
   type HooksSource,
   hooksSourceSchema,
@@ -20,6 +22,19 @@ import {
   resolveModel,
   type SkillFrontmatter,
 } from "./schemas.js";
+
+function buildAgentFile(
+  frontmatter: AgentFrontmatter,
+  adapter: HarnessAdapter,
+  resolvedModel: string,
+  renderedBody: string,
+): string {
+  const { frontmatter: data, appendix } = adapter.buildAgentArtifact({
+    frontmatter,
+    resolvedModel,
+  });
+  return `---\n${stringifyYaml(data)}---\n${renderedBody.trimStart()}${appendix}`;
+}
 
 const DEFAULT_PLUGIN_METADATA: PluginMetadata = {
   name: "cheese-flow",
@@ -203,17 +218,22 @@ async function compileAgents(options: CompileAgentsOptions): Promise<string[]> {
     const frontmatter = parseAgentFrontmatter(parsed.data);
     const adapter = harnessAdapters[options.harness];
     const outputFile = `${frontmatter.name}.md`;
+    const resolvedModel = resolveModel(frontmatter.models, options.harness);
     const rendered = eta.renderString(parsed.body, {
-      agent: {
-        ...frontmatter,
-        model: resolveModel(frontmatter.models, options.harness),
-      },
+      agent: { ...frontmatter, model: resolvedModel },
       harness: adapter,
     }) as string;
 
+    const finalContent = buildAgentFile(
+      frontmatter,
+      adapter,
+      resolvedModel,
+      rendered,
+    );
+
     await writeFile(
       path.join(options.agentOutputDirectory, outputFile),
-      rendered.trimStart(),
+      finalContent,
       "utf8",
     );
     compiled.push(outputFile);

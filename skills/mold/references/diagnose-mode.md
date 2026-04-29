@@ -3,7 +3,7 @@
 Diagnose is the entry mode for stack traces, "X is broken", "Y is slow",
 flake reports, and other symptom-shaped inputs. `/mold` Diagnose is
 **diagnostic-only**: it shapes the bug and the fix into a spec (plus
-optional follow-up issues), then hands off to `/fromage` for the actual
+optional follow-up issues), then hands off to `/cook` for the actual
 patch.
 
 The single most important thing Diagnose does is force agreement on a
@@ -59,7 +59,7 @@ permission to add temporary production instrumentation. Do **not** proceed
 to hypothesise without a loop.
 
 If the answer is still "no loop", Crystallize emits an issue with the
-Reproduction block marked `[BLOCKED]` so `/fromage` does not silently try
+Reproduction block marked `[BLOCKED]` so `/cook` does not silently try
 to fix a bug it cannot verify.
 
 ## Phase 1 — Reproduce
@@ -137,5 +137,5 @@ loop, even if just "TBD: needs a loop before fix").
   because cheap eliminations are how you avoid expensive wrong fixes.
 - Treating a flaky loop as a real loop. Flake is a symptom of a loop
   that hasn't been iterated on yet.
-- Letting Diagnose write code. The fix is `/fromage`'s job; Diagnose
-  produces the spec that lets `/fromage` verify the fix.
+- Letting Diagnose write code. The fix is `/cook`'s job; Diagnose
+  produces the spec that lets `/cook` verify the fix.

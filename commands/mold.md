@@ -7,7 +7,7 @@ argument-hint: "<rough idea | feature request | bug | spec path | design doc>"
 # /mold
 
 `/mold` shapes a fuzzy idea into a coherent spec (and optional issues)
-that downstream `/cheese` and `/fromage` can consume without re-asking
+that downstream `/cheese` and `/cook` can consume without re-asking
 design questions. It is a **thinking amplifier**, not a one-shot
 generator: the dialogue is the point, the artifact is the by-product.
 
@@ -29,7 +29,7 @@ is the implementation source of truth.
 | --- | --- |
 | `/culture` | Same dialogue feel; **never writes**. Use it when there is no artifact intent. |
 | `/briesearch` | External evidence dispatcher. `/mold` calls it through the Validate Cycle. |
-| `/fromage` | Implements a crystallized spec. `/mold` ends with a hand-off offer, never an auto-invoke. |
+| `/cook` | Implements a crystallized spec. `/mold` ends with a hand-off offer, never an auto-invoke. |
 
 ## What you get
 
@@ -57,4 +57,4 @@ slug, and target paths in a single bundled prompt.
 
 - Free-form rubber-ducking with no artifact intent → `/culture`.
 - Single library lookup → `/briesearch` directly.
-- Already-clear spec → skip ahead to `/fromage` or `/fromagerie`.
+- Already-clear spec → skip ahead to `/cook`.

@@ -32,7 +32,7 @@ skill. It does not cross the line itself.
 
 | If you want to… | Use instead |
 |---|---|
-| Implement a feature | `/fromage` |
+| Implement a feature | `/cook` |
 | Write a spec to a file | `/mold` |
 | Review existing code | `/age` |
 | Research an external library or API | `/briesearch` |

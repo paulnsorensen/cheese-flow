@@ -25,12 +25,12 @@ use a 0-100 confidence scale; only >= 50 is surfaced to the user.
 
 | Dimension | Sub-agent | What it looks for |
 |---|---|---|
-| Safety | `fromage-age-safety` | Bugs, security holes, silent failures, unchecked inputs |
-| Architecture | `fromage-age-arch` | Complexity budgets (lines, params, nesting), Sliced Bread organization |
-| Encapsulation | `fromage-age-encap` | Leaky abstractions, overly wide public APIs, cross-boundary imports |
-| YAGNI / de-slop | `fromage-age-yagni` | Unjustified dead code, speculative abstractions, AI-generated noise |
-| Spec adherence | `fromage-age-spec` | Drift from `<harness>/specs/<slug>.md`, monkey patches, shortcuts |
-| History risk | `fromage-age-history` | Per-file risk modifiers derived from git blame / churn patterns |
+| Safety | `age-safety` | Bugs, security holes, silent failures, unchecked inputs |
+| Architecture | `age-arch` | Complexity budgets (lines, params, nesting), Sliced Bread organization |
+| Encapsulation | `age-encap` | Leaky abstractions, overly wide public APIs, cross-boundary imports |
+| YAGNI / de-slop | `age-yagni` | Unjustified dead code, speculative abstractions, AI-generated noise |
+| Spec adherence | `age-spec` | Drift from `<harness>/specs/<slug>.md`, monkey patches, shortcuts |
+| History risk | `age-history` | Per-file risk modifiers derived from git blame / churn patterns |
 
 `<harness>` is the active harness output root — `.claude` for Claude Code,
 `.codex` for Codex.

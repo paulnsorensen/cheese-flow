@@ -69,7 +69,7 @@ of Explore mode>.
 
 **Loop technique:** <failing-test | curl-script | cli-invocation | headless-browser | replay | throwaway-harness | property-fuzz | bisection | differential | HITL-bash>
 
-**Loop command:** <exact, deterministic command or script — runnable by `/fromage` to verify the fix>
+**Loop command:** <exact, deterministic command or script — runnable by `/cook` to verify the fix>
 
 **Failure signal:** <specific symptom: error message, wrong output, slow timing — what the loop reports when the bug is present>
 
@@ -97,7 +97,7 @@ of Explore mode>.
 
 ## User Stories
 > Format: `As a <user>, I want <feature> so that <benefit>.` Each story
-> carries machine-checkable acceptance criteria so `/fromage` can plan
+> carries machine-checkable acceptance criteria so `/cook` can plan
 > against them without re-asking. Pure-refactor specs can ship with a
 > single maintainer story; the section is never empty.
 
@@ -159,7 +159,7 @@ erDiagram
 
 ## Interface Sketches
 > Pseudocode signatures locked during /mold. Names + types + contracts; not
-> final code. /fromage translates to the target idioms.
+> final code. /cook translates to the target idioms.
 
 ### `<module path>`
 **Responsibilities:** <one>, <two>, <three>.

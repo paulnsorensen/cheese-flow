@@ -2,7 +2,7 @@
 
 Sketch is the cognitive job of turning a chosen approach into pseudocode
 signatures and contracts. It is **not** writing code. It is plan, expressed
-in a shape `/fromage` can compile into target idioms.
+in a shape `/cook` can compile into target idioms.
 
 ## Entry
 
@@ -47,7 +47,7 @@ Push back on either, or `1A 2A` to confirm.
 ## Pseudocode style
 
 - **Python-flavored** as the universal shape (function-style signatures,
-  type hints). `/fromage` translates to the target language at implement
+  type hints). `/cook` translates to the target language at implement
   time.
 - **Names + types + contracts.** Not bodies. Not implementations.
 - **Error shape** is part of the contract — name the exception or result

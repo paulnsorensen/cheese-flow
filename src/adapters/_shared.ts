@@ -1,4 +1,6 @@
 import type {
+  AgentArtifact,
+  AgentArtifactInput,
   HookEntry,
   PluginMetadata,
   PortableHooks,
@@ -58,4 +60,41 @@ export function pascalMatcherHooks(
     }));
   }
   return result;
+}
+
+export function buildBaseAgentArtifact(
+  input: AgentArtifactInput,
+  agentFrontmatterKeys: ReadonlySet<string>,
+): AgentArtifact {
+  const { frontmatter, resolvedModel } = input;
+  const data: Record<string, unknown> = {
+    name: frontmatter.name,
+    description: frontmatter.description,
+    model: resolvedModel,
+  };
+  if (frontmatter.tools.length > 0) data.tools = frontmatter.tools;
+  for (const key of agentFrontmatterKeys) {
+    const value = (frontmatter as unknown as Record<string, unknown>)[key];
+    if (value === undefined) continue;
+    if (Array.isArray(value) && value.length === 0) continue;
+    data[key] = value;
+  }
+  const appendix =
+    agentFrontmatterKeys.has("skills") || frontmatter.skills.length === 0
+      ? ""
+      : buildSkillsAppendix(frontmatter.skills);
+  return { frontmatter: data, appendix };
+}
+
+export function buildPortableAgentArtifact(
+  input: AgentArtifactInput,
+): AgentArtifact {
+  return buildBaseAgentArtifact(input, EMPTY_AGENT_KEYS);
+}
+
+const EMPTY_AGENT_KEYS: ReadonlySet<string> = new Set();
+
+function buildSkillsAppendix(skills: string[]): string {
+  const lines = skills.map((skill) => `- ${skill}`).join("\n");
+  return `\n## Required skills (prompt contract)\n\nThis harness does not expose a structured skills binding, so treat the\nfollowing skill names as a hard prompt contract — invoke them by name when\nthe workflow calls for their behavior:\n\n${lines}\n`;
 }

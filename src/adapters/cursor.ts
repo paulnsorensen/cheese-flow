@@ -6,7 +6,7 @@ import type {
 } from "../domain/harness.js";
 import { parseFrontmatter } from "../lib/frontmatter.js";
 import type { SkillFrontmatter } from "../lib/schemas.js";
-import { buildBaseManifest } from "./_shared.js";
+import { buildBaseManifest, buildPortableAgentArtifact } from "./_shared.js";
 
 function buildRuleContent(description: string, body: string): string {
   return `---\ndescription: ${description}\nglobs:\nalwaysApply: false\n---\n${body.trim()}\n`;
@@ -101,6 +101,7 @@ export const cursorAdapter: HarnessAdapter = {
   buildManifest: buildBaseManifest,
   mcpFileName: "mcp.json",
   buildHookConfig: () => null,
+  buildAgentArtifact: buildPortableAgentArtifact,
   emitSurface: emitCursorSkillSurface,
   capabilities: {
     skillFrontmatterKeys: new Set<string>(),

@@ -1,5 +1,17 @@
 import type { HarnessAdapter } from "../domain/harness.js";
-import { buildBaseManifest, camelCaseHooks } from "./_shared.js";
+import {
+  buildBaseAgentArtifact,
+  buildBaseManifest,
+  camelCaseHooks,
+} from "./_shared.js";
+
+const CLAUDE_AGENT_KEYS: ReadonlySet<string> = new Set([
+  "skills",
+  "color",
+  "effort",
+  "disallowedTools",
+  "permissionMode",
+]);
 
 export const claudeCodeAdapter: HarnessAdapter = {
   name: "claude-code",
@@ -17,15 +29,11 @@ export const claudeCodeAdapter: HarnessAdapter = {
   buildManifest: buildBaseManifest,
   mcpFileName: ".mcp.json",
   buildHookConfig: (portable) => ({ hooks: camelCaseHooks(portable) }),
+  buildAgentArtifact: (input) =>
+    buildBaseAgentArtifact(input, CLAUDE_AGENT_KEYS),
   capabilities: {
     skillFrontmatterKeys: new Set(["model", "context"]),
-    agentFrontmatterKeys: new Set([
-      "skills",
-      "color",
-      "effort",
-      "disallowedTools",
-      "permissionMode",
-    ]),
+    agentFrontmatterKeys: CLAUDE_AGENT_KEYS,
     hookEvents: new Set([
       "sessionStart",
       "sessionEnd",
