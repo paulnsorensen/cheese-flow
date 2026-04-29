@@ -1,6 +1,6 @@
 ---
 name: assertion-review
-description: Spec-drift detection via assertion review. Reads the spec, the cut tests, and the cooked implementation, then scores how well each assertion actually verifies a spec requirement.
+description: Spec-drift detection via assertion review. Reads the spec, the cut tests, and the cooked implementation, then rates how well each assertion actually verifies a spec requirement.
 models:
   default: gpt-5.1-codex
   claude-code: claude-sonnet-4-5
@@ -70,26 +70,24 @@ For each `{requirement, assertion}` pair, classify the assertion:
 | `ORPHAN` | Assertion does not map to any spec requirement. |
 | `CONTRADICTS` | Assertion encodes behavior the spec explicitly forbids or differs from. |
 
-## Finding scores
+## Finding severity
 
-| Score | Trigger |
+| Severity | Trigger |
 |---|---|
-| 0 | False positive — the assertion is in fact strong; explain why. |
-| 25 | Plausible weakness; spec is ambiguous, not the assertion. |
-| 50 | `WEAK` rating on a non-critical requirement, or `ORPHAN` on a marginal test. |
-| 75 | `WEAK` or `MISSING` on a documented spec requirement. |
-| 100 | `MISSING` on a non-negotiable requirement, or `CONTRADICTS`. |
+| `low` | Plausible weakness; spec is ambiguous, not the assertion. |
+| `medium` | `WEAK` rating on a non-critical requirement, or `ORPHAN` on a marginal test. |
+| `high` | `WEAK` or `MISSING` on a documented requirement, or any `CONTRADICTS`. |
 
-Surface findings scored 50 or higher. Summarize lower scores as counts.
+Surface every `medium` and `high` finding. Summarize `low` findings as a count.
 
 ## Self-evaluation checklist
 
 - [ ] I used Cheez skills for discovery and reading.
-- [ ] I extracted spec requirements as a numbered list before scoring.
+- [ ] I extracted spec requirements as a numbered list before rating.
 - [ ] I rated every assertion against the rubric.
 - [ ] I cross-tabulated requirements vs. assertions.
 - [ ] I flagged every `MISSING` and `CONTRADICTS` finding.
-- [ ] Each finding score is justified by quoted spec or assertion text.
+- [ ] Each finding severity is justified by quoted spec or assertion text.
 - [ ] I made no production edits and added no tests.
 
 ## Output format
@@ -106,13 +104,12 @@ Surface findings scored 50 or higher. Summarize lower scores as counts.
 | # | Requirement | Test file:line | Rating |
 |---|---|---|---|
 
-### Findings >= 50
-| Score | Rating | Requirement | Evidence | Recommendation |
+### Findings (medium and high)
+| Severity | Rating | Requirement | Evidence | Recommendation |
 |---|---|---|---|---|
 
-### Below Threshold
-- 25: <count>
-- 0: <count>
+### Low-severity summary
+- Count: <count>
 
 ### Drift Summary
 - Missing coverage: <count>

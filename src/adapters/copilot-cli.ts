@@ -1,5 +1,9 @@
 import type { HarnessAdapter, PluginMetadata } from "../domain/harness.js";
-import { buildBaseManifest, camelCaseHooks } from "./_shared.js";
+import {
+  buildBaseManifest,
+  buildPortableAgentArtifact,
+  camelCaseHooks,
+} from "./_shared.js";
 
 function buildCopilotManifest(
   metadata: PluginMetadata,
@@ -28,6 +32,7 @@ export const copilotCliAdapter: HarnessAdapter = {
     version: 1,
     hooks: camelCaseHooks(portable),
   }),
+  buildAgentArtifact: buildPortableAgentArtifact,
   capabilities: {
     skillFrontmatterKeys: new Set<string>(),
     agentFrontmatterKeys: new Set<string>(),

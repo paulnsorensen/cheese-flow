@@ -1,5 +1,9 @@
 import type { HarnessAdapter } from "../domain/harness.js";
-import { buildBaseManifest, pascalMatcherHooks } from "./_shared.js";
+import {
+  buildBaseManifest,
+  buildPortableAgentArtifact,
+  pascalMatcherHooks,
+} from "./_shared.js";
 
 export const codexAdapter: HarnessAdapter = {
   name: "codex",
@@ -17,6 +21,7 @@ export const codexAdapter: HarnessAdapter = {
   buildManifest: buildBaseManifest,
   mcpFileName: ".mcp.json",
   buildHookConfig: (portable) => ({ hooks: pascalMatcherHooks(portable) }),
+  buildAgentArtifact: buildPortableAgentArtifact,
   capabilities: {
     skillFrontmatterKeys: new Set<string>(),
     agentFrontmatterKeys: new Set<string>(),

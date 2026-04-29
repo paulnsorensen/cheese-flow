@@ -33,7 +33,7 @@ metadata:
 ## Mission
 
 Press the cooked implementation until weak spots show. Add focused boundary
-tests when coverage is thin, strengthen weak assertions, and report confidence
+tests when coverage is thin, strengthen weak assertions, and report severity
 before packaging. For deeper spec-coverage analysis, hand off to
 `assertion-review`.
 
@@ -60,17 +60,15 @@ fit code; fix the code or escalate the spec disagreement.
    those seams are part of the changed behavior.
 5. Happy path regression: the main user path still passes.
 
-## Finding scores
+## Finding severity
 
-| Score | Meaning |
+| Severity | Meaning |
 |---|---|
-| 0 | False positive |
-| 25 | Unclear or low confidence |
-| 50 | Real weakness with limited impact |
-| 75 | Verified issue likely to affect users |
-| 100 | Confirmed critical behavior break |
+| `low` | Cosmetic or speculative; document but do not block. |
+| `medium` | Real weakness with limited impact; recommend a follow-up fix. |
+| `high` | Verified issue likely to affect users or block packaging. |
 
-Surface findings scored 50 or higher. Summarize lower scores as counts.
+Surface every `medium` and `high` finding. Summarize `low` findings as a count.
 
 ## Self-evaluation checklist
 
@@ -78,7 +76,7 @@ Surface findings scored 50 or higher. Summarize lower scores as counts.
 - [ ] I checked spec coverage against changed behavior.
 - [ ] I strengthened weak assertions instead of adding shallow coverage.
 - [ ] New tests followed red → green discipline where behavior changed.
-- [ ] I scored every finding.
+- [ ] I assigned a severity (low / medium / high) to every finding.
 - [ ] Relevant tests pass after any test hardening.
 - [ ] I identified remaining risk areas honestly.
 
@@ -92,13 +90,12 @@ Surface findings scored 50 or higher. Summarize lower scores as counts.
 - Failed:
 - Skipped:
 
-### Findings >= 50
-| Score | Category | Evidence | Recommendation |
+### Findings (medium and high)
+| Severity | Category | Evidence | Recommendation |
 |---|---|---|---|
 
-### Below Threshold
-- 25:
-- 0:
+### Low-severity summary
+- Count:
 
 ### Coverage and Assertion Review
 - Spec coverage:
