@@ -212,9 +212,10 @@ Coherence self-check before crystallize:
 - [ ] Chosen option grounded in codebase evidence
 - [ ] Interface sketches: every public seam has a pseudocode signature
 - [ ] Validate cycles: all launched cycles judged
-- [ ] Chosen option Grilled (>=1 question per major branch)
+- [ ] Chosen option Grilled (>=1 `Grill turns` entry per major branch)
 - [ ] Open questions all marked [TBD] / [BLOCKED] / [?] (none silent)
-- [ ] Quality gates specified
+- [ ] Quality gates specified (>=1 `Quality gates` entry, runnable command)
+- [ ] Reproduction loop captured if Diagnose ran (or `[BLOCKED]` if no loop is possible)
 ```
 
 Guard conditions are mandatory before Crystallize except where noted:

@@ -51,6 +51,26 @@ briesearch_used: <integer>      # 0..2 unless user lifts the cap
 - [BLOCKED] <external dependency>
 - [CONFLICT cf-1] <statement> contradicted by <evidence>
 
+## Grill turns
+- turn <N>: branch=<name> question="<short>" recommendation=<choice> user_answer=<choice>
+- ...
+
+## Quality gates
+- `<command>` — <what it checks> (agreed turn <N>)
+- ...
+
+## Reproduction loop  # Diagnose mode only
+technique: <failing-test|curl-script|cli-invocation|headless-browser|replay|throwaway-harness|property-fuzz|bisection|differential|HITL-bash>
+command: |
+  <exact, deterministic command or script>
+failure_signal: <specific symptom>
+reproduction_rate: <100% | high | flaky>
+steps:
+  - <step 1>
+  - <step 2>
+expected: <what should happen>
+actual: <what happens>
+
 ## Mode history
 Explore (1-3) → Ground (4-5) → Shape (6-8) → [validate cycle 1] → Sketch (9-11)
   → [validate cycle 2] → [validate cycle 3] → Grill (12-now)
@@ -78,6 +98,17 @@ Explore (1-3) → Ground (4-5) → Shape (6-8) → [validate cycle 1] → Sketch
 - **Open questions** — every entry carries one of `[?]`, `[TBD]`,
   `[BLOCKED]`, `[CONFLICT <id>]`. The Crystallize coherence gate fails if
   any entry lacks a marker.
+- **Grill turns** — append-only. One line per Grill question. Records the
+  branch traversed, the question asked, the agent's recommended answer, and
+  the user's chosen answer. Tracks turn-completion (presence), not content
+  quality. The coherence checklist's "Chosen option Grilled" item counts
+  branches covered against the agent's branch list at Sketch exit.
+- **Quality gates** — append-only. Each entry is a runnable command with a
+  one-line description. Migrates verbatim into the spec's `Quality Gates`
+  section. Empty if the dialogue did not specify gates.
+- **Reproduction loop** — populated only when Diagnose ran a Phase 0 loop.
+  Migrates verbatim into the spec's `Reproduction` section. Human-supplied;
+  the agent does not infer steps or signals.
 - **Mode history** — turn-numbered, includes inline cycle markers.
 
 ## Lifecycle
@@ -86,13 +117,11 @@ Explore (1-3) → Ground (4-5) → Shape (6-8) → [validate cycle 1] → Sketch
 - **Update** — every turn the agent writes the file (replace, not append).
 - **Read** — the agent reads the previous state at the start of each turn.
 - **Migrate to spec** — on Crystallize, the spec template absorbs
-  `Decisions` and `Sketches` verbatim into named sections. Validate cycles
-  feed confidence and the spec's evidence rows.
+  `Decisions`, `Sketches`, `Quality gates`, and (if Diagnose ran) `Reproduction
+  loop` verbatim into named sections. Validate cycles feed confidence and the
+  spec's evidence rows. `Grill turns` is not migrated — it serves the
+  coherence checklist and stays in scratch state.
 - **Cleanup** — after a successful Crystallize *and* the user accepts the
   hand-off offer, the run directory is removed. Otherwise it stays for the
   OS to evict.
 
-## Resume (deferred)
-
-`v1` does not support resume. The state path is documented so a future
-`--resume` can read it. Do not rely on resume in the current iteration.

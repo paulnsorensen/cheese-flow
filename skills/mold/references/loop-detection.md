@@ -68,7 +68,7 @@ From here, the smallest move is <X>. Confirm or redirect.
 The state file is the source of truth. After every turn the agent:
 
 1. Updates `Mode history`.
-2. Increments a `Drift counter` if the turn produced no new entry in
+2. Increments `drift_counter` if the turn produced no new entry in
    `Decisions`, `Sketches`, or `Validate cycles`.
 3. Resets the counter when an entry lands.
 4. Compares the user's last 2 messages against the bored-user pattern.

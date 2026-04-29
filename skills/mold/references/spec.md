@@ -31,6 +31,7 @@ sketches_locked: true|false
 | --- | --- | --- |
 | Executive Summary | yes | — |
 | Problem Statement | yes | — |
+| Reproduction | no | Diagnose mode populated a Phase 0 loop |
 | Users & Pain | no | dialogue surfaced user/business signal |
 | Goals | yes | — |
 | Non-Goals | yes | — |
@@ -61,6 +62,27 @@ followed by `_(none)_` placeholders.
 ## Problem Statement
 <JTBD framing — the job this feature does for the user. Drawn from Beat 0
 of Explore mode>.
+
+## Reproduction
+> Bug-shaped specs only. The Phase 0 feedback loop from Diagnose mode lands
+> here verbatim. Human-supplied; the agent does not infer steps or signals.
+
+**Loop technique:** <failing-test | curl-script | cli-invocation | headless-browser | replay | throwaway-harness | property-fuzz | bisection | differential | HITL-bash>
+
+**Loop command:** <exact, deterministic command or script — runnable by `/fromage` to verify the fix>
+
+**Failure signal:** <specific symptom: error message, wrong output, slow timing — what the loop reports when the bug is present>
+
+**Reproduction rate:** <100% | high (e.g. 50/100 runs) | flaky (low single digits — must be raised before debugging)>
+
+### Steps
+1. <step>
+2. <step>
+3. <step>
+
+### Expected vs Actual
+- **Expected:** <what should happen>.
+- **Actual:** <what happens instead>.
 
 ## Users & Pain
 - Who feels this today
@@ -208,6 +230,11 @@ At Crystallize:
 - `Validate cycles` block → cited inline in Approach, Decisions, and
   Interface Sketches sections via `> [confidence: ...] Evidence: ...`.
 - `Open questions` block → `Open Questions` section verbatim.
+- `Reproduction loop` block (Diagnose only) → `Reproduction` section verbatim;
+  agent fills in Steps and Expected/Actual from the loop's recorded behaviour.
+- `Grill turns` block → not migrated to spec; serves the coherence checklist
+  (turn-completion proof) and stays in scratch state.
+- `Quality gates` block → `Quality Gates` section verbatim.
 
 ## Collisions
 
@@ -216,6 +243,12 @@ At Crystallize:
 | Same slug, status `draft` | overwrite | `<slug>-v2` rev |
 | Same slug, status `approved` | rev to `<slug>-v2` | never silently overwrite |
 | Existing spec, new issues for same slug | append issues to that slug's series | — |
+
+`/mold` writes new specs as `status: draft`. The `draft` → `approved`
+transition is **external** — a human reviewer flips the field after sign-off.
+`/mold` never auto-promotes. The `approved` collision branch fires when a
+later `/mold` run encounters a previously-approved spec, and protects it from
+silent overwrite.
 
 ## Atomic write
 
