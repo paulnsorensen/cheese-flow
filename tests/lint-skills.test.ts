@@ -289,17 +289,18 @@ describe("lintSkillSource", () => {
     }
   });
 
-  it("flags Claude-only frontmatter fields with the dedicated rule", () => {
+  it("flags Claude-only frontmatter fields via adapter capabilities", () => {
     const issues = lintSkillSource({
       directoryName: "claude-only-fields",
       relativeFile: "claude-only-fields/SKILL.md",
       source: `---\nname: claude-only-fields\ndescription: A perfectly fine description that is long enough for discovery.\nmodel: opus\ncontext: fork\n---\n${validBody}`,
     });
-    const claudeOnly = issues.filter(
-      (entry) => entry.rule === "frontmatter-claude-only-field",
+    // context: fork and model each produce one frontmatter-portability warning.
+    const portability = issues.filter(
+      (entry) => entry.rule === "frontmatter-portability",
     );
-    expect(claudeOnly).toHaveLength(2);
-    expect(claudeOnly.every((entry) => entry.severity === "warning")).toBe(
+    expect(portability).toHaveLength(2);
+    expect(portability.every((entry) => entry.severity === "warning")).toBe(
       true,
     );
   });
@@ -311,7 +312,48 @@ describe("lintSkillSource", () => {
       source: `---\nname: inline-context\ndescription: A perfectly fine description that is long enough for discovery.\ncontext: inline\n---\n${validBody}`,
     });
     expect(
-      issues.some((entry) => entry.rule === "frontmatter-claude-only-field"),
+      issues.some((entry) => entry.rule === "frontmatter-portability"),
+    ).toBe(false);
+  });
+
+  it("context: fork produces exactly one portability warning (no duplicate)", () => {
+    const issues = lintSkillSource({
+      directoryName: "fork-context",
+      relativeFile: "fork-context/SKILL.md",
+      source: `---\nname: fork-context\ndescription: A perfectly fine description that is long enough for discovery.\ncontext: fork\n---\n${validBody}`,
+    });
+    const portability = issues.filter(
+      (entry) => entry.rule === "frontmatter-portability",
+    );
+    expect(portability).toHaveLength(1);
+  });
+
+  it("Stop in body emits body-harness-only-hook-event, not body-pascal-hook-event", () => {
+    const issues = lintSkillSource({
+      directoryName: "stop-hook",
+      relativeFile: "stop-hook/SKILL.md",
+      source: `---\nname: stop-hook\ndescription: A perfectly fine description that is long enough for discovery.\n---\n# Body\nFires on Stop events.\n`,
+    });
+    expect(
+      issues.some((entry) => entry.rule === "body-harness-only-hook-event"),
+    ).toBe(true);
+    expect(
+      issues.some((entry) => entry.rule === "body-pascal-hook-event"),
+    ).toBe(false);
+  });
+
+  it("stop (camelCase) in body does not emit any hook warning", () => {
+    const issues = lintSkillSource({
+      directoryName: "stop-camel",
+      relativeFile: "stop-camel/SKILL.md",
+      source: `---\nname: stop-camel\ndescription: A perfectly fine description that is long enough for discovery.\n---\n# Body\nFires on stop events.\n`,
+    });
+    expect(
+      issues.some(
+        (entry) =>
+          entry.rule === "body-harness-only-hook-event" ||
+          entry.rule === "body-pascal-hook-event",
+      ),
     ).toBe(false);
   });
 
@@ -328,7 +370,7 @@ describe("lintSkillSource", () => {
       issues.some((entry) => entry.rule.startsWith("frontmatter:name")),
     ).toBe(true);
     expect(
-      issues.some((entry) => entry.rule === "context-fork-claude-only"),
+      issues.some((entry) => entry.rule === "frontmatter-portability"),
     ).toBe(true);
     expect(issues.some((entry) => entry.rule === "body-claude-only-tool")).toBe(
       true,

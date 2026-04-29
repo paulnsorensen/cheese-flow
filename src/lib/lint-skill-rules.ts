@@ -3,8 +3,7 @@ import { parseFrontmatter } from "./frontmatter.js";
 import {
   checkAllowedToolsPortability,
   checkBodyHarnessIdioms,
-  checkClaudeOnlyFields,
-  checkContextPortability,
+  checkFrontmatterPortability,
 } from "./harness-compat.js";
 import { parseSkillFrontmatter, type SkillFrontmatter } from "./schemas.js";
 
@@ -96,9 +95,7 @@ function validateFrontmatter(
 
   if (typeof data === "object" && data !== null) {
     const raw = data as Record<string, unknown>;
-    issues.push(
-      ...portabilityChecks(raw["allowed-tools"], raw.context, raw, issue),
-    );
+    issues.push(...portabilityChecks(raw["allowed-tools"], raw, issue));
   }
 
   return issues;
@@ -167,7 +164,6 @@ function nameAndDescriptionChecks(
 
 function portabilityChecks(
   allowedTools: unknown,
-  contextField: unknown,
   rawFrontmatter: Record<string, unknown>,
   issue: IssueFactory,
 ): LintIssue[] {
@@ -179,11 +175,7 @@ function portabilityChecks(
   for (const finding of checkAllowedToolsPortability(allowed)) {
     issues.push(issue(finding.severity, finding.rule, finding.message));
   }
-  const ctx = typeof contextField === "string" ? contextField : undefined;
-  for (const finding of checkContextPortability(ctx)) {
-    issues.push(issue(finding.severity, finding.rule, finding.message));
-  }
-  for (const finding of checkClaudeOnlyFields(rawFrontmatter, "skill")) {
+  for (const finding of checkFrontmatterPortability(rawFrontmatter, "skill")) {
     issues.push(issue(finding.severity, finding.rule, finding.message));
   }
   return issues;

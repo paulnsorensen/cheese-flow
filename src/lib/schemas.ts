@@ -59,17 +59,6 @@ export type SkillFrontmatter = z.infer<typeof skillFrontmatterSchema>;
 export type CommandFrontmatter = z.infer<typeof commandFrontmatterSchema>;
 export type AgentFrontmatter = z.infer<typeof agentFrontmatterSchema>;
 
-// Frontmatter keys that compile-trip cleanly only on Claude Code. The portability
-// linter surfaces a warning when authors set these on portable skills/agents.
-export const CLAUDE_ONLY_SKILL_KEYS = ["model", "context"] as const;
-export const CLAUDE_ONLY_AGENT_KEYS = [
-  "skills",
-  "color",
-  "effort",
-  "disallowedTools",
-  "permissionMode",
-] as const;
-
 export function parseSkillFrontmatter(data: unknown): SkillFrontmatter {
   return skillFrontmatterSchema.parse(data);
 }

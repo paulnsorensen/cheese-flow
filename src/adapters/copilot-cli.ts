@@ -28,4 +28,10 @@ export const copilotCliAdapter: HarnessAdapter = {
     version: 1,
     hooks: camelCaseHooks(portable),
   }),
+  capabilities: {
+    skillFrontmatterKeys: new Set<string>(),
+    agentFrontmatterKeys: new Set<string>(),
+    hookEvents: new Set(["sessionStart", "preToolUse", "postToolUse"]),
+    toolNames: new Set<string>(),
+  },
 };
