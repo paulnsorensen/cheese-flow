@@ -189,6 +189,7 @@ describe("installHarnessArtifacts", () => {
       "merge-resolve",
       "milknado-execute",
       "milknado-plan",
+      "mold",
       "nested-dir",
       "research",
     ]);
