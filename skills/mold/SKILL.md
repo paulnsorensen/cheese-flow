@@ -16,8 +16,8 @@ allowed-tools:
 
 Use this skill when the user has a fuzzy idea and wants to converge — through
 dialogue, evidence, and interface lockdown — on a coherent spec (and optional
-issues) that downstream `/cheese` and `/cook` can consume without
-re-asking design questions.
+issues) that downstream `/cook` can consume without re-asking design
+questions.
 
 Do not use this skill for one-shot implementation, free-form rubber-ducking
 without artifact intent (use `/culture`), or library-only research (use

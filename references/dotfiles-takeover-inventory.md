@@ -67,7 +67,6 @@ personal paths or Claude-only behavior.
 | `ghostbuster` | `agents/ghostbuster.md` | Reusable dead-code/spec-drift forensic agent. |
 | `nih-scanner` | `agents/nih-scanner.md` | Pairs with the `nih-audit` skill. |
 | `lsp-probe` | `agents/lsp-probe.md` | Useful short-lived LSP query broker. |
-| `fromage-pasteurize` | `agents/fromage-pasteurize.md` | Standalone security/dependency audit agent. |
 | `explore-lsp` | `plugins/local/cheese-flow/agents/explore-lsp.md` | Low-coupling part of the cheese-flow exploration stack. |
 
 ## Priority 2: Adapt Before Porting
@@ -99,9 +98,9 @@ right harness overrides.
 - `code-review`, `spec`, `nih-audit`, `ghostbuster`, `skill-improver`,
   `setup-perms`, `scaffold`, `test`, `wreck`, `onboard`, `audit`, `simplifier`:
   useful workflows, but each needs path/tool normalization or bundled agents.
-- `fromage`, `fromagerie`, `move-my-cheese`, `cheese-convoy`: treat as an
-  optional platform bundle. They only make sense with the full skill and agent
-  graph.
+- `move-my-cheese`, `cheese-convoy`: treat as an optional platform bundle.
+  They only make sense once the parallelism layer (planned as a milknado
+  reboot) is back in cheese-flow.
 - `copilot-review`, `copilot-delegate`, `copilot-setup`: keep optional until
   Copilot is intentionally supported as a first-class target.
 - `agents`: rewrite to inspect project/compiled assets, not hardcoded
@@ -111,12 +110,8 @@ right harness overrides.
 
 - `whey-drainer`, `roquefort-wrecker`, `ricotta-reducer`: strong quality agents;
   adapt build/test commands and skill dependencies.
-- `fromage-culture`, `fromage-curdle`, `fromage-cook`, `fromage-press`,
-  `fromage-wire`, `fromage-fort`: core pipeline agents, but they require the
-  surrounding Fromage command/skill conventions.
-- `fromage-age-*`: port as a coherent Age review pack, not one at a time.
-- `fromagerie-*`, `culture-*`, `worktree-triage`: wait until worktree,
-  token-sizing, and MCP dependencies are explicit in `cheese-flow`.
+- `culture-*`, `worktree-triage`: wait until worktree, token-sizing, and MCP
+  dependencies are explicit in `cheese-flow`.
 - `explore-tilth`, `explore-tokei`, `explore-graph`: keep as optional exploration
   layers behind installed-tool or MCP checks.
 - `xray` reference agents: useful as an opt-in bundle once the `xray` skill is
@@ -154,6 +149,6 @@ right harness overrides.
 3. Bring over plugin-local `init`, `explore`, and `hello` commands with matching
    `init` and `explore` skills.
 4. Add the first low-coupling agents: `cheese-factory`, `ghostbuster`,
-   `nih-scanner`, `lsp-probe`, `fromage-pasteurize`, and `explore-lsp`.
+   `nih-scanner`, `lsp-probe`, and `explore-lsp`.
 5. Run the compiler tests after each batch and tighten schemas only when a real
    source asset needs the field.

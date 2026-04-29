@@ -7,9 +7,9 @@ argument-hint: "<rough idea | feature request | bug | spec path | design doc>"
 # /mold
 
 `/mold` shapes a fuzzy idea into a coherent spec (and optional issues)
-that downstream `/cheese` and `/cook` can consume without re-asking
-design questions. It is a **thinking amplifier**, not a one-shot
-generator: the dialogue is the point, the artifact is the by-product.
+that downstream `/cook` can consume without re-asking design questions.
+It is a **thinking amplifier**, not a one-shot generator: the dialogue
+is the point, the artifact is the by-product.
 
 ## Execution
 

@@ -62,9 +62,11 @@ describe("/cook flow artifacts", () => {
     expect(parsed.body).toContain("CONTRADICTS");
   });
 
-  it("wires /cook into the /cheese routing table", async () => {
-    const source = await readSource("commands/cheese.md");
-    expect(source).toContain("`/cook`");
-    expect(source).not.toMatch(/`\/fromage`/u);
+  it("declares no fromage or fromagerie language in shipped commands", async () => {
+    for (const command of ["age", "briesearch", "cook", "culture", "mold"]) {
+      const source = await readSource(`commands/${command}.md`);
+      expect(source).not.toMatch(/\bfromage(rie)?\b/iu);
+      expect(source).not.toMatch(/`\/fromage(rie)?`/u);
+    }
   });
 });

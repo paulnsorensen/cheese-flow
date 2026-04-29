@@ -52,5 +52,5 @@ merged; conflicts are flagged in the synthesis.
 - Choosing between libraries that solve the same problem.
 - Understanding an unfamiliar API before integrating it.
 - Investigating a dependency (maturity, license, maintenance activity).
-- Pulling external context before `/mold` or `/cheese` so the spec is
+- Pulling external context before `/mold` or `/cook` so the spec is
   informed, not speculative.

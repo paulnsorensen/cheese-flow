@@ -19,7 +19,6 @@ spec into tested code through red-green-refactor discipline.
 | Skill / command | Boundary |
 | --- | --- |
 | `/mold` | Produces the spec this command consumes. `/cook` never re-asks design questions answered by mold. |
-| `/cheese` | Routes here when intent is "implement a known spec". |
 | `/age` | Reviews the resulting changes after press finishes. |
 | `assertion-review` | Optional drift gate after press; surfaces requirements without strong assertions. |
 
