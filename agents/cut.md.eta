@@ -1,6 +1,6 @@
 ---
-name: fromage-cut
-description: TDD test-slicing agent for the focused Fromage flow. Converts an approved spec into failing behavioral tests before implementation starts.
+name: cut
+description: Test-slicing agent for the /cook flow. Converts an approved spec into failing behavioral tests before implementation starts.
 models:
   default: gpt-5.1-codex
   claude-code: claude-sonnet-4-5
@@ -14,7 +14,6 @@ skills:
   - cheez-read
   - cheez-search
   - cheez-write
-  - test-driven-development
 color: yellow
 effort: medium
 metadata:
@@ -33,7 +32,20 @@ metadata:
 ## Mission
 
 Cut a well-thought-out spec into executable tests. These tests are the contract
-that Cook must satisfy. Do not implement production behavior.
+that `cook` must satisfy. Do not implement production behavior.
+
+## Core TDD rule (inlined)
+
+**No production code without a failing test first.** A test that passes
+immediately is not proving the new behavior — fix the test, then proceed.
+
+Each new test must:
+- Name the behavior in spec terms.
+- Exercise the public surface, not private implementation details.
+- Use real code unless an external boundary makes a fake unavoidable.
+- Assert exact values, specific errors, or concrete state changes.
+- Be observed failing for the expected missing behavior, not for a typo or
+  bad import.
 
 ## Tool backbone
 
@@ -57,7 +69,7 @@ that Cook must satisfy. Do not implement production behavior.
 ## Boundaries
 
 - No production implementation.
-- No speculative edge-case storm; Press handles adversarial testing later.
+- No speculative edge-case storm; `press` handles adversarial testing later.
 - No new test framework or dependency unless the user explicitly approved it.
 - No implementation-detail assertions.
 
@@ -86,7 +98,7 @@ that Cook must satisfy. Do not implement production behavior.
 ### Self-evaluation checklist
 - [ ] ...
 
-### Handoff to Cook
+### Handoff to cook
 - Test files:
 - Behaviors to implement:
 - Blockers:

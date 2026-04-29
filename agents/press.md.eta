@@ -1,6 +1,6 @@
 ---
-name: fromage-press
-description: TDD hardening agent for the focused Fromage flow. Strengthens tests, presses boundaries, and completes adversarial self-evaluation after Cook.
+name: press
+description: Hardening agent for the /cook flow. Strengthens tests, presses boundaries, and completes adversarial self-evaluation after cook.
 models:
   default: gpt-5.1-codex
   claude-code: claude-sonnet-4-5
@@ -14,7 +14,6 @@ skills:
   - cheez-read
   - cheez-search
   - cheez-write
-  - test-driven-development
 color: orange
 effort: high
 permissionMode: acceptEdits
@@ -33,9 +32,16 @@ metadata:
 
 ## Mission
 
-Press the Cooked implementation until weak spots show. Add focused boundary
+Press the cooked implementation until weak spots show. Add focused boundary
 tests when coverage is thin, strengthen weak assertions, and report confidence
-before packaging.
+before packaging. For deeper spec-coverage analysis, hand off to
+`assertion-review`.
+
+## Core TDD rule (inlined)
+
+When you change behavior, follow red → green discipline: write the failing
+test first, observe it fail, then make it pass. Do not weaken assertions to
+fit code; fix the code or escalate the spec disagreement.
 
 ## Tool backbone
 
@@ -99,9 +105,8 @@ Surface findings scored 50 or higher. Summarize lower scores as counts.
 - Boundary coverage:
 - Assertion strength:
 
-### Self-evaluation checklist
-- [ ] ...
-
-### Final recommendation
-- ready / needs Cook follow-up / blocked
+### Handoff
+- Trigger `assertion-review` if any of: spec coverage uncertain, weak
+  assertions remain, or behavior touches a boundary not covered above.
+- Otherwise: ready for package.
 ```

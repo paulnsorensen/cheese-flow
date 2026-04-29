@@ -16,7 +16,7 @@ allowed-tools:
 
 Use this skill when the user has a fuzzy idea and wants to converge — through
 dialogue, evidence, and interface lockdown — on a coherent spec (and optional
-issues) that downstream `/cheese` and `/fromage` can consume without
+issues) that downstream `/cheese` and `/cook` can consume without
 re-asking design questions.
 
 Do not use this skill for one-shot implementation, free-form rubber-ducking
@@ -33,7 +33,7 @@ dialogue actually produced — never more, never less.
 | --- | --- |
 | `/culture` | Same dialogue feel; **never writes**. Use it when there is no artifact intent. |
 | `/briesearch` | External evidence dispatcher. `/mold` calls it through the Validate Cycle. |
-| `/fromage` | Implements a crystallized spec. `/mold` ends with a hand-off offer, never an auto-invoke. |
+| `/cook` | Implements a crystallized spec. `/mold` ends with a hand-off offer, never an auto-invoke. |
 
 ## Operating principles
 
@@ -118,7 +118,7 @@ core discipline — agree on a fast, deterministic, falsifiable feedback
 technique (failing test, curl/CLI script, headless browser, replay,
 bisection harness, differential loop, ...) before chasing hypotheses.
 The chosen loop becomes the Reproduction block in the bug-shaped spec, so
-`/fromage` can verify the fix against the same signal the diagnosis used.
+`/cook` can verify the fix against the same signal the diagnosis used.
 Diagnose is **diagnostic-only** — hand-off to Shape ("what's the fix?")
 then Crystallize emits a bug-shaped spec plus optional follow-up issues.
 Loop menu and discipline in `references/diagnose-mode.md`.
@@ -294,8 +294,7 @@ After writing, offer the next step inline. Never auto-invoke.
 
 | Artifact | Suggested next step |
 | --- | --- |
-| Spec (single feature) | `/fromage <harness>/specs/<slug>.md` |
-| Spec (large) | `/fromagerie <harness>/specs/<slug>.md` |
+| Spec | `/cook <harness>/specs/<slug>.md` |
 | Issues | `gh issue create --body-file <path>` (per file) |
 
 ## Loop detection

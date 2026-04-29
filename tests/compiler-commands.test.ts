@@ -135,8 +135,8 @@ describe("shipped command scaffolds", () => {
       "age.md",
       "briesearch.md",
       "cheese.md",
+      "cook.md",
       "culture.md",
-      "fromage.md",
       "mold.md",
     ];
     for (const root of [".claude", ".codex"]) {

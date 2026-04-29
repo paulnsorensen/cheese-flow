@@ -89,6 +89,85 @@ describe("installHarnessArtifacts", () => {
     expect(codexMcp.mcpServers).toHaveProperty("context7");
   });
 
+  it("emits agent frontmatter with skills binding for claude-code", async () => {
+    const projectRoot = await mkdtemp(
+      path.join(os.tmpdir(), "cheese-flow-claude-fm-"),
+    );
+    createdDirectories.push(projectRoot);
+    await cp(path.resolve("agents"), path.join(projectRoot, "agents"), {
+      recursive: true,
+    });
+    await cp(path.resolve("skills"), path.join(projectRoot, "skills"), {
+      recursive: true,
+    });
+
+    await installHarnessArtifacts({
+      projectRoot,
+      harnesses: ["claude-code"],
+    });
+
+    const cookAgent = await readFile(
+      path.join(projectRoot, ".claude", "agents", "cook.md"),
+      "utf8",
+    );
+    const { data } = parseFrontmatter<{
+      name: string;
+      description: string;
+      model: string;
+      tools: string[];
+      skills: string[];
+      color: string;
+      permissionMode: string;
+    }>(cookAgent);
+    expect(data.name).toBe("cook");
+    expect(data.model).toBe("claude-sonnet-4-5");
+    expect(data.skills).toEqual(["cheez-read", "cheez-search", "cheez-write"]);
+    expect(data.color).toBe("blue");
+    expect(data.permissionMode).toBe("acceptEdits");
+    expect(cookAgent).not.toContain("Required skills (prompt contract)");
+  });
+
+  it("drops claude-only fields and appends a skills prompt contract for codex", async () => {
+    const projectRoot = await mkdtemp(
+      path.join(os.tmpdir(), "cheese-flow-codex-fm-"),
+    );
+    createdDirectories.push(projectRoot);
+    await cp(path.resolve("agents"), path.join(projectRoot, "agents"), {
+      recursive: true,
+    });
+    await cp(path.resolve("skills"), path.join(projectRoot, "skills"), {
+      recursive: true,
+    });
+
+    await installHarnessArtifacts({
+      projectRoot,
+      harnesses: ["codex"],
+    });
+
+    const cookAgent = await readFile(
+      path.join(projectRoot, ".codex", "agents", "cook.md"),
+      "utf8",
+    );
+    const { data } = parseFrontmatter<{
+      name: string;
+      description: string;
+      model: string;
+      tools: string[];
+      skills?: string[];
+      color?: string;
+      permissionMode?: string;
+    }>(cookAgent);
+    expect(data.name).toBe("cook");
+    expect(data.model).toBe("gpt-5.1-codex");
+    expect(data.skills).toBeUndefined();
+    expect(data.color).toBeUndefined();
+    expect(data.permissionMode).toBeUndefined();
+    expect(cookAgent).toContain("Required skills (prompt contract)");
+    expect(cookAgent).toContain("- cheez-read");
+    expect(cookAgent).toContain("- cheez-search");
+    expect(cookAgent).toContain("- cheez-write");
+  });
+
   it("validates the shipped skill metadata", async () => {
     const skill = await readSkill(path.resolve("."), "basic-skill");
     expect(skill.name).toBe("basic-skill");
@@ -176,12 +255,13 @@ describe("installHarnessArtifacts", () => {
     ) as { agents: string[]; skills: string[]; commands: string[] };
 
     expect(manifest.agents).toEqual([
+      "assertion-review.md",
       "basic-agent.md",
-      "fromage-cook.md",
-      "fromage-cut.md",
-      "fromage-press.md",
+      "cook.md",
+      "cut.md",
       "milknado-executor.md",
       "milknado-planner.md",
+      "press.md",
     ]);
     expect(manifest.skills).toEqual([
       "basic-skill",
@@ -195,7 +275,6 @@ describe("installHarnessArtifacts", () => {
       "mold",
       "nested-dir",
       "research",
-      "test-driven-development",
     ]);
     expect(manifest.commands).toEqual([]);
   });

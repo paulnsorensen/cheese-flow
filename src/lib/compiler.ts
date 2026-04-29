@@ -2,8 +2,10 @@ import type { Dirent } from "node:fs";
 import { cp, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { Eta } from "eta";
+import { stringify as stringifyYaml } from "yaml";
 import { harnessAdapters } from "../adapters/index.js";
 import {
+  type HarnessAdapter,
   type HarnessName,
   type HooksSource,
   hooksSourceSchema,
@@ -20,6 +22,47 @@ import {
   resolveModel,
   type SkillFrontmatter,
 } from "./schemas.js";
+
+const CLAUDE_ONLY_AGENT_FIELDS = [
+  "skills",
+  "color",
+  "effort",
+  "disallowedTools",
+  "permissionMode",
+] as const;
+
+type ClaudeOnlyAgentField = (typeof CLAUDE_ONLY_AGENT_FIELDS)[number];
+
+function buildAgentFrontmatterBlock(
+  frontmatter: AgentFrontmatter,
+  adapter: HarnessAdapter,
+  resolvedModel: string,
+): string {
+  const data: Record<string, unknown> = {
+    name: frontmatter.name,
+    description: frontmatter.description,
+    model: resolvedModel,
+  };
+  if (frontmatter.tools.length > 0) data.tools = frontmatter.tools;
+  for (const field of CLAUDE_ONLY_AGENT_FIELDS) {
+    if (!adapter.capabilities.agentFrontmatterKeys.has(field)) continue;
+    const value = frontmatter[field as ClaudeOnlyAgentField];
+    if (value === undefined) continue;
+    if (Array.isArray(value) && value.length === 0) continue;
+    data[field] = value;
+  }
+  return `---\n${stringifyYaml(data)}---\n`;
+}
+
+function buildSkillsPromptContract(
+  frontmatter: AgentFrontmatter,
+  adapter: HarnessAdapter,
+): string {
+  if (frontmatter.skills.length === 0) return "";
+  if (adapter.capabilities.agentFrontmatterKeys.has("skills")) return "";
+  const lines = frontmatter.skills.map((skill) => `- ${skill}`).join("\n");
+  return `\n## Required skills (prompt contract)\n\nThis harness does not expose a structured skills binding, so treat the\nfollowing skill names as a hard prompt contract — invoke them by name when\nthe workflow calls for their behavior:\n\n${lines}\n`;
+}
 
 const DEFAULT_PLUGIN_METADATA: PluginMetadata = {
   name: "cheese-flow",
@@ -203,17 +246,23 @@ async function compileAgents(options: CompileAgentsOptions): Promise<string[]> {
     const frontmatter = parseAgentFrontmatter(parsed.data);
     const adapter = harnessAdapters[options.harness];
     const outputFile = `${frontmatter.name}.md`;
+    const resolvedModel = resolveModel(frontmatter.models, options.harness);
     const rendered = eta.renderString(parsed.body, {
-      agent: {
-        ...frontmatter,
-        model: resolveModel(frontmatter.models, options.harness),
-      },
+      agent: { ...frontmatter, model: resolvedModel },
       harness: adapter,
     }) as string;
 
+    const frontmatterBlock = buildAgentFrontmatterBlock(
+      frontmatter,
+      adapter,
+      resolvedModel,
+    );
+    const skillsContract = buildSkillsPromptContract(frontmatter, adapter);
+    const finalContent = `${frontmatterBlock}${rendered.trimStart()}${skillsContract}`;
+
     await writeFile(
       path.join(options.agentOutputDirectory, outputFile),
-      rendered.trimStart(),
+      finalContent,
       "utf8",
     );
     compiled.push(outputFile);
