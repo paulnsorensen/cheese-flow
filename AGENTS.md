@@ -49,6 +49,24 @@ cheese-flow is opinionated scaffolding for portable agents and skills that compi
 5. Name things after business concepts, not technical abstractions
 6. Minimize state mutation
 
+## Self-Refinement: producer-critic isolation
+
+cheese-flow's iterative refinement model is grounded in two papers:
+
+- **Self-Refine** (Madaan et al., 2023, [arxiv 2303.17651](https://arxiv.org/abs/2303.17651)) — single-LLM
+  generator/refiner/feedback-provider loop. Cited here as the *anti-pattern motivation*: same-context
+  self-critique is provably self-biased (Xu et al., ACL 2024) and amplifies that bias across iterations.
+- **Reflexion** (Shinn et al., 2023, [arxiv 2303.11366](https://arxiv.org/abs/2303.11366)) — distinct
+  Actor / Evaluator / Self-Reflection roles, raw trajectory dropped between attempts, distilled verbal
+  lesson persisted in a bounded memory buffer. This IS the target pattern: isolation by prompt boundary,
+  persistence by distilled lesson.
+
+The cheese-flow embodiment is **fresh-context per-charter critics** — one critic per producer charter
+(cook-critic, culture-critic, …), each dispatched as a fresh-window subagent that receives only an
+artifact handle and re-derives findings from primary sources. This avoids embedding self-critique
+inside the producer (Self-Refine self-bias trap) and avoids a single generic shared critic (loses
+rubric specificity). See `skills/critique/SKILL.md` for the dispatch primitive.
+
 ## No Migration Code
 
 This project is pre-release. Do not add migration backfills, deprecation shims, or compatibility layers.

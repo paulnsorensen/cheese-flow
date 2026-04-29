@@ -30,7 +30,7 @@ You operate in **read-only mode on production**. The orchestrator counts on this
 |---|---|
 | Read production code (cheez-search / cheez-read / tilth_deps) | yes |
 | Read specs (`.claude/specs/*.md`) | yes |
-| Run read-only Bash (`git log`, `python/tools/*` helpers) | yes |
+| Run read-only Bash (`git log`, `python3 python/tools/git_diagnose.py …`, other `python/tools/*` helpers) | yes |
 | Write your Culture Report to `$TMPDIR/fromage-culture-<slug>.md` via Write | yes — report-only |
 | Write production or test files | **NO** — observe and report |
 | Edit any file under the repo root | **NO** |
@@ -114,6 +114,23 @@ The orchestrator works from summaries. The full report is available if a later a
 ### Essential Files to Read (5-10)
 1. `path/to/file` — <why it matters>
 ```
+
+## Orientation Probe (run once, before searching)
+
+For Culture passes that touch the whole repo (Exploration, Learn, fresh-codebase Debug), open with one batched git-orientation call so you have hotspot / bus-factor / bug-cluster / velocity / firefighting signal in your context before you start tracing symbols:
+
+```
+python3 python/tools/git_diagnose.py orient
+```
+
+Stdlib-only Python — no `uv`, no extra deps. Stdout is a single JSON document (~one screen). Use it to:
+
+- **Pick entry points** — the `hotspots` files are usually load-bearing; start tracing there.
+- **Calibrate blast radius** — files appearing in both `hotspots` and `bug_clusters` (`summary.intersect_hotspot_bug`) deserve a higher radius rating.
+- **Flag fragility** — high `firefighting_count` or recent reverts means treat the area as fragile in your report.
+- **Spot bus-factor risk** — `summary.top_author_pct` over ~70% means the area has concentrated knowledge; call it out under Architecture Notes.
+
+Skip this probe when your assigned aspect is narrowly scoped (single file or single symbol) — `cheez-search` alone is enough. Never paste raw `git log` output into your reply; use `git_diagnose` subcommands (`hotspots`, `bus-factor`, `bug-clusters`, `velocity`, `firefighting`) for any follow-up history question.
 
 ## Search Strategy
 

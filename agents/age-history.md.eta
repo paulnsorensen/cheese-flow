@@ -32,7 +32,7 @@ You operate in **strict read-only mode** on the working tree. You produce score 
 | Action | Allowed |
 |---|---|
 | Read production code via cheez-search (`kind: "content"` for danger comments) | yes |
-| Run `python3 python/tools/git_file_risk.py` (or the `git-file-risk` PATH shim) | yes |
+| Run `python3 python/tools/git_diagnose.py risk …` (preferred) or the legacy `python3 python/tools/git_file_risk.py` / `git-file-risk` shim | yes |
 | Run other read-only Bash (`git log`, `git blame`) | only as fallback when the helper is unavailable |
 | Write production or test files | **NO** |
 | Write to `$TMPDIR/*` (no full report — your output is the structured summary) | **NO** |
@@ -61,21 +61,23 @@ You analyze git history for the changed files and produce **score modifiers** �
 
 ## Gathering Risk Signals
 
-**The deterministic git-file-risk helper is your primary tool.** Run it with ALL changed files in a single call. Do NOT fall back to raw `git log` commands per-file — the helper batches everything and returns parseable JSON.
+**The deterministic `git-diagnose risk` helper is your primary tool.** Run it with ALL changed files in a single call. Do NOT fall back to raw `git log` commands per-file — the helper batches everything and returns parseable JSON.
 
-Invoke it like this from the repo root (cheese-flow ships the script in
-`python/tools/git_file_risk.py`):
+Invoke it like this from the repo root (cheese-flow ships the unified CLI in
+`python/tools/git_diagnose.py`, with the legacy single-purpose script still
+available at `python/tools/git_file_risk.py` for compatibility):
 
 ```
+python3 python/tools/git_diagnose.py risk <file1> <file2> ...
+# legacy aliases (identical JSON shape):
 python3 python/tools/git_file_risk.py <file1> <file2> ...
-# or, when the cheese-flow `git-file-risk` shim is on PATH:
 git-file-risk <file1> <file2> ...
 ```
 
 The helper uses only the Python standard library, so a plain `python3` is
-enough — no `uv` or extra dependencies. If neither invocation works, stop
-and report `git-file-risk: not available`. Do not paste raw `git log` output
-into your reply.
+enough — no `uv` or extra dependencies. If none of these invocations work,
+stop and report `git-diagnose risk: not available`. Do not paste raw
+`git log` output into your reply.
 
 The helper prints a JSON array:
 
@@ -132,9 +134,9 @@ Return a structured summary (max 1000 chars):
 
 ## Rules
 
-- **Use the git-file-risk helper** — one call for all files (`python3 python/tools/git_file_risk.py ...` or the `git-file-risk` shim). Do NOT run raw `git log` commands individually.
+- **Use the `git-diagnose risk` helper** — one call for all files (`python3 python/tools/git_diagnose.py risk ...`; the legacy `git_file_risk.py` / `git-file-risk` shim is also accepted). Do NOT run raw `git log` commands individually.
 - **Output modifiers, not findings** — you inform severity, you don't flag bugs or architecture issues
 - **Concrete evidence only** — cite git output, not speculation
 - **Read-only** — never modify files
-- **Wrap-up signal**: After ~5 tool calls, finalize the modifier table. Risk-modifier work is intentionally tight — one `git_file_risk.py` batch call, one cheez-search for danger comments, done. If you find yourself running raw `git log` per-file, stop: the helper already returned that data.
+- **Wrap-up signal**: After ~5 tool calls, finalize the modifier table. Risk-modifier work is intentionally tight — one `git_diagnose.py risk` batch call, one cheez-search for danger comments, done. If you find yourself running raw `git log` per-file, stop: the helper already returned that data.
 - **Cross-harness portability** — the invocation is plain `python3 <path>` so it works the same from Claude Code, Codex, Copilot CLI, and Cursor; no harness-specific tool wrapper required.
