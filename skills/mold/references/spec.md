@@ -185,6 +185,9 @@ def <name>(
 Document-level `confidence` in the frontmatter is mechanical:
 
 ```
+# rounds = count of distinct mode entries in the state file's Mode history
+#          (each Explore/Ground/Shape/Sketch/Grill/Diagnose segment counts as 1;
+#           inline validate-cycle markers are excluded from the count)
 base       = min(rounds * 15, 100)
 penalties  = 20 * count([BLOCKED]) + 10 * count([TBD]) + 5 * count([?])
 bonuses    = 5 * count(SUPPORTED validate cycles)
@@ -216,6 +219,8 @@ At Crystallize:
 
 ## Atomic write
 
-Stage to `${TMPDIR:-/tmp}/cheese-flow-mold-<run_id>/staged/` and `mv` into
-place. On failure, the temp directory is removed and no partial files exist
-in the harness output root.
+Stage to `<harness>/.mold-staging-<run_id>/` (a sibling of the destination,
+guaranteed same filesystem) and `mv` into place. This ensures `mv` is an
+atomic rename rather than a cross-filesystem copy+delete. On failure, the
+staging directory is removed and no partial files exist in the harness output
+root.

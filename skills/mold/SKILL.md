@@ -2,7 +2,7 @@
 name: mold
 description: Iterative thinking amplifier for fuzzy ideas. Routes input to the right starting mode (Explore, Ground, Shape, Sketch, Grill, Diagnose), runs Validate Cycles to anchor claims, locks down interfaces in pseudocode, and only crystallizes a spec (and optional issues) after a two-key handshake plus a coherence self-check.
 license: MIT
-compatibility: Works in markdown-based coding harnesses with sub-agent support. Heavy delegation to /briesearch and cheez-* skills; degrades gracefully when those are absent.
+compatibility: Works in markdown-based coding harnesses with sub-agent support. Heavy delegation to /briesearch and cheez-* skills. When tilth MCP is absent, substitute the host Read tool for local file references — the no-speculation invariant (Operating Principle 2) still holds.
 metadata:
   owner: cheese-flow
   category: planning
@@ -139,8 +139,8 @@ Plan:
 Outcomes write to the state file's `Validate cycles` block:
 
 - **SUPPORTED** — evidence aligns; hypothesis becomes a decision.
-- **CONTRADICTED** — evidence disagrees; surface as `[CONFLICT]`; revise or
-  abandon.
+- **CONTRADICTED** — evidence disagrees; surface as `[CONFLICT <id>]` (e.g.
+  `[CONFLICT cf-1]`); revise or abandon.
 - **REFINED** — evidence partially aligns; restate with new precision and
   re-validate or accept.
 
@@ -195,7 +195,7 @@ the Sketch gate unless the user follows up with `crystallize anyway`.
 | `[?]` | Agent uncertain; needs validation |
 | `[TBD]` | User uncertain; decision deferred |
 | `[BLOCKED]` | External dependency unresolved |
-| `[CONFLICT]` | Codebase contradicts a stated assumption |
+| `[CONFLICT <id>]` | Codebase contradicts a stated assumption; `<id>` (e.g. `cf-1`) links back to the contradicted validate cycle's `conflict_id` |
 
 ## Termination — two-key handshake
 

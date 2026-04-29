@@ -61,7 +61,7 @@ A bare `/briesearch` is a research dispatch. The Validate Cycle adds:
 - The **stated hypothesis** (commitment to an assertion).
 - The **judgment step** (verdict tag, not just a summary).
 - The **decision recorded in state** (`Decisions` block on SUPPORTED;
-  `[CONFLICT]` marker on CONTRADICTED; restated hypothesis on REFINED).
+  `[CONFLICT <id>]` marker on CONTRADICTED; restated hypothesis on REFINED).
 
 Direct `/briesearch` calls are allowed but discouraged. The framing matters.
 
@@ -82,7 +82,9 @@ Every cycle gets one line in the state file's `Validate cycles` block:
 Followed by:
 
 - on SUPPORTED — append the decision to `Decisions` with the same cycle id.
-- on CONTRADICTED — append a `[CONFLICT]` line to `Open questions`.
+- on CONTRADICTED — assign a `conflict_id` (e.g. `cf-1`, incrementing per
+  session) to the cycle entry, then append a `[CONFLICT <id>]` line to
+  `Open questions` using that same id so the two stay linked.
 - on REFINED — append the restated hypothesis as a new cycle entry, and
   link the prior id (`refined from cycle <prior>`).
 
