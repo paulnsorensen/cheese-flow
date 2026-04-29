@@ -71,6 +71,13 @@ export type SurfaceEmissionResult = {
   commands: string[];
 };
 
+export type HarnessCapabilities = {
+  skillFrontmatterKeys: ReadonlySet<string>;
+  agentFrontmatterKeys: ReadonlySet<string>;
+  hookEvents: ReadonlySet<string>;
+  toolNames: ReadonlySet<string>;
+};
+
 export interface HarnessAdapter {
   name: HarnessName;
   displayName: string;
@@ -92,4 +99,6 @@ export interface HarnessAdapter {
     skillsDir: string,
     outputRoot: string,
   ) => Promise<SurfaceEmissionResult>;
+
+  capabilities: HarnessCapabilities;
 }

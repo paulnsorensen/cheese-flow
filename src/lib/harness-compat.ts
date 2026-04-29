@@ -10,13 +10,10 @@ import {
 import os from "node:os";
 import path from "node:path";
 import { harnessAdapters } from "../adapters/index.js";
-import type { HarnessAdapter } from "../domain/harness.js";
+import type { HarnessAdapter, HarnessName } from "../domain/harness.js";
+import { eventSupport, fieldSupport, toolSupport } from "./capabilities.js";
 import { parseFrontmatter } from "./frontmatter.js";
-import {
-  CLAUDE_ONLY_AGENT_KEYS,
-  CLAUDE_ONLY_SKILL_KEYS,
-  parseSkillFrontmatter,
-} from "./schemas.js";
+import { parseSkillFrontmatter } from "./schemas.js";
 
 export type HarnessCompatFinding = {
   rule: string;
@@ -26,27 +23,6 @@ export type HarnessCompatFinding = {
 };
 
 const CLAUDE_PERMISSION_GLOB = /\b([A-Za-z]\w*)\(([^)]*:[^)]*)\)/u;
-
-const CLAUDE_ONLY_TOOL_NAMES = [
-  "Agent",
-  "Task",
-  "NotebookEdit",
-  "WebSearch",
-  "WebFetch",
-  "TodoWrite",
-] as const;
-
-const PASCAL_HOOK_EVENTS = [
-  "SessionStart",
-  "SessionEnd",
-  "PreToolUse",
-  "PostToolUse",
-  "Stop",
-  "SubagentStop",
-  "Notification",
-  "PreCompact",
-  "UserPromptSubmit",
-] as const;
 
 const HARNESS_PATH_MARKERS = [
   ".claude/",
@@ -58,18 +34,8 @@ const HARNESS_PATH_MARKERS = [
   "copilot-instructions.md",
 ] as const;
 
-export function checkContextPortability(
-  context: string | undefined,
-): HarnessCompatFinding[] {
-  if (context !== "fork") return [];
-  return [
-    {
-      rule: "context-fork-claude-only",
-      severity: "warning",
-      message:
-        "context: fork is a Claude Code-only hint (forked subagent context). Codex, Cursor, and Copilot CLI ignore it — the skill body must still work when run inline. Document the fallback or set context: inline for harness-portable skills.",
-    },
-  ];
+function displayName(harness: HarnessName): string {
+  return harnessAdapters[harness].displayName;
 }
 
 export function checkAllowedToolsPortability(
@@ -90,20 +56,26 @@ export function checkAllowedToolsPortability(
   }));
 }
 
-export function checkClaudeOnlyFields(
+export function checkFrontmatterPortability(
   frontmatter: Record<string, unknown>,
   kind: "skill" | "agent",
 ): HarnessCompatFinding[] {
-  const claudeOnlyKeys =
-    kind === "skill" ? CLAUDE_ONLY_SKILL_KEYS : CLAUDE_ONLY_AGENT_KEYS;
+  const support = fieldSupport(kind);
+  const allAdapters = Object.keys(harnessAdapters) as HarnessName[];
   const findings: HarnessCompatFinding[] = [];
-  for (const key of claudeOnlyKeys) {
+
+  for (const [key, supportedBy] of support) {
     if (frontmatter[key] === undefined) continue;
+    if (supportedBy.length === allAdapters.length) continue;
     if (key === "context" && frontmatter[key] === "inline") continue;
+
+    const unsupported = allAdapters.filter((n) => !supportedBy.includes(n));
+    const supportedNames = supportedBy.map(displayName).join(", ");
+    const unsupportedNames = unsupported.map(displayName).join(", ");
     findings.push({
-      rule: `frontmatter-claude-only-field`,
+      rule: "frontmatter-portability",
       severity: "warning",
-      message: `frontmatter field "${key}" is Claude Code-only and is dropped by Codex, Cursor, and Copilot CLI. Move the constraint into the body, or accept that non-Claude harnesses will ignore it.`,
+      message: `frontmatter field "${key}" is supported only by ${supportedNames}; ${unsupportedNames} drop it. Move the constraint into the body, or accept the field will be ignored.`,
     });
   }
   return findings;
@@ -125,29 +97,56 @@ function findFirstMatchLine(body: string, pattern: RegExp): number | undefined {
 
 export function checkBodyHarnessIdioms(body: string): HarnessCompatFinding[] {
   const findings: HarnessCompatFinding[] = [];
+  const allAdapters = Object.keys(harnessAdapters) as HarnessName[];
+  const hookAdapterCount = allAdapters.filter(
+    (n) => harnessAdapters[n].capabilities.hookEvents.size > 0,
+  ).length;
 
-  for (const tool of CLAUDE_ONLY_TOOL_NAMES) {
+  const toolSupportMap = toolSupport();
+  for (const [tool, supportedBy] of toolSupportMap) {
     const pattern = new RegExp(`\\b${tool}\\(`, "u");
     const line = findFirstMatchLine(body, pattern);
-    if (line !== undefined) {
-      findings.push({
-        rule: "body-claude-only-tool",
-        severity: "warning",
-        message: `body references Claude-only tool "${tool}(...)"; non-Claude harnesses do not expose this tool. Rephrase generically (e.g. "spawn a sub-agent").`,
-        line,
-      });
+    if (line === undefined) continue;
+    const unsupported = allAdapters.filter((n) => !supportedBy.includes(n));
+    const unsupportedNames = unsupported.map(displayName).join(", ");
+    findings.push({
+      rule: "body-claude-only-tool",
+      severity: "warning",
+      message: `body references tool "${tool}(...)"; ${unsupportedNames} do not expose this tool. Rephrase generically (e.g. "spawn a sub-agent").`,
+      line,
+    });
+  }
+
+  const eventSupportMap = eventSupport();
+  const allCamelEvents = new Set<string>();
+  for (const adapter of Object.values(harnessAdapters)) {
+    for (const event of adapter.capabilities.hookEvents) {
+      allCamelEvents.add(event);
     }
   }
 
-  for (const event of PASCAL_HOOK_EVENTS) {
-    const camel = `${event.charAt(0).toLowerCase()}${event.slice(1)}`;
-    const pattern = new RegExp(`\\b${event}\\b`, "u");
+  for (const camelEvent of allCamelEvents) {
+    const pascalEvent = `${camelEvent.charAt(0).toUpperCase()}${camelEvent.slice(1)}`;
+    const pattern = new RegExp(`\\b${pascalEvent}\\b`, "u");
     const line = findFirstMatchLine(body, pattern);
-    if (line !== undefined) {
+    if (line === undefined) continue;
+
+    const supportedBy = eventSupportMap.get(camelEvent) ?? [];
+    if (supportedBy.length === hookAdapterCount) {
       findings.push({
         rule: "body-pascal-hook-event",
         severity: "warning",
-        message: `body references PascalCase hook event "${event}"; cheese-flow's portable hooks use camelCase ("${camel}"). Per-harness mapping is applied at compile time.`,
+        message: `body references PascalCase hook event "${pascalEvent}"; cheese-flow's portable hooks use camelCase ("${camelEvent}"). Per-harness mapping is applied at compile time.`,
+        line,
+      });
+    } else {
+      const unsupported = allAdapters.filter((n) => !supportedBy.includes(n));
+      const supportedNames = supportedBy.map(displayName).join(", ");
+      const unsupportedNames = unsupported.map(displayName).join(", ");
+      findings.push({
+        rule: "body-harness-only-hook-event",
+        severity: "warning",
+        message: `body references hook event "${pascalEvent}" which is supported only by ${supportedNames}; ${unsupportedNames} do not expose it.`,
         line,
       });
     }

@@ -133,7 +133,15 @@ here than for agents:
 
 ## Portable Fields
 
-Portable fields should mean the same thing regardless of target harness:
+A field is portable when every harness adapter declares it in its `capabilities`
+block. Fields not declared by any adapter are implicitly portable — they are
+part of the universal source schema. Fields declared by only some adapters will
+be silently dropped at compile time for adapters that do not declare them; the
+`cheese lint` portability check surfaces a `frontmatter-portability` warning so
+authors know to re-state the constraint in the skill body if other harnesses
+also need to honor it.
+
+Universal (implicitly portable) skill fields:
 
 - `name` is the stable kebab-case skill identifier and must match the directory name.
 - `description` is the short human-readable purpose.
@@ -143,16 +151,22 @@ Portable fields should mean the same thing regardless of target harness:
   names (`Bash`, `Read`) for portability — Claude Code's permission-glob syntax
   (`Bash(git diff:*)`) is not parsed by Cursor, Codex, or Copilot CLI.
 - `metadata` carries repository-owned details that may not be emitted everywhere.
-- `model` is an optional model hint (e.g. `opus`, `haiku`); each adapter resolves
-  it to a concrete identifier or drops it.
-- `context` is `fork` or `inline`. **`fork` is a Claude Code-only hint** that
-  asks the host to run the skill in a forked sub-agent context (Claude Code's
-  `Agent` tool). Codex, Cursor, and Copilot CLI ignore the field and run the
-  skill body inline, so the body must still produce useful output without the
-  fork. Default behavior when the field is absent is `inline`.
 
-Adapters may preserve, transform, or omit these fields depending on the target
-harness.
+Currently declared only by the `claude-code` adapter (will trigger a
+`frontmatter-portability` warning on other harnesses):
+
+- `model` — an optional model hint (e.g. `opus`, `haiku`); each adapter resolves
+  it to a concrete identifier or drops it.
+- `context` — `fork` or `inline`. `fork` asks the host to run the skill in a
+  forked sub-agent context (Claude Code's `Agent` tool). Codex, Cursor, and
+  Copilot CLI run the skill body inline regardless, so the body must still
+  produce useful output without the fork. `inline` is the portable default and
+  does not trigger a warning.
+
+Adapters may preserve, transform, or omit fields depending on the target
+harness. Adding a new adapter that supports `model` or `context` means editing
+that adapter's `capabilities` declaration — no changes to the schema or lint
+constants needed.
 
 ## Agent Portable Fields
 
@@ -166,19 +180,19 @@ per template; the frontmatter contract is:
 | `description` | yes | all | one-line summary surfaced in agent menus |
 | `models` | yes | all (resolved) | per-harness identifiers; `default` is the fallback |
 | `tools` | optional (defaults to `[]`) | all | bare tool names; permission-glob syntax is Claude-Code-only |
-| `skills` | optional | **Claude Code only** | sub-agent skill bindings; non-Claude harnesses ignore the field |
-| `color` | optional | **Claude Code only** | UI hint for `/agents` listings; ignored elsewhere |
-| `effort` | optional (`low` / `medium` / `high`) | **Claude Code only** | run-budget hint; ignored elsewhere |
-| `disallowedTools` | optional | **Claude Code only** | structural block-list; non-Claude harnesses fall back to the prompt contract |
-| `permissionMode` | optional (`plan` / `acceptEdits` / `default`) | **Claude Code only** | dispatch-time permission hint |
+| `skills` | optional | `claude-code` adapter only | sub-agent skill bindings; non-Claude harnesses ignore the field |
+| `color` | optional | `claude-code` adapter only | UI hint for `/agents` listings; ignored elsewhere |
+| `effort` | optional (`low` / `medium` / `high`) | `claude-code` adapter only | run-budget hint; ignored elsewhere |
+| `disallowedTools` | optional | `claude-code` adapter only | structural block-list; non-Claude harnesses fall back to the prompt contract |
+| `permissionMode` | optional (`plan` / `acceptEdits` / `default`) | `claude-code` adapter only | dispatch-time permission hint |
 | `metadata` | optional | repository-only | not emitted to any harness; useful for CI/lint analytics |
 
-Fields marked **Claude Code only** are accepted and validated portably so the
-source can stay in one place, but they will be dropped at compile time for
-Codex, Cursor, and Copilot CLI. The `cheese lint` portability checks surface a
-`frontmatter-claude-only-field` warning when an author sets one, so the
-constraint must be re-stated in the prompt body if non-Claude harnesses also
-need to honor it.
+Fields listed as "`claude-code` adapter only" are currently declared in
+`src/adapters/claude-code.ts`'s `capabilities.agentFrontmatterKeys`. The
+`cheese lint` portability check surfaces a `frontmatter-portability` warning
+when an author sets one of these fields; the constraint must be re-stated in the
+prompt body if non-Claude harnesses also need to honor it. Adding adapter support
+for a field means editing the relevant adapter's `capabilities` declaration.
 
 ## Harness Overrides
 

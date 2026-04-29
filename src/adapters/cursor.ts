@@ -102,4 +102,10 @@ export const cursorAdapter: HarnessAdapter = {
   mcpFileName: "mcp.json",
   buildHookConfig: () => null,
   emitSurface: emitCursorSkillSurface,
+  capabilities: {
+    skillFrontmatterKeys: new Set<string>(),
+    agentFrontmatterKeys: new Set<string>(),
+    hookEvents: new Set<string>(),
+    toolNames: new Set<string>(),
+  },
 };

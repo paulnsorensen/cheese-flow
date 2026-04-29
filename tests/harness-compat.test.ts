@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
+import { fieldSupport } from "../src/lib/capabilities.js";
 import {
   checkAllowedToolsPortability,
   checkBodyHarnessIdioms,
-  checkClaudeOnlyFields,
-  checkContextPortability,
+  checkFrontmatterPortability,
   compileTestSkill,
 } from "../src/lib/harness-compat.js";
 
@@ -50,6 +50,63 @@ describe("checkAllowedToolsPortability", () => {
   });
 });
 
+describe("checkFrontmatterPortability", () => {
+  it("returns no findings for skills using only portable fields", () => {
+    expect(
+      checkFrontmatterPortability({ name: "x", description: "y" }, "skill"),
+    ).toEqual([]);
+  });
+
+  it("flags model and context: fork on a skill (2 findings)", () => {
+    const findings = checkFrontmatterPortability(
+      { name: "x", description: "y", model: "opus", context: "fork" },
+      "skill",
+    );
+    expect(findings).toHaveLength(2);
+    expect(findings.every((f) => f.rule === "frontmatter-portability")).toBe(
+      true,
+    );
+    expect(findings.some((f) => f.message.includes('"model"'))).toBe(true);
+    expect(findings.some((f) => f.message.includes('"context"'))).toBe(true);
+  });
+
+  it("does not flag context: inline because it is the portable default", () => {
+    const findings = checkFrontmatterPortability(
+      { name: "x", description: "y", context: "inline" },
+      "skill",
+    );
+    expect(findings).toEqual([]);
+  });
+
+  it("flags all Claude-only agent fields", () => {
+    const findings = checkFrontmatterPortability(
+      {
+        name: "x",
+        description: "y",
+        skills: ["foo"],
+        color: "red",
+        effort: "high",
+        disallowedTools: ["Edit"],
+        permissionMode: "default",
+      },
+      "agent",
+    );
+    expect(findings).toHaveLength(5);
+    expect(findings.every((f) => f.rule === "frontmatter-portability")).toBe(
+      true,
+    );
+  });
+
+  it("is driven by adapter capabilities, not hardcoded constants", () => {
+    // model is supported only by claude-code; if a future adapter also declares it,
+    // the map grows and the warning would no longer fire for that adapter.
+    // Verify the current mapping is capability-driven.
+    const support = fieldSupport("skill");
+    expect(support.get("model")).toEqual(["claude-code"]);
+    expect(support.get("context")).toEqual(["claude-code"]);
+  });
+});
+
 describe("checkBodyHarnessIdioms", () => {
   it("returns no findings on plain markdown body", () => {
     const body = "# Heading\n\nUse the harness's native tools.\n";
@@ -68,13 +125,29 @@ describe("checkBodyHarnessIdioms", () => {
     expect(findings[0]?.message).toContain("Task");
   });
 
-  it("flags multiple PascalCase hook events including the extended set", () => {
+  it("flags portable PascalCase hook events with body-pascal-hook-event", () => {
     const findings = checkBodyHarnessIdioms(
-      "Fires SessionStart, PreToolUse, PostToolUse, Stop, SubagentStop, Notification.",
+      "Fires SessionStart, PreToolUse, PostToolUse.",
     );
     expect(
       findings.filter((f) => f.rule === "body-pascal-hook-event"),
-    ).toHaveLength(6);
+    ).toHaveLength(3);
+  });
+
+  it("flags claude-only PascalCase hook events with body-harness-only-hook-event", () => {
+    const findings = checkBodyHarnessIdioms(
+      "Fires Stop, SubagentStop, Notification.",
+    );
+    expect(
+      findings.filter((f) => f.rule === "body-harness-only-hook-event"),
+    ).toHaveLength(3);
+    expect(findings.every((f) => f.severity === "warning")).toBe(true);
+  });
+
+  it("Stop emits body-harness-only-hook-event, not body-pascal-hook-event", () => {
+    const findings = checkBodyHarnessIdioms("Triggers on Stop.");
+    const stopFinding = findings.find((f) => f.message.includes("Stop"));
+    expect(stopFinding?.rule).toBe("body-harness-only-hook-event");
   });
 
   it("does not flag camelCase hook events", () => {
@@ -82,6 +155,17 @@ describe("checkBodyHarnessIdioms", () => {
       "Fires sessionStart, preToolUse, postToolUse.",
     );
     expect(findings).toEqual([]);
+  });
+
+  it("does not flag camelCase stop in body", () => {
+    const findings = checkBodyHarnessIdioms("Fires stop, subagentStop events.");
+    expect(
+      findings.some(
+        (f) =>
+          f.rule === "body-pascal-hook-event" ||
+          f.rule === "body-harness-only-hook-event",
+      ),
+    ).toBe(false);
   });
 
   it("flags Claude-only tools beyond Agent/Task", () => {
@@ -117,70 +201,6 @@ describe("checkBodyHarnessIdioms", () => {
       (f) => f.rule === "body-claude-only-tool",
     );
     expect(agentFinding?.line).toBe(2);
-  });
-});
-
-describe("checkClaudeOnlyFields", () => {
-  it("returns no findings for skills using only portable fields", () => {
-    expect(
-      checkClaudeOnlyFields({ name: "x", description: "y" }, "skill"),
-    ).toEqual([]);
-  });
-
-  it("flags model and context: fork on a skill", () => {
-    const findings = checkClaudeOnlyFields(
-      { name: "x", description: "y", model: "opus", context: "fork" },
-      "skill",
-    );
-    expect(findings).toHaveLength(2);
-    expect(
-      findings.every((f) => f.rule === "frontmatter-claude-only-field"),
-    ).toBe(true);
-  });
-
-  it("does not flag context: inline because it is the portable default", () => {
-    const findings = checkClaudeOnlyFields(
-      { name: "x", description: "y", context: "inline" },
-      "skill",
-    );
-    expect(findings).toEqual([]);
-  });
-
-  it("flags Claude-only agent fields", () => {
-    const findings = checkClaudeOnlyFields(
-      {
-        name: "x",
-        description: "y",
-        skills: ["foo"],
-        color: "red",
-        effort: "high",
-        disallowedTools: ["Edit"],
-        permissionMode: "default",
-      },
-      "agent",
-    );
-    expect(findings).toHaveLength(5);
-    expect(
-      findings.every((f) => f.rule === "frontmatter-claude-only-field"),
-    ).toBe(true);
-  });
-});
-
-describe("checkContextPortability", () => {
-  it("returns no findings when context is undefined", () => {
-    expect(checkContextPortability(undefined)).toEqual([]);
-  });
-
-  it("returns no findings on context: inline", () => {
-    expect(checkContextPortability("inline")).toEqual([]);
-  });
-
-  it("flags context: fork as Claude-only", () => {
-    const findings = checkContextPortability("fork");
-    expect(findings).toHaveLength(1);
-    expect(findings[0]?.rule).toBe("context-fork-claude-only");
-    expect(findings[0]?.severity).toBe("warning");
-    expect(findings[0]?.message).toContain("forked subagent");
   });
 });
 

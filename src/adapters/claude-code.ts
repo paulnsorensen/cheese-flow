@@ -17,4 +17,33 @@ export const claudeCodeAdapter: HarnessAdapter = {
   buildManifest: buildBaseManifest,
   mcpFileName: ".mcp.json",
   buildHookConfig: (portable) => ({ hooks: camelCaseHooks(portable) }),
+  capabilities: {
+    skillFrontmatterKeys: new Set(["model", "context"]),
+    agentFrontmatterKeys: new Set([
+      "skills",
+      "color",
+      "effort",
+      "disallowedTools",
+      "permissionMode",
+    ]),
+    hookEvents: new Set([
+      "sessionStart",
+      "sessionEnd",
+      "preToolUse",
+      "postToolUse",
+      "stop",
+      "subagentStop",
+      "notification",
+      "preCompact",
+      "userPromptSubmit",
+    ]),
+    toolNames: new Set([
+      "Agent",
+      "Task",
+      "NotebookEdit",
+      "WebSearch",
+      "WebFetch",
+      "TodoWrite",
+    ]),
+  },
 };
