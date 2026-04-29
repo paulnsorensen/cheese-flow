@@ -19,9 +19,20 @@ export type LintReport = {
   issues: LintIssue[];
 };
 
+export type CompileSkillFn = (
+  skillName: string,
+  skillSource: string,
+) => Promise<HarnessCompatFinding[]>;
+
+export type LintSkillsDirectoryOptions = {
+  compile?: CompileSkillFn;
+};
+
 export async function lintSkillsDirectory(
   skillsRoot: string,
+  options: LintSkillsDirectoryOptions = {},
 ): Promise<LintReport> {
+  const compile = options.compile ?? compileTestSkill;
   const entries = await readdir(skillsRoot, { withFileTypes: true });
   const directories = entries
     .filter((entry) => entry.isDirectory())
@@ -30,7 +41,9 @@ export async function lintSkillsDirectory(
 
   const issues: LintIssue[] = [];
   for (const directoryName of directories) {
-    issues.push(...(await lintSkillDirectory(skillsRoot, directoryName)));
+    issues.push(
+      ...(await lintSkillDirectory(skillsRoot, directoryName, compile)),
+    );
   }
 
   return { scanned: directories.length, issues };
@@ -39,6 +52,7 @@ export async function lintSkillsDirectory(
 async function lintSkillDirectory(
   skillsRoot: string,
   directoryName: string,
+  compile: CompileSkillFn,
 ): Promise<LintIssue[]> {
   const skillFile = path.join(skillsRoot, directoryName, "SKILL.md");
   const relativeFile = path.relative(skillsRoot, skillFile);
@@ -60,10 +74,7 @@ async function lintSkillDirectory(
     return sourceIssues;
   }
 
-  const compileFindings = await compileTestSkill(
-    directoryName,
-    sourceOrIssue.source,
-  );
+  const compileFindings = await compile(directoryName, sourceOrIssue.source);
   const compileIssues = compileFindings.map((finding) =>
     findingToIssue(finding, directoryName, relativeFile),
   );

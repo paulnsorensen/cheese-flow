@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { harnessAdapters } from "../src/adapters/index.js";
+import type { HarnessAdapter } from "../src/domain/harness.js";
 import { fieldSupport } from "../src/lib/capabilities.js";
 import {
   checkAllowedToolsPortability,
@@ -33,6 +35,8 @@ describe("checkAllowedToolsPortability", () => {
       "mcp__tilth__tilth_search",
     ]);
     expect(findings).toHaveLength(1);
+    expect(findings[0]?.rule).toBe("allowed-tools-claude-permission-syntax");
+    expect(findings[0]?.severity).toBe("warning");
     expect(findings[0]?.message).toContain("Bash(gh:*)");
   });
 
@@ -47,6 +51,8 @@ describe("checkAllowedToolsPortability", () => {
     const findings = checkAllowedToolsPortability("bash(git diff:*)");
     expect(findings).toHaveLength(1);
     expect(findings[0]?.rule).toBe("allowed-tools-claude-permission-syntax");
+    expect(findings[0]?.severity).toBe("warning");
+    expect(findings[0]?.message).toContain("bash(git diff:*)");
   });
 });
 
@@ -104,6 +110,62 @@ describe("checkFrontmatterPortability", () => {
     const support = fieldSupport("skill");
     expect(support.get("model")).toEqual(["claude-code"]);
     expect(support.get("context")).toEqual(["claude-code"]);
+  });
+
+  it("warning suppresses when every adapter (including a hypothetical fifth) declares the field", () => {
+    // Plan §6 regression: prove the lint is data-driven by mutating the registry
+    // so every adapter declares `model` in skillFrontmatterKeys. The warning
+    // must stop firing — adding a portable field means editing capabilities,
+    // not the lint.
+    const skillsBefore = checkFrontmatterPortability(
+      { name: "x", description: "y", model: "opus" },
+      "skill",
+    );
+    expect(skillsBefore).toHaveLength(1);
+
+    const registry = harnessAdapters as Record<string, HarnessAdapter>;
+    const original = new Map<string, ReadonlySet<string>>();
+    for (const [name, adapter] of Object.entries(registry)) {
+      original.set(name, adapter.capabilities.skillFrontmatterKeys);
+      adapter.capabilities = {
+        ...adapter.capabilities,
+        skillFrontmatterKeys: new Set([
+          ...adapter.capabilities.skillFrontmatterKeys,
+          "model",
+        ]),
+      };
+    }
+    const fifth = {
+      ...(registry["claude-code"] as HarnessAdapter),
+      displayName: "Fifth",
+      outputRoot: ".fifth",
+      capabilities: {
+        skillFrontmatterKeys: new Set(["model"]),
+        agentFrontmatterKeys: new Set<string>(),
+        hookEvents: new Set<string>(),
+        toolNames: new Set<string>(),
+      },
+    } as HarnessAdapter;
+    registry["fifth"] = fifth;
+
+    try {
+      const skillsAfter = checkFrontmatterPortability(
+        { name: "x", description: "y", model: "opus" },
+        "skill",
+      );
+      expect(skillsAfter).toEqual([]);
+    } finally {
+      delete registry["fifth"];
+      for (const [name, adapter] of Object.entries(registry)) {
+        const restored = original.get(name);
+        if (restored !== undefined) {
+          adapter.capabilities = {
+            ...adapter.capabilities,
+            skillFrontmatterKeys: restored,
+          };
+        }
+      }
+    }
   });
 });
 
@@ -216,7 +278,7 @@ describe("compileTestSkill", () => {
   it("reports a compile failure for every adapter when frontmatter is malformed", async () => {
     const malformed = "no frontmatter at all\n";
     const findings = await compileTestSkill("broken-skill", malformed);
-    expect(findings.length).toBeGreaterThan(0);
+    expect(findings).toHaveLength(4);
     expect(findings.every((f) => f.severity === "error")).toBe(true);
     const rules = findings.map((f) => f.rule);
     for (const harness of ["claude-code", "codex", "cursor", "copilot-cli"]) {

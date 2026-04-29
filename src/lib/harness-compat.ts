@@ -96,19 +96,23 @@ function findFirstMatchLine(body: string, pattern: RegExp): number | undefined {
 }
 
 export function checkBodyHarnessIdioms(body: string): HarnessCompatFinding[] {
-  const findings: HarnessCompatFinding[] = [];
-  const allAdapters = Object.keys(harnessAdapters) as HarnessName[];
-  const hookAdapterCount = allAdapters.filter(
-    (n) => harnessAdapters[n].capabilities.hookEvents.size > 0,
-  ).length;
+  return [
+    ...collectToolFindings(body),
+    ...collectEventFindings(body),
+    ...collectPathFindings(body),
+  ];
+}
 
-  const toolSupportMap = toolSupport();
-  for (const [tool, supportedBy] of toolSupportMap) {
-    const pattern = new RegExp(`\\b${tool}\\(`, "u");
-    const line = findFirstMatchLine(body, pattern);
+function collectToolFindings(body: string): HarnessCompatFinding[] {
+  const allAdapters = Object.keys(harnessAdapters) as HarnessName[];
+  const findings: HarnessCompatFinding[] = [];
+  for (const [tool, supportedBy] of toolSupport()) {
+    const line = findFirstMatchLine(body, new RegExp(`\\b${tool}\\(`, "u"));
     if (line === undefined) continue;
-    const unsupported = allAdapters.filter((n) => !supportedBy.includes(n));
-    const unsupportedNames = unsupported.map(displayName).join(", ");
+    const unsupportedNames = allAdapters
+      .filter((n) => !supportedBy.includes(n))
+      .map(displayName)
+      .join(", ");
     findings.push({
       rule: "body-claude-only-tool",
       severity: "warning",
@@ -116,55 +120,75 @@ export function checkBodyHarnessIdioms(body: string): HarnessCompatFinding[] {
       line,
     });
   }
+  return findings;
+}
 
-  const eventSupportMap = eventSupport();
-  const allCamelEvents = new Set<string>();
-  for (const adapter of Object.values(harnessAdapters)) {
-    for (const event of adapter.capabilities.hookEvents) {
-      allCamelEvents.add(event);
-    }
-  }
-
-  for (const camelEvent of allCamelEvents) {
+function collectEventFindings(body: string): HarnessCompatFinding[] {
+  const allAdapters = Object.keys(harnessAdapters) as HarnessName[];
+  const hookAdapterCount = allAdapters.filter(
+    (n) => harnessAdapters[n].capabilities.hookEvents.size > 0,
+  ).length;
+  const findings: HarnessCompatFinding[] = [];
+  for (const [camelEvent, supportedBy] of eventSupport()) {
     const pascalEvent = `${camelEvent.charAt(0).toUpperCase()}${camelEvent.slice(1)}`;
-    const pattern = new RegExp(`\\b${pascalEvent}\\b`, "u");
-    const line = findFirstMatchLine(body, pattern);
+    const line = findFirstMatchLine(
+      body,
+      new RegExp(`\\b${pascalEvent}\\b`, "u"),
+    );
     if (line === undefined) continue;
-
-    const supportedBy = eventSupportMap.get(camelEvent) ?? [];
-    if (supportedBy.length === hookAdapterCount) {
-      findings.push({
-        rule: "body-pascal-hook-event",
-        severity: "warning",
-        message: `body references PascalCase hook event "${pascalEvent}"; cheese-flow's portable hooks use camelCase ("${camelEvent}"). Per-harness mapping is applied at compile time.`,
+    findings.push(
+      eventFinding(
+        camelEvent,
+        pascalEvent,
+        supportedBy,
+        hookAdapterCount,
+        allAdapters,
         line,
-      });
-    } else {
-      const unsupported = allAdapters.filter((n) => !supportedBy.includes(n));
-      const supportedNames = supportedBy.map(displayName).join(", ");
-      const unsupportedNames = unsupported.map(displayName).join(", ");
-      findings.push({
-        rule: "body-harness-only-hook-event",
-        severity: "warning",
-        message: `body references hook event "${pascalEvent}" which is supported only by ${supportedNames}; ${unsupportedNames} do not expose it.`,
-        line,
-      });
-    }
+      ),
+    );
   }
+  return findings;
+}
 
+function eventFinding(
+  camelEvent: string,
+  pascalEvent: string,
+  supportedBy: HarnessName[],
+  hookAdapterCount: number,
+  allAdapters: HarnessName[],
+  line: number,
+): HarnessCompatFinding {
+  if (supportedBy.length === hookAdapterCount) {
+    return {
+      rule: "body-pascal-hook-event",
+      severity: "warning",
+      message: `body references PascalCase hook event "${pascalEvent}"; cheese-flow's portable hooks use camelCase ("${camelEvent}"). Per-harness mapping is applied at compile time.`,
+      line,
+    };
+  }
+  const unsupported = allAdapters.filter((n) => !supportedBy.includes(n));
+  const supportedNames = supportedBy.map(displayName).join(", ");
+  const unsupportedNames = unsupported.map(displayName).join(", ");
+  return {
+    rule: "body-harness-only-hook-event",
+    severity: "warning",
+    message: `body references hook event "${pascalEvent}" which is supported only by ${supportedNames}; ${unsupportedNames} do not expose it.`,
+    line,
+  };
+}
+
+function collectPathFindings(body: string): HarnessCompatFinding[] {
+  const findings: HarnessCompatFinding[] = [];
   for (const marker of HARNESS_PATH_MARKERS) {
-    const pattern = new RegExp(escapeRegex(marker), "u");
-    const line = findFirstMatchLine(body, pattern);
-    if (line !== undefined) {
-      findings.push({
-        rule: "body-harness-path-marker",
-        severity: "warning",
-        message: `body references harness-specific path "${marker}"; portable skills should use the cheese-flow source layout (e.g. "skills/<name>/SKILL.md") and let adapters project per harness.`,
-        line,
-      });
-    }
+    const line = findFirstMatchLine(body, new RegExp(escapeRegex(marker), "u"));
+    if (line === undefined) continue;
+    findings.push({
+      rule: "body-harness-path-marker",
+      severity: "warning",
+      message: `body references harness-specific path "${marker}"; portable skills should use the cheese-flow source layout (e.g. "skills/<name>/SKILL.md") and let adapters project per harness.`,
+      line,
+    });
   }
-
   return findings;
 }
 

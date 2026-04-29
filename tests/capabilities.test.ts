@@ -10,10 +10,9 @@ import {
 describe("adapter capabilities declarations", () => {
   it("every adapter has a capabilities object", () => {
     for (const [name, adapter] of Object.entries(harnessAdapters)) {
-      expect(
-        adapter.capabilities,
-        `${name} missing capabilities`,
-      ).toBeDefined();
+      expect(typeof adapter.capabilities, `${name} missing capabilities`).toBe(
+        "object",
+      );
       expect(adapter.capabilities.skillFrontmatterKeys).toBeInstanceOf(Set);
       expect(adapter.capabilities.agentFrontmatterKeys).toBeInstanceOf(Set);
       expect(adapter.capabilities.hookEvents).toBeInstanceOf(Set);
@@ -136,10 +135,11 @@ describe("eventSupport", () => {
     const support = eventSupport();
     const hookAdapters = Object.entries(harnessAdapters)
       .filter(([, a]) => a.capabilities.hookEvents.size > 0)
-      .map(([name]) => name);
+      .map(([name]) => name)
+      .sort();
     for (const event of PORTABLE_EVENTS) {
-      const supportedBy = support.get(event) ?? [];
-      expect(supportedBy.length).toBe(hookAdapters.length);
+      const supportedBy = (support.get(event) ?? []).slice().sort();
+      expect(supportedBy).toEqual(hookAdapters);
     }
   });
 

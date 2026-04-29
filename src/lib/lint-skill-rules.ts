@@ -73,7 +73,6 @@ export function lintSkillSource(context: LintSourceContext): LintIssue[] {
 }
 
 function bodyLineOffset(source: string): number {
-  // SKILL.md line N for body line 1 = lines consumed by "---\n<frontmatter>\n---\n".
   const bodyStart = source.search(/\r?\n---\r?\n/u);
   if (bodyStart === -1) return 0;
   const lead = source.slice(0, bodyStart);
@@ -110,16 +109,7 @@ function tryParseFrontmatter(
     return parseSkillFrontmatter(data);
   } catch (error) {
     if (error instanceof z.ZodError) {
-      for (const zodIssue of error.issues) {
-        const fieldPath = zodIssue.path.join(".") || "<frontmatter>";
-        issues.push(
-          issue(
-            "error",
-            `frontmatter:${fieldPath}`,
-            `${fieldPath}: ${zodIssue.message}`,
-          ),
-        );
-      }
+      pushZodIssues(error, issue, issues);
     } else {
       issues.push(
         issue(
@@ -130,6 +120,23 @@ function tryParseFrontmatter(
       );
     }
     return undefined;
+  }
+}
+
+function pushZodIssues(
+  error: z.ZodError,
+  issue: IssueFactory,
+  issues: LintIssue[],
+): void {
+  for (const zodIssue of error.issues) {
+    const fieldPath = zodIssue.path.join(".") || "<frontmatter>";
+    issues.push(
+      issue(
+        "error",
+        `frontmatter:${fieldPath}`,
+        `${fieldPath}: ${zodIssue.message}`,
+      ),
+    );
   }
 }
 
