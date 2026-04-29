@@ -81,6 +81,11 @@ Exit when: a problem statement plus one concrete pain point is articulated.
 Job: anchor every claim to evidence — code, docs, prior research. Probe
 glossary conflicts against any harness convention files (`CONTEXT.md`,
 `CLAUDE.md`, project root agent guides) found on entry.
+**Sharpen fuzzy language**: when the user uses overloaded or ambiguous
+terms ("account", "session", "user"), pause and resolve with a
+canonical-term question (e.g. "you said 'account' — do you mean Customer
+or User? Those are different things"). Resolved terms get logged in the
+state file's `Decisions` block so later modes use the canonical name.
 Invariant: never say "I think the code does X" without a `cheez-*` call.
 Exit when: every load-bearing claim has a citation.
 
@@ -107,10 +112,16 @@ is at least user confidence.
 
 ### Diagnose — symptom inputs
 Job: entry mode for stack traces and "X is broken". Phases:
-`Reproduce → Hypothesize (3-5 ranked, falsifiable, parallel Validate Cycles)
-→ Confirm root cause`. Diagnose is **diagnostic-only** — hand-off to Shape
-("what's the fix?") then Crystallize emits a bug-shaped spec plus optional
-follow-up issues.
+`Build a Loop → Reproduce → Hypothesize (3-5 ranked, falsifiable, parallel
+Validate Cycles) → Confirm root cause`. Phase 0 (**Build a Loop**) is the
+core discipline — agree on a fast, deterministic, falsifiable feedback
+technique (failing test, curl/CLI script, headless browser, replay,
+bisection harness, differential loop, ...) before chasing hypotheses.
+The chosen loop becomes the Reproduction block in the bug-shaped spec, so
+`/fromage` can verify the fix against the same signal the diagnosis used.
+Diagnose is **diagnostic-only** — hand-off to Shape ("what's the fix?")
+then Crystallize emits a bug-shaped spec plus optional follow-up issues.
+Loop menu and discipline in `references/diagnose-mode.md`.
 
 ## The Validate Cycle (cross-mode sub-pattern)
 
@@ -145,13 +156,17 @@ Detail in `references/validate-cycle.md`.
 | Tool | When | Cap |
 | --- | --- | --- |
 | `/briesearch` (via Validate Cycle) | hypothesis needs external evidence | 2/session |
-| `cheez-search` | symbol mention, dependency claim, sibling lookup | unbudgeted |
+| `cheez-search` | symbol mention, dependency claim, callers/imports lookup, sibling lookup | unbudgeted |
 | `cheez-read` | file mention, spec read on entry | unbudgeted |
+
+`cheez-search` covers blast-radius work via its `kind: "callers"` mode and
+`tilth_deps` tool — use it instead of looking for a separate dependency
+skill.
 
 **Parallel sweeps**:
 
-- *Shape Sweep* — one turn fans out 3-4 reads (`cheez-search` + `cheez-deps`
-  plus optional `/briesearch`) before drafting Options.
+- *Shape Sweep* — one turn fans out 3-4 `cheez-search` reads (symbol +
+  callers + deps) plus optional `/briesearch` before drafting Options.
 - *Sketch Sweep* — parallel `cheez-search` for nearby siblings before drafting
   signatures for a module.
 - *Hypothesis Probe (Diagnose)* — parallel Validate Cycles, one per ranked
@@ -210,7 +225,9 @@ Guard conditions are mandatory before Crystallize except where noted:
 - *Sketch gate* — mandatory when the chosen option touches more than one
   module or introduces a new public interface. Skip only for trivial
   single-function changes (the agent must say so).
-- *Grill gate* — mandatory for high-blast-radius decisions (per `cheez-deps`).
+- *Grill gate* — mandatory for high-blast-radius decisions, where blast
+  radius is measured by `cheez-search` callers/imports for the touched
+  symbols.
 - *Open hypotheses must settle* — any Validate Cycle launched but unjudged
   blocks Crystallize unless the user accepts it as `[TBD]`.
 
@@ -234,7 +251,8 @@ Format selection table:
 | Dialogue signal | Output |
 | --- | --- |
 | Any meaningful design discussion | Spec |
-| Side-channel actionables (out-of-scope bugs, follow-ups) | Spec + Issues |
+| Side-channel actionables (out-of-scope bugs, follow-ups) | Spec + Issues (`bug`/`chore` flavor) |
+| Plan broke down into independently-grabbable atoms | Spec + Issues (`slice` flavor — vertical slices, AFK/HITL, blocked-by graph) |
 | Diagnose root cause + fix design | Spec (bug-shaped) + optional Issues |
 | Pure decision-only (no design) | Spec with only `Decisions` populated |
 

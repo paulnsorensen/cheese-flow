@@ -65,8 +65,13 @@ conventions already there.
 Parallel sketches sweep:
   cheez-search query: "dispatch" scope: "src/notifications/"
   cheez-search query: "queue, enqueue" scope: "src/notifications/"
-  cheez-deps path: "src/notifications/index.ts"
+  cheez-search query: "dispatch" kind: "callers" scope: "src/"
+  cheez-search deps: "src/notifications/index.ts"
 ```
+
+`cheez-search` exposes both `tilth_search` (definitions, usages, callers)
+and `tilth_deps` (imports, imported-by). The blast-radius and sibling
+work happens through that single skill.
 
 If the sweep surfaces a sibling that mirrors what we are about to design,
 adopt the sibling's shape unless there is a stated reason to diverge.

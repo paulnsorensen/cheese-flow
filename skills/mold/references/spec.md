@@ -34,6 +34,7 @@ sketches_locked: true|false
 | Users & Pain | no | dialogue surfaced user/business signal |
 | Goals | yes | — |
 | Non-Goals | yes | — |
+| User Stories | yes | for pure-refactor specs, a single maintainer story is fine |
 | Functional Requirements | yes | — |
 | Non-Functional Requirements | yes | — |
 | Context (Existing Landscape, Constraints, Dependencies) | yes | — |
@@ -43,6 +44,7 @@ sketches_locked: true|false
 | Decisions | no | dialogue resolved hard-to-reverse choices |
 | Risks & Mitigations | yes | — |
 | Quality Gates | yes | — |
+| Red/Green Paths | no | dialogue produced end-to-end verification scenarios |
 | Open Questions | yes | — |
 
 Empty conditional sections are dropped at write time. Do not leave headings
@@ -70,6 +72,25 @@ of Explore mode>.
 
 ## Non-Goals
 <What we're explicitly NOT doing>.
+
+## User Stories
+> Format: `As a <user>, I want <feature> so that <benefit>.` Each story
+> carries machine-checkable acceptance criteria so `/fromage` can plan
+> against them without re-asking. Pure-refactor specs can ship with a
+> single maintainer story; the section is never empty.
+
+### US-001: <Title>
+**Story:** As a <user>, I want <feature> so that <benefit>.
+
+**Acceptance criteria:**
+- [ ] <Specific, verifiable criterion — not "works correctly".>
+- [ ] <Another criterion>.
+
+### US-002: <Title>
+**Story:** As a <user>, I want <feature> so that <benefit>.
+
+**Acceptance criteria:**
+- [ ] <...>.
 
 ## Functional Requirements
 - FR-1: The system must <verb> when <condition>.
@@ -145,6 +166,13 @@ def <name>(
 
 ## Quality Gates
 - `<command>` — <what it checks>.
+
+## Red/Green Paths
+> End-to-end verification scenarios. The agent picks one Green path per
+> US-NNN and at least one Red path that exercises the unhappy seam.
+
+- **Green:** <user does X> → <system responds with Y> → <state becomes Z>.
+- **Red:** <user does X without <precondition>> → <system returns <error>> → <no state change>.
 
 ## Open Questions
 - [?] <agent uncertainty>
