@@ -177,6 +177,9 @@ describe("installHarnessArtifacts", () => {
 
     expect(manifest.agents).toEqual([
       "basic-agent.md",
+      "fromage-cook.md",
+      "fromage-cut.md",
+      "fromage-press.md",
       "milknado-executor.md",
       "milknado-planner.md",
     ]);
@@ -191,6 +194,7 @@ describe("installHarnessArtifacts", () => {
       "milknado-plan",
       "nested-dir",
       "research",
+      "test-driven-development",
     ]);
     expect(manifest.commands).toEqual([]);
   });
