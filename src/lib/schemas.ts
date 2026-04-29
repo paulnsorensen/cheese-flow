@@ -7,22 +7,36 @@ const slug = z
   .max(64)
   .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/u, "Must be lowercase kebab-case.");
 
-const skillFrontmatterSchema = z.object({
-  name: slug,
-  description: z.string().min(1).max(1024),
-  license: z.string().min(1).optional(),
-  compatibility: z.string().min(1).max(500).optional(),
-  "allowed-tools": z
-    .union([z.array(z.string().min(1)), z.string().min(1)])
-    .optional(),
-  metadata: z.record(z.string(), z.unknown()).optional(),
-});
+const effortLevelSchema = z.enum(["low", "medium", "high"]);
+const permissionModeSchema = z.enum(["plan", "acceptEdits", "default"]);
+const skillContextSchema = z.enum(["fork", "inline"]);
 
-const commandFrontmatterSchema = z.object({
-  name: slug,
-  description: z.string().min(1).max(1024),
-  "argument-hint": z.string().min(1).max(200).optional(),
-});
+export type EffortLevel = z.infer<typeof effortLevelSchema>;
+export type PermissionMode = z.infer<typeof permissionModeSchema>;
+export type SkillContext = z.infer<typeof skillContextSchema>;
+
+const skillFrontmatterSchema = z
+  .object({
+    license: z.string().min(1).optional(),
+    compatibility: z.string().min(1).max(500).optional(),
+    "allowed-tools": z
+      .union([z.array(z.string().min(1)), z.string().min(1)])
+      .optional(),
+    metadata: z.record(z.string(), z.unknown()).optional(),
+    name: slug,
+    description: z.string().min(1).max(1024),
+    model: z.string().min(1).optional(),
+    context: skillContextSchema.optional(),
+  })
+  .strict();
+
+const commandFrontmatterSchema = z
+  .object({
+    name: slug,
+    description: z.string().min(1).max(1024),
+    "argument-hint": z.string().min(1).max(200).optional(),
+  })
+  .strict();
 
 const harnessModelSchema = z.object({
   default: z.string().min(1),
@@ -32,12 +46,20 @@ const harnessModelSchema = z.object({
   "copilot-cli": z.string().min(1).optional(),
 });
 
-const agentFrontmatterSchema = z.object({
-  name: slug,
-  description: z.string().min(1).max(1024),
-  models: harnessModelSchema,
-  tools: z.array(z.string().min(1)).default([]),
-});
+const agentFrontmatterSchema = z
+  .object({
+    name: slug,
+    description: z.string().min(1).max(1024),
+    models: harnessModelSchema,
+    tools: z.array(z.string().min(1)).default([]),
+    skills: z.array(slug).default([]),
+    color: z.string().min(1).optional(),
+    effort: effortLevelSchema.optional(),
+    disallowedTools: z.array(z.string().min(1)).default([]),
+    permissionMode: permissionModeSchema.optional(),
+    metadata: z.record(z.string(), z.unknown()).optional(),
+  })
+  .strict();
 
 export type SkillFrontmatter = z.infer<typeof skillFrontmatterSchema>;
 export type CommandFrontmatter = z.infer<typeof commandFrontmatterSchema>;
