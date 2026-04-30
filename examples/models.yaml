@@ -1,0 +1,38 @@
+# Example models.yaml for cheese-flow.
+#
+# Drop a copy of this file at the project root as `models.yaml` to pin or
+# override the concrete models used when compiling agent templates.
+#
+# Agent templates reference portable aliases (e.g. `model: sonnet`). This
+# manifest maps those aliases to concrete model IDs per harness, with an
+# optional per-agent escape hatch.
+#
+# Both sections are optional. If `models.yaml` is absent, agents compile
+# with their alias as-written and each harness adapter resolves a default.
+
+# Pins: alias -> concrete model ID, scoped per harness.
+# Applied when an agent's frontmatter references the alias.
+pins:
+  claude-code:
+    opus: claude-opus-4-7
+    sonnet: claude-sonnet-4-6
+    haiku: claude-haiku-4-5
+  codex:
+    gpt-5-codex: gpt-5-codex
+  cursor:
+    sonnet: claude-sonnet-4-6
+  copilot-cli:
+    sonnet: claude-sonnet-4-6
+
+# Overrides: agent-name -> harness -> concrete model ID.
+# Wins over `pins` when set. Use sparingly for one-off escapes — for
+# example, promoting a single agent to opus for a tricky workload, or
+# pinning a known-good model for one harness during a migration.
+#
+# Keys must be kebab-case agent names matching the agent template filename
+# (e.g. `age-correctness` for `agents/age-correctness.md.eta`).
+overrides:
+  age-correctness:
+    claude-code: claude-opus-4-7
+  basic-agent:
+    claude-code: claude-haiku-4-5
