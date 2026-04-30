@@ -120,9 +120,9 @@ export async function installHarnessArtifacts(
   return outputs;
 }
 
-// Removes only the paths this build re-emits, so user-managed files at the
-// harness output root (settings.local.json, personal CLAUDE.md, etc.) are not
-// destroyed when contributors run `npm run build`.
+// Removes only the paths this install step re-emits, so user-managed files at
+// the harness output root (settings.local.json, personal CLAUDE.md, etc.) are
+// not destroyed when contributors run `cheese install` / `npm run install:<harness>`.
 async function cleanGeneratedArtifacts(
   adapter: HarnessAdapter,
   outputRoot: string,
