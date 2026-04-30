@@ -71,7 +71,7 @@ except HashMismatch:
     current_file     — cheez-read(fix.file, section containing anchor lines)
     rationale        — fix.rationale
 
-  record outcome from wolf: applied | skipped(reason)
+  record wolf result: {id, status: "applied"|"skip"|"already_applied", ...}
 ```
 
 Hash mismatch is the ONLY trigger for `cleanup-wolf`. Every other path is
@@ -82,10 +82,12 @@ any other condition.
 
 The wolf receives the fix entry and the current file state at the
 affected region. It attempts to re-anchor via `cheez-search` narrative
-match and applies with `tilth_edit`. Returns:
+match and applies with `tilth_edit`. Returns one of:
 
 ```json
-{"outcome": "applied" | "skipped", "reason": "<if skipped>"}
+{"id": "<fix.id>", "status": "applied", "new_anchor": {...}, "file": "..."}
+{"id": "<fix.id>", "status": "skip", "reason": "<reason>"}
+{"id": "<fix.id>", "status": "already_applied"}
 ```
 
 ## Phase 3 — Emit Report

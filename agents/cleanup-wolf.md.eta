@@ -36,7 +36,7 @@ Follow the full protocol in `skills/cleanup/references/wolf-protocol.md` if it e
 
 2. **Extract tier-1 tokens**: from the narrative and `fix.content`, identify 3-5 structurally distinctive tokens that would survive refactoring (function names, error types, string literals — not line numbers or generic keywords).
 
-3. **Search with cheez-search**: run `tilth_search` on the target file using the tier-1 tokens. Require a unique match — if 0 or 2+ matches are returned, skip.
+3. **Search with cheez-search**: use the `cheez-search` skill on the target file with the tier-1 tokens. Require a unique match — if 0 or 2+ matches are returned, skip.
 
 4. **Verify the match**: use cheez-read to read the matched block. Confirm the content is semantically equivalent to what the original observation described. If the content has already been fixed, return `{status: "already_applied", id: fix.id}`.
 

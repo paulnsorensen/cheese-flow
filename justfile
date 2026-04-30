@@ -57,9 +57,14 @@ test-age-fixtures:
         echo "no fixtures directory at $fixtures_dir" >&2
         exit 1
     fi
+    shopt -s nullglob
+    dim_dirs=("$fixtures_dir"/*/)
+    if [ "${#dim_dirs[@]}" -eq 0 ]; then
+        echo "no fixture subdirectories found under $fixtures_dir" >&2
+        exit 1
+    fi
     failures=0
-    for dim_dir in "$fixtures_dir"/*/; do
-        [ -d "$dim_dir" ] || continue
+    for dim_dir in "${dim_dirs[@]}"; do
         dim=$(basename "$dim_dir")
         expected="$dim_dir/expected.json"
         actual="$dim_dir/actual.json"

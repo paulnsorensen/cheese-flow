@@ -53,16 +53,33 @@ Re-anchoring only; the replacement content is unchanged from the original fix.
 
 On success:
 ```json
-{"applied": true, "new_anchor": {"start": "<line:hash>", "end": "<line:hash>"}}
+{
+  "id": "<fix.id>",
+  "status": "applied",
+  "new_anchor": {"start": "<line:hash>", "end": "<line:hash>"},
+  "file": "<fix.file>"
+}
 ```
 
 On skip:
 ```json
-{"skipped": "<reason>"}
+{
+  "id": "<fix.id>",
+  "status": "skip",
+  "reason": "<reason>"
+}
+```
+
+On already-applied (block already contains the fix content):
+```json
+{
+  "id": "<fix.id>",
+  "status": "already_applied"
+}
 ```
 
 Reasons for skip: `"no_match"`, `"ambiguous_match: N candidates"`,
-`"narrative_too_generic"`.
+`"narrative_too_generic"`, `"semantic_change_required"`.
 
 Wolf returns one of these two shapes and nothing else. No partial applies,
 no semantic rewrites, no suggestions.

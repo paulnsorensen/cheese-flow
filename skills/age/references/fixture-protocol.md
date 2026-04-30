@@ -63,24 +63,28 @@ fail the gate.
 
 ## How `just test-age-fixtures` works
 
-```justfile
-test-age-fixtures:
-    python python/tools/age_fixture_diff.py tests/age-fixtures/
+The `justfile` loops each dim directory and calls the comparator with two
+explicit file arguments:
+
+```bash
+python python/tools/age_fixture_diff.py <dim>/actual.json <dim>/expected.json
 ```
 
 The comparator:
-1. Scans `tests/age-fixtures/` for `<dim>/` subdirectories.
-2. For each dim, reads `expected.json` and locates `actual.json` (written by
-   the dim agent during the test run).
-3. Compares per the tolerances above.
-4. Exits non-zero if any observation fails; prints a diff for each failure.
+1. Receives `actual.json` (written by the dim agent) and `expected.json`
+   (the checked-in fixture).
+2. Verifies the `dimension` field matches.
+3. Matches observations by `id` first (exact), then falls back to fuzzy
+   scoring. Each actual observation is consumed at most once (one-to-one).
+4. Exits non-zero if any expected observation is unmatched; prints a
+   JSON summary with `misses` for each failure.
 
 ---
 
 ## Failure modes
 
-**orphan match** -- `expected.json` references an observation id that has no
-counterpart in `actual.json`. Fail with: `orphan: <id> not found in actual`.
+**missing id** -- `expected.json` references an observation `id` that is
+absent from `actual.json` and no fuzzy match succeeds. Reported in `misses`.
 
 **missing actual.json** -- the dim agent did not write output. Fail with:
 `missing: tests/age-fixtures/<dim>/actual.json`.

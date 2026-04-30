@@ -111,6 +111,7 @@ Written by the orchestrator after Phase 3 synthesis. Consumed by
     {
       "id": "deslop-1",
       "dimension": "deslop",
+      "operation": "tilth_edit",
       "file": "src/bar.ts",
       "anchor": {"start": "88:b2c", "end": "90:e1d"},
       "content": "...",
@@ -123,8 +124,8 @@ Written by the orchestrator after Phase 3 synthesis. Consumed by
 
 ### Rules
 
-- `operation` enum is closed and singular: `tilth_edit`. Do not add
-  alternatives without revising this schema.
+- `operation` is always `"tilth_edit"`. The enum is closed and singular;
+  do not add alternatives without revising this schema.
 - `id` matches the originating observation's `id`.
 - `anchor` and `content` map 1:1 to `tilth_edit`'s `start`, `end`,
   `content` arguments. The cleanup skill calls `tilth_edit` with no

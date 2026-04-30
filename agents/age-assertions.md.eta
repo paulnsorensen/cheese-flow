@@ -42,7 +42,7 @@ Assertions is tests-only: review test files in the diff for weak assertion patte
 
 1. `$RUN_DIR/evidence-pack.yaml`
 2. `references/assertions/protocol.md` — required; contains the canonical weak-assertion catalog
-3. Language-specific reference file under `references/assertions/` matching the primary test framework in the diff (e.g., `jest.md`, `pytest.md`, `rspec.md`)
+3. Language-specific reference file under `references/assertions/` matching the primary language of the changed test files (e.g., `typescript.md`, `python.md`, `go.md`, `rust.md`, `shell.md`)
 
 If `evidence-pack.yaml` is malformed or missing, emit `{"observations": [], "scope_match": false, "summary": "evidence-pack unavailable"}` and stop.
 

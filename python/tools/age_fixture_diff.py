@@ -60,23 +60,41 @@ def _candidate_score(actual: dict, expected: dict) -> float:
     return ratio
 
 
-def _match_expected(expected_obs: dict, actual_obs: list[dict]) -> dict | None:
+def _match_expected(
+    expected_obs: dict, available_actual: list[dict]
+) -> tuple[dict, int] | tuple[None, int]:
+    """Return (match_dict, best_idx) or (None, -1). Caller must remove best_idx."""
+    expected_id = expected_obs.get("id")
+    # Prefer exact id match first.
+    for idx, actual in enumerate(available_actual):
+        if actual.get("id") == expected_id:
+            score = _candidate_score(actual, expected_obs)
+            if score > 0.0:
+                return {
+                    "expected_id": expected_id,
+                    "matched_id": actual.get("id"),
+                    "narrative_ratio": round(score, 3),
+                    "expected_anchor": expected_obs.get("anchor"),
+                    "matched_anchor": actual.get("anchor"),
+                }, idx
+    # Fall back to best fuzzy match among remaining actuals.
     best_idx = -1
     best_score = 0.0
-    for idx, actual in enumerate(actual_obs):
+    for idx, actual in enumerate(available_actual):
         score = _candidate_score(actual, expected_obs)
         if score > best_score:
             best_score = score
             best_idx = idx
     if best_idx < 0:
-        return None
+        return None, -1
+    actual = available_actual[best_idx]
     return {
-        "expected_id": expected_obs.get("id"),
-        "matched_id": actual_obs[best_idx].get("id"),
+        "expected_id": expected_id,
+        "matched_id": actual.get("id"),
         "narrative_ratio": round(best_score, 3),
         "expected_anchor": expected_obs.get("anchor"),
-        "matched_anchor": actual_obs[best_idx].get("anchor"),
-    }
+        "matched_anchor": actual.get("anchor"),
+    }, best_idx
 
 
 def diff(actual: dict, expected: dict) -> dict:
@@ -88,21 +106,23 @@ def diff(actual: dict, expected: dict) -> dict:
             "expected_dimension": expected.get("dimension"),
         }
     expected_obs = expected.get("observations") or []
-    actual_obs = actual.get("observations") or []
+    # Work on a mutable copy so each actual is consumed at most once.
+    available_actual: list[dict] = list(actual.get("observations") or [])
     matches: list[dict] = []
     misses: list[dict] = []
     for obs in expected_obs:
-        match = _match_expected(obs, actual_obs)
+        match, best_idx = _match_expected(obs, available_actual)
         if match is None:
             misses.append({"expected_id": obs.get("id"), "anchor": obs.get("anchor")})
         else:
             matches.append(match)
+            available_actual.pop(best_idx)
     return {
         "ok": not misses,
         "dimension": expected.get("dimension"),
         "matches": matches,
         "misses": misses,
-        "actual_count": len(actual_obs),
+        "actual_count": len(actual.get("observations") or []),
         "expected_count": len(expected_obs),
     }
 
