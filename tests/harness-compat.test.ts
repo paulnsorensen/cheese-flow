@@ -144,6 +144,7 @@ describe("checkFrontmatterPortability", () => {
         agentFrontmatterKeys: new Set<string>(),
         hookEvents: new Set<string>(),
         toolNames: new Set<string>(),
+        bootstrapHook: false,
       },
     } as HarnessAdapter;
     registry["fifth"] = fifth;

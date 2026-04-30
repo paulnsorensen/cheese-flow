@@ -31,12 +31,11 @@ Run the orchestration inline, but keep raw evidence out of the main context:
 3. Have fetchers write findings to scratch files under `$TMPDIR`.
 4. Have one synthesis sub-agent read those scratch files and return the final
    answer.
-5. Write the full report to `<harness>/research/<slugified-topic>.md`.
+5. Write the full report to `.cheese/research/<slugified-topic>.md`.
 6. Delete the scratch directory after the report is written.
 
-`<harness>` is the active harness output root — `.claude` for Claude Code,
-`.codex` for Codex, etc. The caller should see only the routing decision,
-fetcher status, synthesis, and the report path.
+The caller should see only the routing decision, fetcher status, synthesis,
+and the report path.
 
 ## Arguments
 
@@ -255,7 +254,7 @@ Synthesis task:
 After the synthesis block, append a fenced `report-body` block containing a
 full markdown report with source URLs, file refs, and repo links. The
 orchestration layer writes that report body verbatim to
-`<harness>/research/<slug>.md`.
+`.cheese/research/<slug>.md`.
 
 ## Cleanup
 

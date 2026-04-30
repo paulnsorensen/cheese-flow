@@ -21,15 +21,12 @@ dispatch occurs.
 | Input shape | Example | Target skill |
 |---|---|---|
 | Feature description / rough idea | "add dark mode", "support webhooks" | `/mold` (if non-trivial) → `/cook` |
-| Spec path | `<harness>/specs/add-dark-mode.md` | `/cook` |
+| Spec path | `.cheese/specs/add-dark-mode.md` | `/cook` |
 | PR reference | `PR#142`, `https://github.com/.../pull/142` | `/age` |
 | Issue reference | `#87`, `issue 87` | triage → likely `/mold` |
 | Bug report / stack trace | pasted error, reproduction steps | debug flow (investigate → `/cook`) |
 | File path or glob | `src/auth/login.ts`, `src/**/*.tsx` | focused review (`/age --scope`) |
 | Research question | "what's the best rate limiter library?" | `/briesearch` |
-
-`<harness>` is the active harness output root — `.claude` for Claude Code,
-`.codex` for Codex.
 
 ## Dispatch contract
 

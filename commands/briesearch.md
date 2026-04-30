@@ -1,6 +1,6 @@
 ---
 name: briesearch
-description: Multi-source research orchestrator. Routes a question across Tavily, Context7 library docs, GitHub, and in-repo tools, writes findings to <harness>/research/<slug>.md, and returns a compact synthesis to the main context.
+description: Multi-source research orchestrator. Routes a question across Tavily, Context7 library docs, GitHub, and in-repo tools, writes findings to .cheese/research/<slug>.md, and returns a compact synthesis to the main context.
 argument-hint: "<question | library | API | dependency>"
 ---
 
@@ -8,9 +8,8 @@ argument-hint: "<question | library | API | dependency>"
 
 `/briesearch` is the research orchestrator. It routes a question across
 multiple information sources in parallel, writes full findings to
-`<harness>/research/<slug>.md`, and returns a compact synthesis back to the
-main context so it does not pollute the caller's window. `<harness>` is the
-active harness output root — `.claude` for Claude Code, `.codex` for Codex.
+`.cheese/research/<slug>.md`, and returns a compact synthesis back to the
+main context so it does not pollute the caller's window.
 
 ## Execution
 
@@ -36,7 +35,7 @@ merged; conflicts are flagged in the synthesis.
 
 ## Output contract
 
-- **Full report** written to `<harness>/research/<slug>.md`:
+- **Full report** written to `.cheese/research/<slug>.md`:
   - Question and scope.
   - Source-by-source findings with inline citations.
   - Conflicts, caveats, and freshness notes.

@@ -252,8 +252,7 @@ silent overwrite.
 
 ## Atomic write
 
-Stage to `<harness>/.mold-staging-<run_id>/` (a sibling of the destination,
+Stage to `.cheese/.mold-staging-<run_id>/` (a sibling of the destination,
 guaranteed same filesystem) and `mv` into place. This ensures `mv` is an
 atomic rename rather than a cross-filesystem copy+delete. On failure, the
-staging directory is removed and no partial files exist in the harness output
-root.
+staging directory is removed and no partial files exist in `.cheese/`.

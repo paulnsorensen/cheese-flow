@@ -1,0 +1,8 @@
+{
+  "sessionStart": [
+    {
+      "type": "command",
+      "command": "bash hooks/cheese-bootstrap.sh"
+    }
+  ]
+}

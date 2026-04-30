@@ -53,5 +53,6 @@ export const claudeCodeAdapter: HarnessAdapter = {
       "WebFetch",
       "TodoWrite",
     ]),
+    bootstrapHook: true,
   },
 };

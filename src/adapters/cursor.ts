@@ -108,5 +108,6 @@ export const cursorAdapter: HarnessAdapter = {
     agentFrontmatterKeys: new Set<string>(),
     hookEvents: new Set<string>(),
     toolNames: new Set<string>(),
+    bootstrapHook: false,
   },
 };

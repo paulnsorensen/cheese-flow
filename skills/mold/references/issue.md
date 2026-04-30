@@ -150,9 +150,9 @@ offers:
 
 ```
 Filed:
-  - <harness>/specs/<slug>.md       (1 spec)
-  - <harness>/issues/<slug>-001.md  (1 issue)
-  - <harness>/issues/<slug>-002.md  (1 issue)
+  - .cheese/specs/<slug>.md       (1 spec)
+  - .cheese/issues/<slug>-001.md  (1 issue)
+  - .cheese/issues/<slug>-002.md  (1 issue)
 
 File these as GitHub issues now? (y/N)
 ```
