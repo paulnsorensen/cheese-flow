@@ -27,7 +27,9 @@ const overrideEntrySchema = z
 const modelManifestSchema = z
   .object({
     pins: pinsByHarnessSchema.optional(),
-    overrides: z.record(z.string().min(1), overrideEntrySchema).optional(),
+    overrides: z
+      .record(z.string().regex(/^[a-z][a-z0-9-]*$/), overrideEntrySchema)
+      .optional(),
   })
   .strict();
 
@@ -46,8 +48,16 @@ export async function readModelManifest(
     if (isFileNotFound(error)) return null;
     throw error;
   }
-  const parsed = parseYaml(raw) ?? {};
-  return modelManifestSchema.parse(parsed);
+  try {
+    const parsed = parseYaml(raw) ?? {};
+    return modelManifestSchema.parse(parsed);
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Unknown parse/validation error";
+    throw new Error(`Invalid models.yaml at ${manifestPath}: ${message}`, {
+      cause: error,
+    });
+  }
 }
 
 export function applyModelManifest(input: {
