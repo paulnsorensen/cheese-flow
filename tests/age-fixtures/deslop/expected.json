@@ -1,0 +1,17 @@
+{
+  "dimension": "deslop",
+  "stake": "medium",
+  "scope_match": true,
+  "observations": [
+    {
+      "id": "deslop-1",
+      "file": "src/notifications/email-sender.ts",
+      "anchor": { "start": "10:000", "end": "11:000" },
+      "bucket": "high",
+      "narrative": "Catch block with bare comment swallows mailer errors silently, matching the swallowed_catch tier-1 deslop pattern.",
+      "evidence": [
+        "src/notifications/email-sender.ts:10 catch (e) { /* ignore */ } — swallowed_catch pattern"
+      ]
+    }
+  ]
+}

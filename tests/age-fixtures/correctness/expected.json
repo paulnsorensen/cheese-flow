@@ -1,0 +1,17 @@
+{
+  "dimension": "correctness",
+  "stake": "high",
+  "scope_match": true,
+  "observations": [
+    {
+      "id": "correctness-1",
+      "file": "src/users/handler.ts",
+      "anchor": { "start": "13:000", "end": "14:000" },
+      "bucket": "high",
+      "narrative": "Catch block swallows the db error and returns null, hiding fetch failures from all callers.",
+      "evidence": [
+        "src/users/handler.ts:13 catch (e) { return null; } swallows db.users.find rejection"
+      ]
+    }
+  ]
+}

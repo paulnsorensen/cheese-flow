@@ -1,0 +1,17 @@
+{
+  "dimension": "security",
+  "stake": "high",
+  "scope_match": true,
+  "observations": [
+    {
+      "id": "security-1",
+      "file": "src/auth/middleware.ts",
+      "anchor": { "start": "4:000", "end": "4:000" },
+      "bucket": "high",
+      "narrative": "Hardcoded production API key on the added line grants permanent admin bypass without rotation or audit trail.",
+      "evidence": [
+        "src/auth/middleware.ts:4 ADMIN_API_KEY = \"sk-prod-8f2a91bc4d7e3051fa6c\" literal secret in diff hunk"
+      ]
+    }
+  ]
+}

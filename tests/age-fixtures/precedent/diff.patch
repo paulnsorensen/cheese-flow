@@ -1,0 +1,11 @@
+--- a/src/sessions/session-store.ts
++++ b/src/sessions/session-store.ts
+@@ -12,6 +12,10 @@ export class SessionStore {
+   async get(sessionId: string): Promise<Session | null> {
+     return this.cache.get(sessionId) ?? null;
+   }
++
++  async invalidateAll(): Promise<void> {
++    this.cache.clear();
++  }
+ }

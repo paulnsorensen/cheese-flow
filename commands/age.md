@@ -1,59 +1,73 @@
 ---
 name: age
-description: Staff Engineer code review. Runs six parallel review dimensions (safety, architecture, encapsulation, YAGNI, spec, history risk) and returns a unified scored report with only findings at confidence >= 50.
-argument-hint: "[--comprehensive] [--scope <path>] [<diff or change ref>]"
+description: Staff Engineer code review. Runs eight orthogonal LLM dimensions (correctness, security, complexity, encapsulation, spec, precedent, deslop, assertions) over the diff and emits a stake-weighted report plus hash-anchored sidecar JSON consumed by /cleanup and /fromage cook.
+argument-hint: "[<ref>] [--scope <path>] [--comprehensive]"
 ---
 
 # /age
 
-`/age` is a Staff Engineer code review. It evaluates code across six
-independent dimensions in parallel and returns a unified Age Report with
-scored findings. Only findings at confidence >= 50 are surfaced.
+`/age` is a Staff Engineer code review. It surfaces where to look and why,
+with verifiable evidence per observation, so you can decide what is actually
+a problem instead of accepting a verdict on faith.
 
-## Modes
+Eight orthogonal dimensions fan out in parallel over your diff. Each dim
+emits evidence-backed observations. The orchestrator synthesizes a
+stake-weighted report and two sidecar JSON files for downstream automation.
 
-| Mode | Trigger | Scope |
+## Execution
+
+Invoke the `age` skill with `$ARGUMENTS`. The skill owns evidence pre-fetch,
+parallel dim dispatch, synthesis, sidecar emission, and cleanup.
+
+Do not reimplement orchestration in this command. This file is the
+user-facing contract; `skills/age/SKILL.md` is the implementation.
+
+## Dimensions
+
+| Dim | Stake | What it reviews |
 |---|---|---|
-| Focused (default) | no flag | Recent changes on the current branch, or an explicit diff / change ref |
-| Comprehensive | `--comprehensive` | Full module audit against the spec and engineering principles |
-| Scoped | `--scope <path>` | A specific file, folder, or glob |
+| `correctness` | high | Silent failures, error swallowing, null misuse, ordering bugs |
+| `security` | high | Diff-scoped auth bypass, secrets, taint-shaped concerns |
+| `encapsulation` | high | Sliced Bread compliance, cross-slice imports, public-API width |
+| `spec` | high | Drift between `.cheese/specs/<slug>.md` and touched code |
+| `complexity` | medium | Function ≤40 lines, file ≤300, params ≤4, nesting ≤3 |
+| `deslop` | medium | AI anti-patterns, dead code, speculative abstractions |
+| `assertions` | medium | Weak test assertions, existence checks, catch-all errors |
+| `precedent` | advisory | Symbol-level history, concurrent PRs touching same paths |
 
-## Review dimensions
+All 8 dims fire on every run. Dims whose rubric does not apply emit
+`scope_match: false` and are tallied but not rendered as sections.
 
-Each dimension will run as an independent parallel sub-agent. All findings
-use a 0-100 confidence scale; only >= 50 is surfaced to the user.
+## Output Contract
 
-| Dimension | Sub-agent | What it looks for |
-|---|---|---|
-| Safety | `age-safety` | Bugs, security holes, silent failures, unchecked inputs |
-| Architecture | `age-arch` | Complexity budgets (lines, params, nesting), Sliced Bread organization |
-| Encapsulation | `age-encap` | Leaky abstractions, overly wide public APIs, cross-boundary imports |
-| YAGNI / de-slop | `age-yagni` | Unjustified dead code, speculative abstractions, AI-generated noise |
-| Spec adherence | `age-spec` | Drift from `.cheese/specs/<slug>.md`, monkey patches, shortcuts |
-| History risk | `age-history` | Per-file risk modifiers derived from git blame / churn patterns |
+Three artifacts written to `.cheese/age/<slug>.*`:
 
-## Output contract
+- **`<slug>.md`** — stake-weighted Markdown report:
+  - Orientation paragraph (what the diff does, factual)
+  - Tally line (ran 8; N had findings)
+  - High-stake dims → medium-stake dims → advisory dims
+  - Cross-dimension callouts (loci where 2+ dims agree)
+- **`<slug>.fixes.json`** — hash-anchored, mechanically-applicable fixes
+  ready for `tilth_edit`. Consumed by `/cleanup`.
+- **`<slug>.suggestions.json`** — narrative-shaped guidance keyed by
+  observation `id`. Consumed by `/fromage cook`.
 
-`/age` returns a single Age Report with:
+Confidence is bucketed (`low | med | high`). No numeric scores anywhere
+in the output.
 
-- A one-line summary per dimension.
-- Findings grouped by severity, each including the dimension, score,
-  rationale, and a `file_path:line_number` anchor the user can jump to.
-- History-risk modifiers applied to sibling findings (not surfaced on
-  their own).
-- A clear "no significant findings" result if all dimensions return
-  scores below 50.
+## Hand-off
 
-## Deferred behavior
+`/age` performs no writes to production source files. After the report
+prints, the next step is yours:
 
-> **Scaffold notice.** Parallel sub-agent dispatch is not yet wired. This
-> file documents the review contract. The current implementation should
-> describe what `/age` would do and stop — it does not yet spawn the six
-> dimension agents.
+```
+/cleanup <slug>                        — apply mechanical fixes
+/fromage cook --suggestions <slug>     — act on judgment guidance
+```
 
-The next iteration will:
+## When to Use
 
-- Spawn the six dimension sub-agents in parallel via the `Agent` tool.
-- Aggregate findings, apply the 50-point surface threshold, and merge
-  history risk modifiers into sibling findings.
-- Emit the unified Age Report as a single response.
+- Before merging a PR you want a structured map of before approving.
+- After `/cook` to catch correctness and encapsulation issues before press.
+- In `/fromage` as the gate between cook and press phases.
+- Anytime you want evidence-backed observations rather than a verdict.

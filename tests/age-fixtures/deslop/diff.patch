@@ -1,0 +1,13 @@
+--- a/src/notifications/email-sender.ts
++++ b/src/notifications/email-sender.ts
+@@ -5,9 +5,15 @@ import { mailer } from "./mailer-client";
+ import { logger } from "../common/logger";
+
+ export async function sendWelcomeEmail(userId: string, email: string): Promise<void> {
+-  await mailer.send({ to: email, template: "welcome", context: { userId } });
++  try {
++    await mailer.send({ to: email, template: "welcome", context: { userId } });
++  } catch (e) {
++    /* ignore */
++  }
+ }

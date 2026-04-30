@@ -1,0 +1,17 @@
+{
+  "dimension": "precedent",
+  "stake": "advisory",
+  "scope_match": true,
+  "observations": [
+    {
+      "id": "precedent-1",
+      "file": "src/sessions/session-store.ts",
+      "anchor": { "start": "15:000", "end": "17:000" },
+      "bucket": "med",
+      "narrative": "Path src/sessions/session-store.ts carries 3 firefight commits (revert, hotfix, hotfix) suggesting cache-clearing logic has previously caused incidents.",
+      "evidence": [
+        "src/sessions/session-store.ts: 3 firefight commits found in path history (revert/hotfix pattern)"
+      ]
+    }
+  ]
+}
