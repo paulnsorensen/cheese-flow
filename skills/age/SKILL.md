@@ -214,19 +214,8 @@ rm -rf "$RUN_DIR"
 
 ## Rules
 
-- File I/O from dim agents goes through `cheez-read` / `cheez-search` /
-  `cheez-write` skills (NFR-1). Host `Read` / `Grep` / `Edit` is forbidden
-  on every harness. Direct `mcp__tilth__*` access is harness-conditional:
-  - **Claude Code** — `skills:` is a structural binding. Exclude
-    `mcp__tilth__*` from `tools:`; the cheez wrappers carry the load.
-    Optionally add `disallowedTools: [mcp__tilth__tilth_read, mcp__tilth__tilth_search]`
-    to make tampering loud.
-  - **Codex / Cursor / Copilot CLI** — `skills:` is emitted as a prompt
-    contract appendix; the harness cannot proxy skill calls back into
-    MCP. Co-list `mcp__tilth__tilth_read` and `mcp__tilth__tilth_search`
-    in `tools:` so the cheez wrappers have something to call. Direct
-    tilth writes (`tilth_edit`) remain forbidden — only `/cleanup` may
-    write, via its own `cleanup-wolf` agent.
+- File I/O from dim agents via `cheez-read` / `cheez-search` (NFR-1).
+  No host `Read` / `Grep` / `Edit`, no direct `tilth_edit`.
 - Hash anchors use tilth `line:hash` strings natively (NFR-2, D-24).
 - No numeric scores anywhere in user-facing output (D-5).
 - Confidence rendered as `low | med | high` bucket only.
