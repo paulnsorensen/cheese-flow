@@ -12,7 +12,7 @@ install:
 
 # Full build with autofix: format -> lint -> typecheck -> build -> tests (for devs before PRs)
 build:
-    rm -rf dist coverage .claude .codex .cursor .copilot
+    rm -rf dist coverage
     npm install
     npm run format
     npm run lint:fix
@@ -27,7 +27,7 @@ build:
 
 # Full build no autofix: format check -> lint check -> typecheck -> build -> tests (for CI)
 build-ci:
-    rm -rf dist coverage .claude .codex .cursor .copilot
+    rm -rf dist coverage
     npm ci
     npm run format:check
     npm run lint:check
@@ -50,7 +50,7 @@ test-py *args:
 
 # Clean build artifacts and caches
 clean:
-    rm -rf dist coverage .claude .codex .cursor .copilot
+    rm -rf dist coverage
     rm -rf .pytest_cache .ruff_cache htmlcov .coverage node_modules/.cache
     find . -type d -name __pycache__ -prune -exec rm -rf {} +
     find . -type f -name "*.pyc" -delete
