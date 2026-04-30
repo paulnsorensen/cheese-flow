@@ -5,7 +5,7 @@ import path from "node:path";
 import { promisify } from "node:util";
 import { afterEach, describe, expect, it } from "vitest";
 import {
-  installHarnessArtifacts,
+  compileHarnessBundles,
   previewAgent,
   readSkill,
 } from "../src/lib/compiler.js";
@@ -27,7 +27,7 @@ afterEach(async () => {
   );
 });
 
-describe("installHarnessArtifacts", () => {
+describe("compileHarnessBundles", () => {
   it("compiles the basic agent template for Claude Code and Codex", async () => {
     const projectRoot = await mkdtemp(path.join(os.tmpdir(), "cheese-flow-"));
     createdDirectories.push(projectRoot);
@@ -38,7 +38,7 @@ describe("installHarnessArtifacts", () => {
       recursive: true,
     });
 
-    const outputs = await installHarnessArtifacts({
+    const outputs = await compileHarnessBundles({
       projectRoot,
       harnesses: ["claude-code", "codex"],
     });
@@ -101,7 +101,7 @@ describe("installHarnessArtifacts", () => {
       recursive: true,
     });
 
-    await installHarnessArtifacts({
+    await compileHarnessBundles({
       projectRoot,
       harnesses: ["claude-code"],
     });
@@ -139,7 +139,7 @@ describe("installHarnessArtifacts", () => {
       recursive: true,
     });
 
-    await installHarnessArtifacts({
+    await compileHarnessBundles({
       projectRoot,
       harnesses: ["codex"],
     });
@@ -204,7 +204,7 @@ describe("installHarnessArtifacts", () => {
     );
 
     await expect(
-      installHarnessArtifacts({
+      compileHarnessBundles({
         projectRoot,
         harnesses: ["claude-code"],
       }),
@@ -242,7 +242,7 @@ describe("installHarnessArtifacts", () => {
       "utf8",
     );
 
-    await installHarnessArtifacts({
+    await compileHarnessBundles({
       projectRoot,
       harnesses: ["claude-code"],
     });
@@ -304,7 +304,7 @@ describe("installHarnessArtifacts", () => {
       });
     });
 
-    await installHarnessArtifacts({ projectRoot, harnesses: ["cursor"] });
+    await compileHarnessBundles({ projectRoot, harnesses: ["cursor"] });
 
     const cursorRoot = path.join(projectRoot, ".cursor");
 
@@ -362,7 +362,7 @@ describe("installHarnessArtifacts", () => {
       "utf8",
     );
 
-    await installHarnessArtifacts({ projectRoot, harnesses: ["copilot-cli"] });
+    await compileHarnessBundles({ projectRoot, harnesses: ["copilot-cli"] });
 
     const copilotRoot = path.join(projectRoot, ".copilot");
 
@@ -414,7 +414,7 @@ describe("installHarnessArtifacts", () => {
       "utf8",
     );
 
-    await installHarnessArtifacts({
+    await compileHarnessBundles({
       projectRoot,
       harnesses: ["claude-code", "codex"],
     });
@@ -466,7 +466,7 @@ describe("installHarnessArtifacts", () => {
       "utf8",
     );
 
-    await installHarnessArtifacts({ projectRoot, harnesses: ["claude-code"] });
+    await compileHarnessBundles({ projectRoot, harnesses: ["claude-code"] });
 
     const pluginJson = JSON.parse(
       await readFile(
@@ -497,7 +497,7 @@ describe("installHarnessArtifacts", () => {
     });
 
     await expect(
-      installHarnessArtifacts({ projectRoot, harnesses: ["claude-code"] }),
+      compileHarnessBundles({ projectRoot, harnesses: ["claude-code"] }),
     ).rejects.toThrow();
   });
 
@@ -516,7 +516,7 @@ describe("installHarnessArtifacts", () => {
     });
 
     await expect(
-      installHarnessArtifacts({ projectRoot, harnesses: ["claude-code"] }),
+      compileHarnessBundles({ projectRoot, harnesses: ["claude-code"] }),
     ).rejects.toThrow();
   });
 
@@ -539,11 +539,11 @@ describe("installHarnessArtifacts", () => {
     await writeFile(userSettingsPath, '{"theme":"dark"}\n', "utf8");
     await writeFile(userClaudeMdPath, "# user notes\n", "utf8");
 
-    await installHarnessArtifacts({
+    await compileHarnessBundles({
       projectRoot,
       harnesses: ["claude-code"],
     });
-    await installHarnessArtifacts({
+    await compileHarnessBundles({
       projectRoot,
       harnesses: ["claude-code"],
     });
@@ -564,7 +564,7 @@ describe("installHarnessArtifacts", () => {
       recursive: true,
     });
 
-    await installHarnessArtifacts({
+    await compileHarnessBundles({
       projectRoot,
       harnesses: ["claude-code"],
     });
@@ -577,7 +577,7 @@ describe("installHarnessArtifacts", () => {
     );
     await writeFile(staleAgentPath, "stale\n", "utf8");
 
-    await installHarnessArtifacts({
+    await compileHarnessBundles({
       projectRoot,
       harnesses: ["claude-code"],
     });
@@ -585,10 +585,45 @@ describe("installHarnessArtifacts", () => {
     await expect(readFile(staleAgentPath, "utf8")).rejects.toThrow();
   });
 
-  it("keeps help on -h and uses -H for harness selection", async () => {
+  it("compiles every supported harness when --harness is omitted", async () => {
+    const projectRoot = await mkdtemp(
+      path.join(os.tmpdir(), "cheese-flow-cli-"),
+    );
+    createdDirectories.push(projectRoot);
+    await cp(path.resolve("agents"), path.join(projectRoot, "agents"), {
+      recursive: true,
+    });
+    await cp(path.resolve("skills"), path.join(projectRoot, "skills"), {
+      recursive: true,
+    });
+
     const { stdout } = await execFileAsync(
       "npx",
-      ["tsx", "src/index.ts", "install", "--help"],
+      ["tsx", "src/index.ts", "compile", "--project-root", projectRoot],
+      {
+        cwd: path.resolve("."),
+      },
+    );
+
+    const compiledLines = stdout
+      .trim()
+      .split("\n")
+      .filter((line) => line.startsWith("Compiled harness bundle:"));
+    expect(compiledLines).toHaveLength(4);
+    expect(compiledLines).toEqual(
+      expect.arrayContaining([
+        `Compiled harness bundle: ${path.join(projectRoot, ".claude")}`,
+        `Compiled harness bundle: ${path.join(projectRoot, ".codex")}`,
+        `Compiled harness bundle: ${path.join(projectRoot, ".cursor")}`,
+        `Compiled harness bundle: ${path.join(projectRoot, ".copilot")}`,
+      ]),
+    );
+  });
+
+  it("keeps help on -h and uses -H for harness selection on compile", async () => {
+    const { stdout } = await execFileAsync(
+      "npx",
+      ["tsx", "src/index.ts", "compile", "--help"],
       {
         cwd: path.resolve("."),
       },
@@ -596,6 +631,28 @@ describe("installHarnessArtifacts", () => {
 
     expect(stdout).toContain("-h, --help");
     expect(stdout).toContain("-H, --harness <name...>");
+  });
+
+  it("reserves install for future local installation", async () => {
+    const error = await execFileAsync(
+      "npx",
+      ["tsx", "src/index.ts", "install"],
+      {
+        cwd: path.resolve("."),
+      },
+    ).then(
+      () => undefined,
+      (caughtError): { code?: number; stderr: string } =>
+        caughtError as { code?: number; stderr: string },
+    );
+
+    expect(error?.code).toBe(1);
+    expect(error?.stderr).toContain(
+      "`cheese install` is reserved for local harness installation and is not implemented yet.",
+    );
+    expect(error?.stderr).toContain(
+      "Use `cheese compile` to emit harness bundles.",
+    );
   });
 });
 

@@ -2,7 +2,7 @@ import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { installHarnessArtifacts } from "../src/lib/compiler.js";
+import { compileHarnessBundles } from "../src/lib/compiler.js";
 import { parseCommandFrontmatter } from "../src/lib/schemas.js";
 
 const createdDirectories: string[] = [];
@@ -39,7 +39,7 @@ async function readManifest(
   ) as { commands: string[] };
 }
 
-describe("copyCommands", () => {
+describe("compileHarnessBundles command output", () => {
   it("copies command files and lists them in the manifest for both harnesses", async () => {
     const projectRoot = await makeProjectRoot("cheese-flow-commands-");
     await seedAgentsAndSkills(projectRoot);
@@ -60,7 +60,7 @@ describe("copyCommands", () => {
       "utf8",
     );
 
-    await installHarnessArtifacts({
+    await compileHarnessBundles({
       projectRoot,
       harnesses: ["claude-code", "codex"],
     });
@@ -87,7 +87,7 @@ describe("copyCommands", () => {
     );
 
     await expect(
-      installHarnessArtifacts({ projectRoot, harnesses: ["claude-code"] }),
+      compileHarnessBundles({ projectRoot, harnesses: ["claude-code"] }),
     ).rejects.toThrow();
   });
 
@@ -102,7 +102,7 @@ describe("copyCommands", () => {
     );
 
     await expect(
-      installHarnessArtifacts({ projectRoot, harnesses: ["claude-code"] }),
+      compileHarnessBundles({ projectRoot, harnesses: ["claude-code"] }),
     ).rejects.toThrow(/must match frontmatter name/u);
   });
 
@@ -126,7 +126,7 @@ describe("shipped command scaffolds", () => {
       recursive: true,
     });
 
-    await installHarnessArtifacts({
+    await compileHarnessBundles({
       projectRoot,
       harnesses: ["claude-code", "codex"],
     });

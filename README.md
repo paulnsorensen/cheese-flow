@@ -22,20 +22,21 @@ Opinionated scaffolding for portable agents and skills that can be compiled into
 - `agents/` — harness-agnostic Eta markdown templates
 - `skills/` — portable Agent Skills definitions
 - `references/` — long-form architectural references (Sliced Bread, etc.)
-- `.claude-plugin/` — Claude Code + Copilot CLI install manifest
-- `.cursor-plugin/` — Cursor install manifest
+- `.claude-plugin/` — Claude Code + Copilot CLI plugin manifest
+- `.cursor-plugin/` — Cursor plugin manifest
 - `.mcp.json` — shared MCP server declarations (tilth, Context7, Tavily)
-- `.claude/` / `.codex/` / `.cursor/` / `.copilot/` — generated install outputs (gitignored)
+- `.claude/` / `.codex/` / `.cursor/` / `.copilot/` — generated harness bundles (gitignored)
 
 ## Getting started
 
 ```bash
 npm install
 npm run build
-npm run install:claude
-npm run install:codex
-npm run install:cursor
-npm run install:copilot
+npm run compile:claude
+npm run compile:codex
+npm run compile:cursor
+npm run compile:copilot
+npm run compile:all
 ```
 
 Or use the repository automation entrypoints:
@@ -48,13 +49,16 @@ just build-ci
 Or target specific harnesses directly:
 
 ```bash
-npx tsx src/index.ts install --harness claude-code
-npx tsx src/index.ts install --harness codex
-npx tsx src/index.ts install --harness cursor
-npx tsx src/index.ts install --harness copilot-cli
-npx tsx src/index.ts install --harness claude-code,codex,cursor,copilot-cli
+npx tsx src/index.ts compile
+npx tsx src/index.ts compile --harness claude-code
+npx tsx src/index.ts compile --harness codex
+npx tsx src/index.ts compile --harness cursor
+npx tsx src/index.ts compile --harness copilot-cli
+npx tsx src/index.ts compile --harness claude-code,codex,cursor,copilot-cli
 npx tsx src/index.ts milknado
 ```
+
+`cheese compile` emits harness bundles for repo authors and CI. `cheese install` is reserved for future local harness installation.
 
 ## Installing cheese-flow as a plugin
 
@@ -77,7 +81,7 @@ Once the package is built or published, the same TUI demo is available through:
 npx cheese-flow milknado
 ```
 
-## What `install` does
+## What `compile` does
 
 - Validates Agent Skills frontmatter with Zod
 - Validates agent template metadata with Zod

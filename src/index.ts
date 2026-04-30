@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import { Command, InvalidArgumentError } from "commander";
 import { harnessNames } from "./adapters/index.js";
 import type { HarnessName } from "./domain/harness.js";
-import { installHarnessArtifacts } from "./lib/compiler.js";
+import { compileHarnessBundles } from "./lib/compiler.js";
 import {
   formatReport,
   hasBlockingFailure,
@@ -38,6 +38,34 @@ function parseHarness(value: string): HarnessName {
   );
 }
 
+type CompileCommandOptions = {
+  harness: HarnessName[];
+  projectRoot: string;
+};
+
+function resolveHarnessTargets(harness: HarnessName[]): HarnessName[] {
+  return harness.length > 0 ? Array.from(new Set(harness)) : harnessNames;
+}
+
+async function runCompileCommand(
+  options: CompileCommandOptions,
+): Promise<void> {
+  const outputs = await compileHarnessBundles({
+    projectRoot: path.resolve(options.projectRoot),
+    harnesses: resolveHarnessTargets(options.harness),
+  });
+
+  for (const output of outputs) {
+    process.stdout.write(`Compiled harness bundle: ${output}\n`);
+  }
+}
+
+function failInstallPlaceholder(): never {
+  throw new Error(
+    "`cheese install` is reserved for local harness installation and is not implemented yet. Use `cheese compile` to emit harness bundles.",
+  );
+}
+
 const program = new Command();
 
 program
@@ -48,13 +76,13 @@ program
   .version("0.1.0");
 
 program
-  .command("install")
+  .command("compile")
   .description(
-    "Compile the repository skill and agent sources for one or more target harnesses.",
+    "Compile the repository skill and agent sources into one or more harness bundles.",
   )
   .option(
     "-H, --harness <name...>",
-    "Harness target(s) to install for.",
+    "Harness target(s) to compile for. Defaults to all supported harnesses.",
     (value, previous: HarnessName[] | undefined) => {
       const items = Array.isArray(previous) ? previous : [];
       return [
@@ -69,19 +97,15 @@ program
     "Project root that contains ./agents and ./skills.",
     defaultProjectRoot,
   )
-  .action(async (options: { harness: HarnessName[]; projectRoot: string }) => {
-    const targets =
-      options.harness.length > 0
-        ? Array.from(new Set(options.harness))
-        : harnessNames;
-    const outputs = await installHarnessArtifacts({
-      projectRoot: path.resolve(options.projectRoot),
-      harnesses: targets,
-    });
+  .action(runCompileCommand);
 
-    for (const output of outputs) {
-      process.stdout.write(`Compiled harness bundle: ${output}\n`);
-    }
+program
+  .command("install")
+  .description(
+    "Install generated bundles into a local harness workspace. (Not implemented yet.)",
+  )
+  .action(() => {
+    failInstallPlaceholder();
   });
 
 program
