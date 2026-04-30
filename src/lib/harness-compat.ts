@@ -110,7 +110,7 @@ function collectPlaceholderFindings(body: string): HarnessCompatFinding[] {
   return [
     {
       rule: "body-harness-placeholder",
-      severity: "warning",
+      severity: "error",
       message:
         'body uses the "<harness>/" placeholder; replace with ".cheese/" so all four harnesses share a single project-root runtime directory.',
       line,

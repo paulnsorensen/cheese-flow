@@ -1,5 +1,12 @@
 import { spawnSync } from "node:child_process";
-import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import {
+  mkdir,
+  mkdtemp,
+  readFile,
+  rm,
+  stat,
+  writeFile,
+} from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -102,5 +109,48 @@ describe("AC5: hooks/cheese-bootstrap.sh idempotent bootstrap", () => {
     expect(lines).toContain("dist/");
     expect(lines).toContain(".cheese/");
     expect(lines.filter((line: string) => line === ".cheese/")).toHaveLength(1);
+  });
+
+  it("writes a single .cheese/ line when .gitignore is empty (zero bytes)", async () => {
+    const cwd = await makeTempCwd();
+    await writeFile(path.join(cwd, ".gitignore"), "", "utf8");
+
+    const result = runScript(cwd);
+    expect(result.code, `stderr: ${result.stderr}`).toBe(0);
+
+    const contents = await readFile(path.join(cwd, ".gitignore"), "utf8");
+    expect(contents).toBe(".cheese/\n");
+  });
+
+  it("preserves existing contents inside a pre-existing .cheese/ directory", async () => {
+    const cwd = await makeTempCwd();
+    await mkdir(path.join(cwd, ".cheese", "specs"), { recursive: true });
+    await writeFile(
+      path.join(cwd, ".cheese", "specs", "existing.md"),
+      "preserve me",
+      "utf8",
+    );
+
+    const result = runScript(cwd);
+    expect(result.code, `stderr: ${result.stderr}`).toBe(0);
+
+    const preserved = await readFile(
+      path.join(cwd, ".cheese", "specs", "existing.md"),
+      "utf8",
+    );
+    expect(preserved).toBe("preserve me");
+  });
+
+  it("treats .cheese (no trailing slash) as distinct and still appends .cheese/", async () => {
+    const cwd = await makeTempCwd();
+    await writeFile(path.join(cwd, ".gitignore"), ".cheese\n", "utf8");
+
+    const result = runScript(cwd);
+    expect(result.code, `stderr: ${result.stderr}`).toBe(0);
+
+    const lines = (await readFile(path.join(cwd, ".gitignore"), "utf8"))
+      .split(/\r?\n/)
+      .filter((line: string) => line.length > 0);
+    expect(lines).toEqual([".cheese", ".cheese/"]);
   });
 });

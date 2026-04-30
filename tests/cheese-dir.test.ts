@@ -100,6 +100,7 @@ describe("AC4: body-harness-placeholder lint rule", () => {
       (f) => f.rule === "body-harness-placeholder",
     );
     expect(placeholderFindings.length).toBeGreaterThanOrEqual(1);
+    expect(placeholderFindings[0]?.severity).toBe("error");
   });
 
   it("does not flag '.cheese/specs/foo.md' with body-harness-placeholder", () => {
