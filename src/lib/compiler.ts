@@ -138,7 +138,10 @@ async function cleanGeneratedArtifacts(
     generatedDirectories.push("rules", "commands");
   }
 
-  const generatedFiles = [adapter.mcpFileName, "manifest.json", "hooks.json"];
+  const generatedFiles = [adapter.mcpFileName, "manifest.json"];
+  if (adapter.buildHookConfig({}) !== null) {
+    generatedFiles.push("hooks.json");
+  }
 
   await Promise.all([
     ...generatedDirectories.map((entry) =>
