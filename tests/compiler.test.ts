@@ -509,6 +509,71 @@ describe("installHarnessArtifacts", () => {
     ).rejects.toThrow();
   });
 
+  it("preserves user-managed files at the harness output root across rebuilds", async () => {
+    const projectRoot = await mkdtemp(
+      path.join(os.tmpdir(), "cheese-flow-preserve-"),
+    );
+    createdDirectories.push(projectRoot);
+    await cp(path.resolve("agents"), path.join(projectRoot, "agents"), {
+      recursive: true,
+    });
+    await cp(path.resolve("skills"), path.join(projectRoot, "skills"), {
+      recursive: true,
+    });
+
+    const claudeRoot = path.join(projectRoot, ".claude");
+    await mkdir(claudeRoot, { recursive: true });
+    const userSettingsPath = path.join(claudeRoot, "settings.local.json");
+    const userClaudeMdPath = path.join(claudeRoot, "CLAUDE.md");
+    await writeFile(userSettingsPath, '{"theme":"dark"}\n', "utf8");
+    await writeFile(userClaudeMdPath, "# user notes\n", "utf8");
+
+    await installHarnessArtifacts({
+      projectRoot,
+      harnesses: ["claude-code"],
+    });
+    await installHarnessArtifacts({
+      projectRoot,
+      harnesses: ["claude-code"],
+    });
+
+    expect(await readFile(userSettingsPath, "utf8")).toBe('{"theme":"dark"}\n');
+    expect(await readFile(userClaudeMdPath, "utf8")).toBe("# user notes\n");
+  });
+
+  it("removes stale generated agents on rebuild", async () => {
+    const projectRoot = await mkdtemp(
+      path.join(os.tmpdir(), "cheese-flow-stale-"),
+    );
+    createdDirectories.push(projectRoot);
+    await cp(path.resolve("agents"), path.join(projectRoot, "agents"), {
+      recursive: true,
+    });
+    await cp(path.resolve("skills"), path.join(projectRoot, "skills"), {
+      recursive: true,
+    });
+
+    await installHarnessArtifacts({
+      projectRoot,
+      harnesses: ["claude-code"],
+    });
+
+    const staleAgentPath = path.join(
+      projectRoot,
+      ".claude",
+      "agents",
+      "renamed-away.md",
+    );
+    await writeFile(staleAgentPath, "stale\n", "utf8");
+
+    await installHarnessArtifacts({
+      projectRoot,
+      harnesses: ["claude-code"],
+    });
+
+    await expect(readFile(staleAgentPath, "utf8")).rejects.toThrow();
+  });
+
   it("keeps help on -h and uses -H for harness selection", async () => {
     const { stdout } = await execFileAsync(
       "npx",

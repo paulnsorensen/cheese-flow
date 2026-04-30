@@ -120,13 +120,46 @@ export async function installHarnessArtifacts(
   return outputs;
 }
 
+// Removes only the paths this install step re-emits, so user-managed files at
+// the harness output root (settings.local.json, personal CLAUDE.md, etc.) are
+// not destroyed when contributors run `cheese install` / `npm run install:<harness>`.
+async function cleanGeneratedArtifacts(
+  adapter: HarnessAdapter,
+  outputRoot: string,
+): Promise<void> {
+  const generatedDirectories = [
+    adapter.agentDirectory,
+    adapter.skillDirectory,
+    adapter.commandDirectory,
+    adapter.manifestDir,
+  ].filter((entry): entry is string => entry !== undefined);
+
+  if (adapter.emitSurface !== undefined) {
+    generatedDirectories.push("rules", "commands");
+  }
+
+  const generatedFiles = [adapter.mcpFileName, "manifest.json"];
+  if (adapter.buildHookConfig({}) !== null) {
+    generatedFiles.push("hooks.json");
+  }
+
+  await Promise.all([
+    ...generatedDirectories.map((entry) =>
+      rm(path.join(outputRoot, entry), { recursive: true, force: true }),
+    ),
+    ...generatedFiles.map((entry) =>
+      rm(path.join(outputRoot, entry), { force: true }),
+    ),
+  ]);
+}
+
 async function processHarness(context: ProcessHarnessContext): Promise<string> {
   const adapter = harnessAdapters[context.harnessName];
   const outputRoot = path.join(context.projectRoot, adapter.outputRoot);
   const agentOutputDirectory = path.join(outputRoot, adapter.agentDirectory);
   const skillOutputDirectory = path.join(outputRoot, adapter.skillDirectory);
 
-  await rm(outputRoot, { recursive: true, force: true });
+  await cleanGeneratedArtifacts(adapter, outputRoot);
   await mkdir(agentOutputDirectory, { recursive: true });
   await mkdir(skillOutputDirectory, { recursive: true });
 
