@@ -45,8 +45,11 @@ dialogue actually produced — never more, never less.
 3. **State a hypothesis before researching.** A bare research dispatch is
    discouraged; the Validate Cycle frame forces commitment plus a judgment
    step.
-4. **Lock down interfaces before crystallizing.** Every cross-module seam
-   gets a pseudocode signature with named unknowns and a recommended answer.
+4. **Lock down interfaces before crystallizing.** Every cross-slice seam
+   gets a pseudocode signature with named unknowns, a recommended answer,
+   and an explicit Sliced Bread slice (`domains/<name>`, `adapters/<name>`,
+   `app`, or `domains/common`). Architecture rules in
+   `references/sliced-bread.md` (repo root, not local to this skill).
 5. **Two-key handshake.** Both the user (explicit verb) and the agent
    (coherence self-check) must agree before extraction.
 6. **Heavy delegation.** `/briesearch` for external research, `cheez-search`
@@ -97,10 +100,13 @@ Exit when: an option is picked (→ Sketch) or none survive (→ Explore).
 
 ### Sketch — interface lockdown
 Job: lock modules, responsibilities, I/O contracts, and seams in pseudocode
-signatures. Before drafting, parallel `cheez-search` for sibling signatures
-in the same domain so new ones fit conventions.
-Exit when: every public seam has a signature; every cross-module call has a
-contract. Detail in `references/sketch-mode.md`.
+signatures, anchored to Sliced Bread slices. Before drafting, parallel
+`cheez-search` for sibling signatures in the same slice so new ones fit
+conventions and respect the crust (the slice's public API).
+Exit when: every public seam has a signature and a declared `slice` field;
+   every cross-slice call imports from the target slice's crust, never its
+   internals. Detail in `references/sketch-mode.md`; architecture rules in
+   `references/sliced-bread.md` (repo root, not local to this skill).
 
 ### Grill — adversarial clarification
 Job: stress-test the chosen approach plus sketched interfaces. **One question
@@ -211,6 +217,7 @@ Coherence self-check before crystallize:
 - [ ] At least 2 options weighed (Do Nothing included)
 - [ ] Chosen option grounded in codebase evidence
 - [ ] Interface sketches: every public seam has a pseudocode signature
+- [ ] Each sketch declares a Sliced Bread slice; cross-slice calls go through the crust
 - [ ] Validate cycles: all launched cycles judged
 - [ ] Chosen option Grilled (>=1 `Grill turns` entry per major branch)
 - [ ] Open questions all marked [TBD] / [BLOCKED] / [?] (none silent)

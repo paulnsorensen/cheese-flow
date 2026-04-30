@@ -44,6 +44,37 @@ Unknowns:
 Push back on either, or `1A 2A` to confirm.
 ```
 
+## Slice placement
+
+Every signature names the **Sliced Bread slice** it lives in before the
+pseudocode is drafted. The slice — `domains/<name>`,
+`adapters/<name>`, `app`, or `domains/common` — goes in the sketch's
+`slice` field. The `module` field records the specific file or module
+path within that slice.
+
+Default decisions:
+
+- **Pure business concept** (entity, value type, port) → `domains/<name>`.
+  Define the port inside the domain; adapters implement it.
+- **External integration** (DB, third-party SDK, queue, cache, logger) →
+  `adapters/<name>`. Implements a port from `domains/`.
+- **Cross-slice orchestration** (use case spanning 2+ domain slices) →
+  `app/use_cases`.
+- **Pure shape with universal semantics** (Money, UserId, Email) →
+  `domains/common`. Only when the type has zero behavior and is referenced
+  by 2+ slices today.
+
+Full rules in `references/sliced-bread.md` (repo root, not local to this
+skill). The Sketch gate fails if any signature crosses an existing
+slice's boundary by importing internals instead of the crust, or if
+`domains/common` would import from a sibling slice.
+
+When the chosen option crosses an existing slice's crust, the sketch
+records the imported public name (`from domains.orders import dispatch`)
+rather than reaching into internals. Run a Validate Cycle on the import
+target to confirm it actually appears in the slice's index file before
+locking the signature.
+
 ## Pseudocode style
 
 - **Python-flavored** as the universal shape (function-style signatures,
@@ -63,10 +94,10 @@ conventions already there.
 
 ```
 Parallel sketches sweep:
-  cheez-search query: "dispatch" scope: "src/notifications/"
-  cheez-search query: "queue, enqueue" scope: "src/notifications/"
+  cheez-search query: "dispatch" scope: "domains/notifications/"
+  cheez-search query: "queue, enqueue" scope: "domains/notifications/"
   cheez-search query: "dispatch" kind: "callers" scope: "src/"
-  cheez-search deps: "src/notifications/index.ts"
+  cheez-search deps: "domains/notifications/index.ts"
 ```
 
 `cheez-search` exposes both `tilth_search` (definitions, usages, callers)
@@ -92,7 +123,8 @@ Sketches live in the state file's `Sketches (locked interfaces)` block
 during the loop, then migrate verbatim into the spec's `Interface Sketches`
 section at Crystallize. Each sketch carries:
 
-- `module` — slice or path.
+- `module` — slice path or file path.
+- `slice` — Sliced Bread slice (`domains/<name>`, `adapters/<name>`, `app`, or `domains/common`).
 - `signature` — pseudocode block.
 - `responsibilities` — bullet list (1-3 items).
 - `seams` — named external integrations (queue, cache, event bus, ...).

@@ -159,9 +159,13 @@ erDiagram
 
 ## Interface Sketches
 > Pseudocode signatures locked during /mold. Names + types + contracts; not
-> final code. /cook translates to the target idioms.
+> final code. /cook translates to the target idioms. Each sketch declares
+> its Sliced Bread slice (`domains/<name>`, `adapters/<name>`, `app`,
+> or `domains/common`) so /cook places code on the correct side of the
+> crust.
 
 ### `<module path>`
+**Slice:** `domains/<name>` | `adapters/<name>` | `app` | `domains/common`.
 **Responsibilities:** <one>, <two>, <three>.
 **Seams:** <queue>, <cache>, <event_bus>.
 

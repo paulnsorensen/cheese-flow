@@ -27,7 +27,8 @@ briesearch_used: <integer>      # 0..2 unless user lifts the cap
 - ...
 
 ## Sketches (locked interfaces)
-- module: <slice or path>
+- module: <file or module path within the slice>
+  slice: domains/<name> | adapters/<name> | app | domains/common
   signature: |
     def <name>(
         <arg>: <Type>,
@@ -89,8 +90,10 @@ Explore (1-3) → Ground (4-5) → Shape (6-8) → [validate cycle 1] → Sketch
 - **Decisions** — append-only. Each line is `<title> — <summary> (agreed
   turn <N>)`. Decisions stand until the user explicitly reverses one.
 - **Sketches** — append-only. Locked sketches feed the spec verbatim.
-  Each sketch is a small block with `module`, `signature`, `responsibilities`,
-  `seams`, `error_shape`.
+  Each sketch is a small block with `module`, `slice`, `signature`,
+  `responsibilities`, `seams`, `error_shape`. The `slice` field names the
+  Sliced Bread slice (`domains/<name>`, `adapters/<name>`, `app`, or
+  `domains/common`) and gates the crystallize crust check.
 - **Validate cycles** — append-only. Outcomes are exactly one of `SUPPORTED`,
   `CONTRADICTED`, `REFINED`. REFINED cycles point at their refined-form id.
   CONTRADICTED cycles get a `conflict_id` that ties to an `Open questions`
