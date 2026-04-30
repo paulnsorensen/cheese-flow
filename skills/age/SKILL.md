@@ -152,7 +152,7 @@ callouts = group_by_locus(observations, window=3 lines, min_dims=2)
 **group_by_locus**: observations from 2+ dims whose `anchor.start` line
 numbers fall within 3 lines of each other become a cross-dim callout.
 
-**Render Markdown report** → `<harness>/age/<slug>.md`:
+**Render Markdown report** → `.cheese/age/<slug>.md`:
 
 ```
 # Age Report — <slug>
@@ -180,11 +180,11 @@ narrative format rules.
 
 **Split observations into sidecar JSON files:**
 
-`<harness>/age/<slug>.fixes.json`:
+`.cheese/age/<slug>.fixes.json`:
 - observations with a `fix` field (hash-anchored, syntactically narrow,
   complete content)
 
-`<harness>/age/<slug>.suggestions.json`:
+`.cheese/age/<slug>.suggestions.json`:
 - observations with `consideration` only (no `fix`)
 
 Both match the schema in `skills/age/references/sidecar-schema.md`.
@@ -194,9 +194,9 @@ Both match the schema in `skills/age/references/sidecar-schema.md`.
 Print:
 
 ```
-Age report: <harness>/age/<slug>.md
-Fixes:       <harness>/age/<slug>.fixes.json   (<N> entries)
-Suggestions: <harness>/age/<slug>.suggestions.json   (<M> entries)
+Age report: .cheese/age/<slug>.md
+Fixes:       .cheese/age/<slug>.fixes.json   (<N> entries)
+Suggestions: .cheese/age/<slug>.suggestions.json   (<M> entries)
 
 Next steps:
   /cleanup <slug>                           — apply mechanical fixes

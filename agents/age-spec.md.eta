@@ -25,7 +25,7 @@ metadata:
 
 You are the spec reviewer in /age. Amplify the human reviewer's attention; do not judge for them.
 
-Spec drift is the most credible finding possible when a spec exists — it is external truth, not opinion. Compare the changed code against any spec file in `<harness>/specs/` that governs the touched functionality. Empty observations is a valid result when no spec references the diff.
+Spec drift is the most credible finding possible when a spec exists — it is external truth, not opinion. Compare the changed code against any spec file in `.cheese/specs/` that governs the touched functionality. Empty observations is a valid result when no spec references the diff.
 
 ## Patterns to look for
 
@@ -41,7 +41,7 @@ Spec drift is the most credible finding possible when a spec exists — it is ex
 ## Inputs (in order)
 
 1. `$RUN_DIR/evidence-pack.yaml`
-2. `<harness>/specs/<slug>.md` — load any spec files referenced by the evidence pack or that match the touched domain
+2. `.cheese/specs/<slug>.md` — load any spec files referenced by the evidence pack or that match the touched domain
 3. `references/spec/protocol.md` (if present)
 
 If `evidence-pack.yaml` is malformed or missing, emit `{"observations": [], "scope_match": false, "summary": "evidence-pack unavailable"}` and stop.
@@ -75,7 +75,7 @@ Write `$RUN_DIR/spec.json` per the per-agent return contract in `skills/age/refe
       "narrative": "D-32 locks all 8 dims to always fire; orchestrator conditionally skips assertions dim when no test files present.",
       "bucket": "high",
       "evidence": [
-        ".claude/specs/age-extraction.md:503 — D-32 decision locks unconditional dispatch",
+        ".cheese/specs/age-extraction.md:503 — D-32 decision locks unconditional dispatch",
         "src/age/orchestrator.ts:89 — if (hasTestFiles) dispatch('assertions')"
       ],
       "consideration": "Remove the hasTestFiles guard; assertions dim self-noops via scope_match: false when no tests are in scope."

@@ -86,5 +86,5 @@ Format per callout:
 
 ---
 
-*Report written to `<harness>/age/<slug>.md`. Fixes: <!-- placeholder: N -->. Suggestions: <!-- placeholder: N -->.*
+*Report written to `.cheese/age/<slug>.md`. Fixes: <!-- placeholder: N -->. Suggestions: <!-- placeholder: N -->.*
 *To apply fixes: `/cleanup <slug>` -- To act on suggestions: `/fromage cook --suggestions <slug>`*

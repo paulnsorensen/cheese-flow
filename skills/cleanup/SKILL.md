@@ -27,14 +27,14 @@ happy path. The `cleanup-wolf` sub-agent fires only on hash mismatch.
 `slug` is the same slug produced by `/age`. Resolves to:
 
 ```
-<harness>/age/<slug>.fixes.json
+.cheese/age/<slug>.fixes.json
 ```
 
-`<harness>` is `.claude` for Claude Code, `.codex` for Codex.
+All harnesses share the project-root `.cheese/` runtime directory.
 
 ## Phase 1 — Load
 
-Load `<harness>/age/<slug>.fixes.json`.
+Load `.cheese/age/<slug>.fixes.json`.
 
 Validate schema: every entry must have all of
 `id`, `dimension`, `file`, `anchor`, `content`, `rationale`, `category`.
@@ -45,7 +45,7 @@ invalid `id` values. Do not apply any fixes from a malformed file.
 If the file does not exist, fail fast:
 
 ```
-ERROR: <harness>/age/<slug>.fixes.json not found.
+ERROR: .cheese/age/<slug>.fixes.json not found.
 Run /age first to generate the fixes sidecar.
 ```
 
@@ -90,7 +90,7 @@ match and applies with `tilth_edit`. Returns:
 
 ## Phase 3 — Emit Report
 
-Write `<harness>/age/<slug>.cleanup-report.md`:
+Write `.cheese/age/<slug>.cleanup-report.md`:
 
 ```markdown
 # Cleanup Report — <slug>
