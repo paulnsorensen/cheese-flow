@@ -271,6 +271,11 @@ describe("installHarnessArtifacts", () => {
       "milknado-executor.md",
       "milknado-planner.md",
       "press.md",
+      "skill-improver-activation.md",
+      "skill-improver-context.md",
+      "skill-improver-output-format.md",
+      "skill-improver-prompt-quality.md",
+      "skill-improver-tool-scoping.md",
     ]);
     expect(manifest.skills).toEqual([
       "age",
@@ -286,6 +291,7 @@ describe("installHarnessArtifacts", () => {
       "mold",
       "nested-dir",
       "research",
+      "skill-improver",
     ]);
     expect(manifest.commands).toEqual([]);
   });

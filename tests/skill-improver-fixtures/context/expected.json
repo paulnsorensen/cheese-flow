@@ -1,0 +1,14 @@
+{
+  "dimension": "context",
+  "stake": "medium",
+  "scope_match": true,
+  "observations": [
+    {
+      "id": "context-1",
+      "file": "tests/skill-improver-fixtures/context/target.md.eta",
+      "anchor": { "start": "25:000" },
+      "bucket": "med",
+      "narrative": "Agent reads every Markdown file under docs/, every README, every CHANGELOG, every ADR, every spec, and the root CLAUDE.md, then dumps the full content back to the caller — output is unbounded and there is no fork or output-budget pointer pattern."
+    }
+  ]
+}

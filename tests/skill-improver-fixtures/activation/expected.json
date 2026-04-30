@@ -1,0 +1,14 @@
+{
+  "dimension": "activation",
+  "stake": "high",
+  "scope_match": true,
+  "observations": [
+    {
+      "id": "activation-1",
+      "file": "tests/skill-improver-fixtures/activation/target.md.eta",
+      "anchor": { "start": "3:000" },
+      "bucket": "high",
+      "narrative": "Description reads as a summary ('A tool for reviewing PR comments.') with no quoted user phrases, no /command reference, and no negative triggers — routing model has nothing concrete to match against."
+    }
+  ]
+}
