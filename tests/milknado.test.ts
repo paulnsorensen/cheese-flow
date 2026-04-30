@@ -1,8 +1,10 @@
-import { execFile } from "node:child_process";
+import { execFile, execFileSync } from "node:child_process";
 import { EventEmitter } from "node:events";
+import { mkdtemp, rm } from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   getMilknadoBackendScriptPath,
   getMilknadoCommand,
@@ -11,6 +13,32 @@ import {
 } from "../src/lib/milknado.js";
 
 const execFileAsync = promisify(execFile);
+
+function makeFixturePaths(dbPath: string) {
+  return {
+    root: path.dirname(path.dirname(path.dirname(path.dirname(dbPath)))),
+    projectDir: path.dirname(path.dirname(dbPath)),
+    milknadoDb: dbPath,
+    worktreeDir: path.join(
+      path.dirname(path.dirname(dbPath)),
+      "worktrees",
+      "fixture",
+    ),
+    manifestsDir: "",
+    runsDir: "",
+    sharedDir: "",
+  };
+}
+
+const tempDirs: string[] = [];
+
+afterEach(async () => {
+  await Promise.all(
+    tempDirs.splice(0).map(async (d) => {
+      await rm(d, { recursive: true, force: true });
+    }),
+  );
+});
 
 describe("milknado helpers", () => {
   it("builds the backend path relative to the project root", () => {
@@ -21,10 +49,45 @@ describe("milknado helpers", () => {
     );
   });
 
-  it("builds the uv command for the backend", () => {
+  it("builds the uv command for the backend, appending --db-path from a CheeseHomePaths", () => {
     const projectRoot = path.resolve(path.sep, "tmp", "cheese-flow");
+    const dbPath = path.resolve(
+      path.sep,
+      "tmp",
+      "cheese-home-fixture",
+      "projects",
+      "-tmp-cheese-flow",
+      "milknado",
+      "milknado.db",
+    );
 
-    expect(getMilknadoCommand(projectRoot)).toEqual({
+    const cmd = getMilknadoCommand(projectRoot, {
+      cheeseHomePaths: {
+        root: path.resolve(path.sep, "tmp", "cheese-home-fixture"),
+        projectDir: path.resolve(
+          path.sep,
+          "tmp",
+          "cheese-home-fixture",
+          "projects",
+          "-tmp-cheese-flow",
+        ),
+        milknadoDb: dbPath,
+        worktreeDir: path.resolve(
+          path.sep,
+          "tmp",
+          "cheese-home-fixture",
+          "projects",
+          "-tmp-cheese-flow",
+          "worktrees",
+          "-tmp-cheese-flow",
+        ),
+        manifestsDir: "",
+        runsDir: "",
+        sharedDir: "",
+      },
+    });
+
+    expect(cmd).toEqual({
       command: "uv",
       args: [
         "run",
@@ -32,12 +95,46 @@ describe("milknado helpers", () => {
         projectRoot,
         "python",
         path.join(projectRoot, "python", "milknado.py"),
+        "--db-path",
+        dbPath,
       ],
+      env: { MILKNADO_DB_PATH: dbPath },
     });
   });
 
-  it("runs the backend via uv and streams stdout and stderr", async () => {
+  it("falls back to resolveCheeseHome when cheeseHomePaths is omitted", async () => {
+    const projectRoot = await mkdtemp(
+      path.join(os.tmpdir(), "milknado-resolve-"),
+    );
+    tempDirs.push(projectRoot);
+    execFileSync("git", ["init", "--quiet", "-b", "main", projectRoot]);
+    execFileSync(
+      "git",
+      ["-C", projectRoot, "commit", "--allow-empty", "-m", "init", "--quiet"],
+      {
+        env: {
+          ...process.env,
+          GIT_AUTHOR_NAME: "Test",
+          GIT_AUTHOR_EMAIL: "test@example.com",
+          GIT_COMMITTER_NAME: "Test",
+          GIT_COMMITTER_EMAIL: "test@example.com",
+        },
+      },
+    );
+
+    const cmd = getMilknadoCommand(projectRoot);
+
+    expect(cmd.command).toBe("uv");
+    expect(cmd.args).toContain("--db-path");
+    const dbPath = cmd.args[cmd.args.indexOf("--db-path") + 1];
+    expect(dbPath).toBeDefined();
+    expect(dbPath?.endsWith(path.join("milknado", "milknado.db"))).toBe(true);
+    expect(cmd.env.MILKNADO_DB_PATH).toBe(dbPath);
+  });
+
+  it("runs the backend via uv, sets MILKNADO_DB_PATH env, and streams stdout and stderr", async () => {
     const projectRoot = path.resolve(path.sep, "tmp", "cheese-flow");
+    const dbPath = path.resolve(path.sep, "tmp", "cheese-home", "milknado.db");
     const stdout = vi.fn();
     const stderr = vi.fn();
     const child = createMockChildProcess();
@@ -45,25 +142,30 @@ describe("milknado helpers", () => {
 
     const runPromise = runMilknadoCommand({
       projectRoot,
+      cheeseHomePaths: makeFixturePaths(dbPath),
       spawnFn,
       stdout: { write: stdout },
       stderr: { write: stderr },
     });
 
-    expect(spawnFn).toHaveBeenCalledWith(
-      "uv",
-      [
-        "run",
-        "--project",
-        projectRoot,
-        "python",
-        path.join(projectRoot, "python", "milknado.py"),
-      ],
-      {
-        cwd: projectRoot,
-        stdio: "pipe",
-      },
-    );
+    expect(spawnFn).toHaveBeenCalledTimes(1);
+    const callArgs = spawnFn.mock.calls[0];
+    expect(callArgs?.[0]).toBe("uv");
+    expect(callArgs?.[1]).toEqual([
+      "run",
+      "--project",
+      projectRoot,
+      "python",
+      path.join(projectRoot, "python", "milknado.py"),
+      "--db-path",
+      dbPath,
+    ]);
+    const spawnOpts = callArgs?.[2] as
+      | { cwd?: string; stdio?: string; env?: Record<string, string> }
+      | undefined;
+    expect(spawnOpts?.cwd).toBe(projectRoot);
+    expect(spawnOpts?.stdio).toBe("pipe");
+    expect(spawnOpts?.env?.MILKNADO_DB_PATH).toBe(dbPath);
 
     child.stdout.emit("data", "Milknado ready\n");
     child.stderr.emit("data", "warning\n");
@@ -78,6 +180,9 @@ describe("milknado helpers", () => {
     const child = createMockChildProcess();
     const runPromise = runMilknadoCommand({
       projectRoot: path.resolve(path.sep, "tmp", "cheese-flow"),
+      cheeseHomePaths: makeFixturePaths(
+        path.resolve(path.sep, "tmp", "cheese-home", "milknado.db"),
+      ),
       spawnFn: vi.fn<SpawnFn>().mockReturnValue(child),
     });
 
@@ -93,6 +198,9 @@ describe("milknado helpers", () => {
     const child = createMockChildProcess();
     const runPromise = runMilknadoCommand({
       projectRoot: path.resolve(path.sep, "tmp", "cheese-flow"),
+      cheeseHomePaths: makeFixturePaths(
+        path.resolve(path.sep, "tmp", "cheese-home", "milknado.db"),
+      ),
       spawnFn: vi.fn<SpawnFn>().mockReturnValue(child),
     });
 
@@ -110,6 +218,9 @@ describe("milknado helpers", () => {
     const child = createMockChildProcess();
     const runPromise = runMilknadoCommand({
       projectRoot,
+      cheeseHomePaths: makeFixturePaths(
+        path.resolve(path.sep, "tmp", "cheese-home", "milknado.db"),
+      ),
       spawnFn: vi.fn<SpawnFn>().mockReturnValue(child),
       stdout: { write: stdout },
       stderr: { write: stderr },
@@ -130,6 +241,9 @@ describe("milknado helpers", () => {
     const child = createMockChildProcess();
     const runPromise = runMilknadoCommand({
       projectRoot: path.resolve(path.sep, "tmp", "cheese-flow"),
+      cheeseHomePaths: makeFixturePaths(
+        path.resolve(path.sep, "tmp", "cheese-home", "milknado.db"),
+      ),
       spawnFn: vi.fn<SpawnFn>().mockReturnValue(child),
     });
 
@@ -144,6 +258,9 @@ describe("milknado helpers", () => {
     const child = createMockChildProcess();
     const runPromise = runMilknadoCommand({
       projectRoot: path.resolve(path.sep, "tmp", "cheese-flow"),
+      cheeseHomePaths: makeFixturePaths(
+        path.resolve(path.sep, "tmp", "cheese-home", "milknado.db"),
+      ),
       spawnFn: vi.fn<SpawnFn>().mockReturnValue(child),
     });
 
@@ -158,6 +275,9 @@ describe("milknado helpers", () => {
     const child = createMockChildProcess();
     const runPromise = runMilknadoCommand({
       projectRoot: path.resolve(path.sep, "tmp", "cheese-flow"),
+      cheeseHomePaths: makeFixturePaths(
+        path.resolve(path.sep, "tmp", "cheese-home", "milknado.db"),
+      ),
       spawnFn: vi.fn<SpawnFn>().mockReturnValue(child),
     });
 
@@ -172,6 +292,9 @@ describe("milknado helpers", () => {
     const child = createMockChildProcess();
     const runPromise = runMilknadoCommand({
       projectRoot: path.resolve(path.sep, "tmp", "cheese-flow"),
+      cheeseHomePaths: makeFixturePaths(
+        path.resolve(path.sep, "tmp", "cheese-home", "milknado.db"),
+      ),
       spawnFn: vi.fn<SpawnFn>().mockReturnValue(child),
     });
 
@@ -186,6 +309,9 @@ describe("milknado helpers", () => {
     const child = createMockChildProcess();
     const runPromise = runMilknadoCommand({
       projectRoot: path.resolve(path.sep, "tmp", "cheese-flow"),
+      cheeseHomePaths: makeFixturePaths(
+        path.resolve(path.sep, "tmp", "cheese-home", "milknado.db"),
+      ),
       spawnFn: vi.fn<SpawnFn>().mockReturnValue(child),
     });
 

@@ -24,5 +24,13 @@ def project_root(explicit: str | None) -> Path:
 
 
 def graph_db_path(root: Path) -> Path:
-    """Return the default graph database path for a project root."""
+    """Return the graph database path.
+
+    ``MILKNADO_DB_PATH`` env var takes precedence so cheese-flow can relocate
+    the SQLite db out of the worktree (see cheese-home spec). Falls back to the
+    in-repo default when the env var is unset or blank.
+    """
+    override = os.environ.get("MILKNADO_DB_PATH", "").strip()
+    if override:
+        return Path(override).expanduser()
     return root / ".milknado" / "milknado.db"
