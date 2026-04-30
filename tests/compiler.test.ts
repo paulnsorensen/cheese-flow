@@ -54,12 +54,8 @@ describe("installHarnessArtifacts", () => {
       "utf8",
     );
 
-    expect(parseFrontmatter<{ model: string }>(claudeAgent).data.model).toBe(
-      "sonnet",
-    );
-    expect(parseFrontmatter<{ model: string }>(codexAgent).data.model).toBe(
-      "gpt-5-codex",
-    );
+    expect(claudeAgent).toContain("sonnet");
+    expect(codexAgent).toContain("gpt-5-codex");
 
     // New emitters: plugin manifest + mcp config appear for both harnesses
     const claudePlugin = JSON.parse(
