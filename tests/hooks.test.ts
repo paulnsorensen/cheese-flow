@@ -213,6 +213,63 @@ describe("emitHooks", () => {
     expect(result).toBe(false);
   });
 
+  it("filters bootstrap entry when bootstrapHook=false even if buildHookConfig returns a payload", async () => {
+    const cursorAdapter = harnessAdapters.cursor;
+    const buildSpy = vi
+      .spyOn(cursorAdapter, "buildHookConfig")
+      .mockImplementation((portable) => ({ hooks: portable }));
+
+    try {
+      const outputRoot = await mkdtemp(path.join(os.tmpdir(), "cheese-flow-"));
+      createdDirectories.push(outputRoot);
+
+      const source = {
+        sessionStart: [
+          { type: "command", command: "bash hooks/cheese-bootstrap.sh" },
+          { type: "command", command: "echo other-hook" },
+        ],
+      };
+
+      const result = await emitHooks("cursor", source, outputRoot);
+      expect(result).not.toBe(false);
+
+      const content = await readFile(
+        path.join(outputRoot, "hooks.json"),
+        "utf8",
+      );
+      expect(content).not.toContain("cheese-bootstrap.sh");
+      expect(content).toContain("echo other-hook");
+    } finally {
+      buildSpy.mockRestore();
+    }
+  });
+
+  it("omits sessionStart entirely when filtering removes the only entry", async () => {
+    const cursorAdapter = harnessAdapters.cursor;
+    const buildSpy = vi
+      .spyOn(cursorAdapter, "buildHookConfig")
+      .mockImplementation((portable) => ({ hooks: portable }));
+
+    try {
+      const outputRoot = await mkdtemp(path.join(os.tmpdir(), "cheese-flow-"));
+      createdDirectories.push(outputRoot);
+
+      const source = {
+        sessionStart: [
+          { type: "command", command: "bash hooks/cheese-bootstrap.sh" },
+        ],
+      };
+
+      await emitHooks("cursor", source, outputRoot);
+      const config = JSON.parse(
+        await readFile(path.join(outputRoot, "hooks.json"), "utf8"),
+      );
+      expect(config.hooks.sessionStart).toBeUndefined();
+    } finally {
+      buildSpy.mockRestore();
+    }
+  });
+
   it("skips non-portable events with warn", async () => {
     const outputRoot = await mkdtemp(path.join(os.tmpdir(), "cheese-flow-"));
     createdDirectories.push(outputRoot);
