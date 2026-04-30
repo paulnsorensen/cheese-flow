@@ -1,0 +1,57 @@
+--- a/src/orders/fulfillment.ts
++++ b/src/orders/fulfillment.ts
+@@ -1,8 +1,50 @@
+ import { Order } from "./order";
+ import { db } from "../db/client";
++import { mailer } from "../notifications/mailer";
++import { inventory } from "../inventory/client";
+
+-export async function fulfill(order: Order): Promise<void> {
+-  await db.orders.update(order.id, { status: "fulfilled" });
++export async function fulfillOrder(
++  orderId: string,
++  warehouseId: string,
++  carrierId: string,
++  notifyEmail: string,
++  priority: "standard" | "express",
++): Promise<void> {
++  const order = await db.orders.find(orderId);
++  if (!order) throw new Error(`Order ${orderId} not found`);
++
++  const stock = await inventory.check(warehouseId, order.items);
++  if (!stock.available) {
++    throw new Error("Insufficient stock");
++  }
++
++  await inventory.reserve(warehouseId, order.items);
++
++  const shipment = await db.shipments.create({
++    orderId,
++    warehouseId,
++    carrierId,
++    priority,
++  });
++
++  await db.orders.update(orderId, {
++    status: "fulfilled",
++    shipmentId: shipment.id,
++  });
++
++  const label = await db.shippingLabels.generate(shipment.id);
++
++  if (priority === "express") {
++    await db.expressQueue.enqueue(shipment.id);
++  }
++
++  await mailer.send({
++    to: notifyEmail,
++    subject: `Order ${orderId} shipped`,
++    body: `Your order has been fulfilled. Tracking: ${label.trackingNumber}`,
++  });
++
++  await db.auditLog.append({
++    event: "order.fulfilled",
++    orderId,
++    shipmentId: shipment.id,
++  });
+ }

@@ -1,0 +1,15 @@
+--- a/src/orders/order-service.ts
++++ b/src/orders/order-service.ts
+@@ -1,7 +1,10 @@
+ import { db } from "../db/client";
+-import { PricingEngine } from "../pricing";
++import { PricingEngine } from "../pricing/internal/pricing-engine";
++import { DiscountTable } from "../pricing/internal/discount-table";
+ import { Order } from "./order";
+
+ export async function createOrder(items: string[]): Promise<Order> {
+-  const price = PricingEngine.calculate(items);
++  const discounts = DiscountTable.load();
++  const price = PricingEngine.calculate(items, discounts);
+   return db.orders.create({ items, price });
+ }

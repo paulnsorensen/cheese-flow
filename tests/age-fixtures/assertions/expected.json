@@ -1,0 +1,17 @@
+{
+  "dimension": "assertions",
+  "stake": "medium",
+  "scope_match": true,
+  "observations": [
+    {
+      "id": "assertions-1",
+      "file": "tests/pricing/price-calculator.test.ts",
+      "anchor": { "start": "8:000", "end": "9:000" },
+      "bucket": "high",
+      "narrative": "toBeTruthy() on result.total passes for any non-zero value and cannot catch an off-by-one; toBe(900) is the exact equality check this test needs.",
+      "evidence": [
+        "tests/pricing/price-calculator.test.ts:8 expect(result.total).toBeTruthy() — truthy check where exact value equality is required"
+      ]
+    }
+  ]
+}

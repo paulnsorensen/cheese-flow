@@ -1,0 +1,17 @@
+--- a/src/users/handler.ts
++++ b/src/users/handler.ts
+@@ -8,10 +8,14 @@ import { db } from "../db/client";
+ import { User } from "./user";
+
+ export async function fetchUser(id: string): Promise<User | null> {
+-  return await db.users.find(id);
++  try {
++    return await db.users.find(id);
++  } catch (e) {
++    return null;
++  }
+ }
+
+ export async function deleteUser(id: string): Promise<void> {
+   await db.users.delete(id);
+ }

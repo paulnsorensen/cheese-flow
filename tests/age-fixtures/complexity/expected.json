@@ -1,0 +1,17 @@
+{
+  "dimension": "complexity",
+  "stake": "medium",
+  "scope_match": true,
+  "observations": [
+    {
+      "id": "complexity-1",
+      "file": "src/orders/fulfillment.ts",
+      "anchor": { "start": "6:000", "end": "10:000" },
+      "bucket": "high",
+      "narrative": "fulfillOrder takes 5 parameters, exceeding the 4-param budget, and its body runs 44 lines past the 40-line ceiling.",
+      "evidence": [
+        "src/orders/fulfillment.ts:6 fulfillOrder(orderId, warehouseId, carrierId, notifyEmail, priority) — 5 params"
+      ]
+    }
+  ]
+}

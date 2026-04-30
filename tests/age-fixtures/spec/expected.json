@@ -1,0 +1,17 @@
+{
+  "dimension": "spec",
+  "stake": "high",
+  "scope_match": true,
+  "observations": [
+    {
+      "id": "spec-1",
+      "file": "src/payments/refund-handler.ts",
+      "anchor": { "start": "11:000", "end": "12:000" },
+      "bucket": "high",
+      "narrative": "issueRefund applies no upper bound on refundAmount, directly contradicting FR-2 which forbids refunds exceeding the original charge.",
+      "evidence": [
+        "src/payments/refund-handler.ts:11 Math.max(amount, 0) permits over-refund; specs/payments.md FR-2 forbids it"
+      ]
+    }
+  ]
+}

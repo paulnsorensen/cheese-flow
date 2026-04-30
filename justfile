@@ -48,6 +48,48 @@ test *args:
 test-py *args:
     uv run --group dev pytest {{args}}
 
+# Run /age fixture comparator against every dim under tests/age-fixtures/
+test-age-fixtures:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    fixtures_dir="tests/age-fixtures"
+    if [ ! -d "$fixtures_dir" ]; then
+        echo "no fixtures directory at $fixtures_dir" >&2
+        exit 1
+    fi
+    shopt -s nullglob
+    dim_dirs=("$fixtures_dir"/*/)
+    if [ "${#dim_dirs[@]}" -eq 0 ]; then
+        echo "no fixture subdirectories found under $fixtures_dir" >&2
+        exit 1
+    fi
+    failures=0
+    for dim_dir in "${dim_dirs[@]}"; do
+        dim=$(basename "$dim_dir")
+        expected="$dim_dir/expected.json"
+        actual="$dim_dir/actual.json"
+        if [ ! -f "$expected" ]; then
+            echo "$dim: missing expected.json" >&2
+            failures=$((failures + 1))
+            continue
+        fi
+        if [ ! -f "$actual" ]; then
+            echo "$dim: missing actual.json (run /age first to populate)" >&2
+            failures=$((failures + 1))
+            continue
+        fi
+        if uv run python python/tools/age_fixture_diff.py "$actual" "$expected"; then
+            echo "$dim: ok"
+        else
+            echo "$dim: FAIL" >&2
+            failures=$((failures + 1))
+        fi
+    done
+    if [ "$failures" -gt 0 ]; then
+        echo "$failures fixture(s) failed" >&2
+        exit 1
+    fi
+
 # Clean build artifacts and caches
 clean:
     rm -rf dist coverage

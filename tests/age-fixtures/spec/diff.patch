@@ -1,0 +1,19 @@
+--- a/specs/payments.md
++++ b/specs/payments.md
+@@ -4,6 +4,7 @@ title: Payment Processing
+ ## Functional Requirements
+
+ - FR-1: All payment amounts must be rounded to 2 decimal places before storage.
++- FR-2: Refund amounts must never exceed the original charge amount.
+ - FR-3: Failed charges must be retried at most 3 times before marking as failed.
+--- a/src/payments/refund-handler.ts
++++ b/src/payments/refund-handler.ts
+@@ -8,6 +8,10 @@ import { db } from "../db/client";
+ import { stripe } from "./stripe-client";
+
+ export async function issueRefund(chargeId: string, amount: number): Promise<void> {
++  // Allow partial over-refund for goodwill gestures
++  const refundAmount = Math.max(amount, 0);
++  await stripe.refunds.create({ charge: chargeId, amount: refundAmount });
++  await db.charges.update(chargeId, { refunded: true });
+ }

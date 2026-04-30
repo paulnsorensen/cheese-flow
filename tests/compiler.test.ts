@@ -255,8 +255,17 @@ describe("installHarnessArtifacts", () => {
     ) as { agents: string[]; skills: string[]; commands: string[] };
 
     expect(manifest.agents).toEqual([
+      "age-assertions.md",
+      "age-complexity.md",
+      "age-correctness.md",
+      "age-deslop.md",
+      "age-encapsulation.md",
+      "age-precedent.md",
+      "age-security.md",
+      "age-spec.md",
       "assertion-review.md",
       "basic-agent.md",
+      "cleanup-wolf.md",
       "cook.md",
       "cut.md",
       "milknado-executor.md",
@@ -264,10 +273,12 @@ describe("installHarnessArtifacts", () => {
       "press.md",
     ]);
     expect(manifest.skills).toEqual([
+      "age",
       "basic-skill",
       "cheez-read",
       "cheez-search",
       "cheez-write",
+      "cleanup",
       "gh",
       "merge-resolve",
       "milknado-execute",

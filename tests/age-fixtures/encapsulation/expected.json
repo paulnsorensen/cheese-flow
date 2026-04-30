@@ -1,0 +1,17 @@
+{
+  "dimension": "encapsulation",
+  "stake": "high",
+  "scope_match": true,
+  "observations": [
+    {
+      "id": "encapsulation-1",
+      "file": "src/orders/order-service.ts",
+      "anchor": { "start": "2:000", "end": "3:000" },
+      "bucket": "high",
+      "narrative": "Imports reach into pricing/internal/ directly, bypassing the pricing slice's public index and coupling orders to internal implementation details.",
+      "evidence": [
+        "src/orders/order-service.ts:2 import from ../pricing/internal/pricing-engine — bypasses ../pricing/index"
+      ]
+    }
+  ]
+}

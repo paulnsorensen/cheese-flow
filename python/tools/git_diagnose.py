@@ -4,7 +4,8 @@
 Modeled on Ally Piechowski's "The Git Commands I Run Before Reading Any Code"
 (https://piechowski.io/post/git-commands-before-reading-code/, Apr 8 2026):
 hotspots, bus factor, bug clusters, velocity, and firefighting frequency.
-Plus a per-file `risk` subcommand for the age-history modifier loop.
+Plus a per-file `risk` subcommand for the age-history modifier loop, and
+`precedent` / `concurrent-prs` subcommands for /age's pre-fetch evidence pack.
 
 Stdlib-only. JSON-on-stdout. No third-party deps. Each subcommand prints a
 single JSON document so callers can parse without context-polluting raw
@@ -17,6 +18,8 @@ git log output.
     python python/tools/git_diagnose.py firefighting
     python python/tools/git_diagnose.py risk path/a.ts path/b.ts
     python python/tools/git_diagnose.py orient
+    python python/tools/git_diagnose.py precedent --symbols foo,bar --paths src/x.ts
+    python python/tools/git_diagnose.py concurrent-prs --paths src/x.ts src/y.ts
 """
 
 from __future__ import annotations
@@ -33,7 +36,7 @@ SECONDS_PER_DAY = 86400
 DEFAULT_SINCE = "1.year.ago"
 DEFAULT_LIMIT = 20
 DEFAULT_BUS_LIMIT = 10
-FIREFIGHT_RE = re.compile(r"\b(revert|hotfix|emergency|rollback)\b", re.IGNORECASE)
+FIREFIGHT_RE = re.compile(r"\b(revert|hotfix|fixup|emergency|rollback)\b", re.IGNORECASE)
 
 
 def _run_git(args: list[str]) -> str:
@@ -165,6 +168,124 @@ def risk_for(path: str, now_ts: int | None = None) -> dict[str, object]:
     }
 
 
+# ─── precedent (consumed by /age age-precedent dim) ──────────────────────────
+
+
+def _commits_touching_symbol(
+    symbol: str, paths: list[str], since: str, limit: int
+) -> list[dict[str, str]]:
+    args = [
+        "log",
+        f"--since={since}",
+        f"-G{symbol}",
+        f"--max-count={limit}",
+        "--format=%H%x09%s",
+    ]
+    if paths:
+        args.append("--")
+        args.extend(paths)
+    output = _run_git(args)
+    rows: list[dict[str, str]] = []
+    for line in output.splitlines():
+        sha, _, subject = line.partition("\t")
+        if sha:
+            rows.append({"sha": sha.strip(), "subject": subject.strip()})
+    return rows
+
+
+def _broken_precedent_for_paths(paths: list[str], since: str) -> list[dict[str, str]]:
+    if not paths:
+        return []
+    args = ["log", f"--since={since}", "--format=%H%x09%s", "--"]
+    args.extend(paths)
+    output = _run_git(args)
+    rows: list[dict[str, str]] = []
+    for line in output.splitlines():
+        sha, _, subject = line.partition("\t")
+        if subject and FIREFIGHT_RE.search(subject):
+            rows.append({"sha": sha.strip(), "subject": subject.strip()})
+    return rows
+
+
+def precedent(
+    symbols: list[str],
+    paths: list[str],
+    limit: int = 10,
+    since: str = DEFAULT_SINCE,
+) -> dict[str, object]:
+    """Symbol-level history + broken-precedent detection for /age."""
+    symbol_rows = [
+        {"symbol": s, "touched_in": _commits_touching_symbol(s, paths, since, limit)}
+        for s in symbols
+    ]
+    return {
+        "symbols": symbol_rows,
+        "paths": paths,
+        "broken_precedent": _broken_precedent_for_paths(paths, since),
+    }
+
+
+# ─── concurrent-prs (consumed by /age age-precedent dim) ─────────────────────
+
+
+def _gh_pr_list_open() -> list[dict[str, object]]:
+    try:
+        result = subprocess.run(
+            [
+                "gh",
+                "pr",
+                "list",
+                "--state",
+                "open",
+                "--json",
+                "number,title,author,url,files",
+                "--limit",
+                "100",
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except OSError:
+        return []
+    if result.returncode != 0:
+        return []
+    try:
+        return json.loads(result.stdout) or []
+    except json.JSONDecodeError:
+        return []
+
+
+def _files_for_pr(pr: dict[str, object]) -> list[str]:
+    files = pr.get("files") or []
+    if not isinstance(files, list):
+        return []
+    return [str(f.get("path", "")) for f in files if isinstance(f, dict) and f.get("path")]
+
+
+def concurrent_prs(paths: list[str]) -> dict[str, object]:
+    """Open PRs touching the given paths."""
+    overlap_targets = set(paths)
+    concurrent: list[dict[str, object]] = []
+    for pr in _gh_pr_list_open():
+        pr_files = _files_for_pr(pr)
+        overlap = sorted(f for f in pr_files if f in overlap_targets)
+        if not overlap:
+            continue
+        author = pr.get("author") or {}
+        author_login = author.get("login") if isinstance(author, dict) else None
+        concurrent.append(
+            {
+                "number": pr.get("number"),
+                "title": pr.get("title"),
+                "author": author_login,
+                "url": pr.get("url"),
+                "paths_overlap": overlap,
+            }
+        )
+    return {"concurrent": concurrent}
+
+
 # ─── orient (bundles all five for Culture's single call) ─────────────────────
 
 
@@ -214,6 +335,13 @@ def _build_parser() -> argparse.ArgumentParser:
     p_risk = sub.add_parser("risk")
     p_risk.add_argument("paths", nargs="+")
     sub.add_parser("orient")
+    p_prec = sub.add_parser("precedent")
+    p_prec.add_argument("--symbols", default="", help="comma-separated symbol names")
+    p_prec.add_argument("--paths", nargs="*", default=[])
+    p_prec.add_argument("--limit", type=int, default=10)
+    p_prec.add_argument("--since", default=DEFAULT_SINCE)
+    p_cprs = sub.add_parser("concurrent-prs")
+    p_cprs.add_argument("--paths", nargs="*", default=[])
     return parser
 
 
@@ -232,6 +360,11 @@ def _dispatch(ns: argparse.Namespace) -> object:
         return [risk_for(p) for p in ns.paths]
     if ns.cmd == "orient":
         return orient()
+    if ns.cmd == "precedent":
+        symbols = [s.strip() for s in ns.symbols.split(",") if s.strip()]
+        return precedent(symbols=symbols, paths=ns.paths, limit=ns.limit, since=ns.since)
+    if ns.cmd == "concurrent-prs":
+        return concurrent_prs(paths=ns.paths)
 
 
 def main(argv: list[str]) -> int:
