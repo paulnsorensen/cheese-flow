@@ -29,11 +29,8 @@ use a 0-100 confidence scale; only >= 50 is surfaced to the user.
 | Architecture | `age-arch` | Complexity budgets (lines, params, nesting), Sliced Bread organization |
 | Encapsulation | `age-encap` | Leaky abstractions, overly wide public APIs, cross-boundary imports |
 | YAGNI / de-slop | `age-yagni` | Unjustified dead code, speculative abstractions, AI-generated noise |
-| Spec adherence | `age-spec` | Drift from `<harness>/specs/<slug>.md`, monkey patches, shortcuts |
+| Spec adherence | `age-spec` | Drift from `.cheese/specs/<slug>.md`, monkey patches, shortcuts |
 | History risk | `age-history` | Per-file risk modifiers derived from git blame / churn patterns |
-
-`<harness>` is the active harness output root — `.claude` for Claude Code,
-`.codex` for Codex.
 
 ## Output contract
 

@@ -2,6 +2,7 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { harnessAdapters } from "../src/adapters/index.js";
 import { emitHooks } from "../src/lib/emit.js";
 
 const createdDirectories: string[] = [];
@@ -104,6 +105,169 @@ describe("emitHooks", () => {
 
     expect(config.hooks.sessionStart).toBeDefined();
     expect(config.hooks.preToolUse).toBeUndefined();
+  });
+
+  it("emits sessionStart bootstrap entry for every bootstrapHook=true harness", async () => {
+    const source = {
+      sessionStart: [
+        { type: "command", command: "bash hooks/cheese-bootstrap.sh" },
+      ],
+    };
+    const enabled: Array<keyof typeof harnessAdapters> = [
+      "claude-code",
+      "codex",
+      "copilot-cli",
+    ];
+    for (const harness of enabled) {
+      const caps = harnessAdapters[harness].capabilities as {
+        bootstrapHook?: boolean;
+      };
+      expect(
+        caps.bootstrapHook,
+        `${harness} must have bootstrapHook=true`,
+      ).toBe(true);
+
+      const outputRoot = await mkdtemp(path.join(os.tmpdir(), "cheese-flow-"));
+      createdDirectories.push(outputRoot);
+
+      const result = await emitHooks(harness, source, outputRoot);
+      expect(result, `${harness} should emit hooks.json`).not.toBe(false);
+
+      const hooksPath = path.join(outputRoot, "hooks.json");
+      const content = await readFile(hooksPath, "utf8");
+      expect(content).toContain("cheese-bootstrap.sh");
+    }
+  });
+
+  it("places bootstrap command at the structurally correct path per harness", async () => {
+    const source = {
+      sessionStart: [
+        { type: "command", command: "bash hooks/cheese-bootstrap.sh" },
+      ],
+    };
+
+    const claudeRoot = await mkdtemp(path.join(os.tmpdir(), "cheese-flow-"));
+    createdDirectories.push(claudeRoot);
+    await emitHooks("claude-code", source, claudeRoot);
+    const claudeConfig = JSON.parse(
+      await readFile(path.join(claudeRoot, "hooks.json"), "utf8"),
+    ) as {
+      hooks: { sessionStart: Array<{ type: string; command: string }> };
+    };
+    expect(claudeConfig.hooks.sessionStart).toHaveLength(1);
+    expect(claudeConfig.hooks.sessionStart[0]?.type).toBe("command");
+    expect(claudeConfig.hooks.sessionStart[0]?.command).toBe(
+      "bash hooks/cheese-bootstrap.sh",
+    );
+
+    const codexRoot = await mkdtemp(path.join(os.tmpdir(), "cheese-flow-"));
+    createdDirectories.push(codexRoot);
+    await emitHooks("codex", source, codexRoot);
+    const codexConfig = JSON.parse(
+      await readFile(path.join(codexRoot, "hooks.json"), "utf8"),
+    ) as {
+      hooks: {
+        SessionStart: Array<{
+          matcher: string;
+          hooks: Array<{ type: string; command: string; timeout: number }>;
+        }>;
+      };
+    };
+    expect(codexConfig.hooks.SessionStart).toHaveLength(1);
+    expect(codexConfig.hooks.SessionStart[0]?.matcher).toBe("*");
+    expect(codexConfig.hooks.SessionStart[0]?.hooks[0]?.command).toBe(
+      "bash hooks/cheese-bootstrap.sh",
+    );
+
+    const copilotRoot = await mkdtemp(path.join(os.tmpdir(), "cheese-flow-"));
+    createdDirectories.push(copilotRoot);
+    await emitHooks("copilot-cli", source, copilotRoot);
+    const copilotConfig = JSON.parse(
+      await readFile(path.join(copilotRoot, "hooks.json"), "utf8"),
+    ) as {
+      version: number;
+      hooks: { sessionStart: Array<{ type: string; command: string }> };
+    };
+    expect(copilotConfig.version).toBe(1);
+    expect(copilotConfig.hooks.sessionStart).toHaveLength(1);
+    expect(copilotConfig.hooks.sessionStart[0]?.command).toBe(
+      "bash hooks/cheese-bootstrap.sh",
+    );
+  });
+
+  it("skips emission for cursor (bootstrapHook=false)", async () => {
+    const cursorCaps = harnessAdapters.cursor.capabilities as {
+      bootstrapHook?: boolean;
+    };
+    expect(cursorCaps.bootstrapHook).toBe(false);
+
+    const outputRoot = await mkdtemp(path.join(os.tmpdir(), "cheese-flow-"));
+    createdDirectories.push(outputRoot);
+
+    const source = {
+      sessionStart: [
+        { type: "command", command: "bash hooks/cheese-bootstrap.sh" },
+      ],
+    };
+    const result = await emitHooks("cursor", source, outputRoot);
+    expect(result).toBe(false);
+  });
+
+  it("filters bootstrap entry when bootstrapHook=false even if buildHookConfig returns a payload", async () => {
+    const cursorAdapter = harnessAdapters.cursor;
+    const buildSpy = vi
+      .spyOn(cursorAdapter, "buildHookConfig")
+      .mockImplementation((portable) => ({ hooks: portable }));
+
+    try {
+      const outputRoot = await mkdtemp(path.join(os.tmpdir(), "cheese-flow-"));
+      createdDirectories.push(outputRoot);
+
+      const source = {
+        sessionStart: [
+          { type: "command", command: "bash hooks/cheese-bootstrap.sh" },
+          { type: "command", command: "echo other-hook" },
+        ],
+      };
+
+      const result = await emitHooks("cursor", source, outputRoot);
+      expect(result).not.toBe(false);
+
+      const content = await readFile(
+        path.join(outputRoot, "hooks.json"),
+        "utf8",
+      );
+      expect(content).not.toContain("cheese-bootstrap.sh");
+      expect(content).toContain("echo other-hook");
+    } finally {
+      buildSpy.mockRestore();
+    }
+  });
+
+  it("omits sessionStart entirely when filtering removes the only entry", async () => {
+    const cursorAdapter = harnessAdapters.cursor;
+    const buildSpy = vi
+      .spyOn(cursorAdapter, "buildHookConfig")
+      .mockImplementation((portable) => ({ hooks: portable }));
+
+    try {
+      const outputRoot = await mkdtemp(path.join(os.tmpdir(), "cheese-flow-"));
+      createdDirectories.push(outputRoot);
+
+      const source = {
+        sessionStart: [
+          { type: "command", command: "bash hooks/cheese-bootstrap.sh" },
+        ],
+      };
+
+      await emitHooks("cursor", source, outputRoot);
+      const config = JSON.parse(
+        await readFile(path.join(outputRoot, "hooks.json"), "utf8"),
+      );
+      expect(config.hooks.sessionStart).toBeUndefined();
+    } finally {
+      buildSpy.mockRestore();
+    }
   });
 
   it("skips non-portable events with warn", async () => {

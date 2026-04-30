@@ -100,6 +100,21 @@ export function checkBodyHarnessIdioms(body: string): HarnessCompatFinding[] {
     ...collectToolFindings(body),
     ...collectEventFindings(body),
     ...collectPathFindings(body),
+    ...collectPlaceholderFindings(body),
+  ];
+}
+
+function collectPlaceholderFindings(body: string): HarnessCompatFinding[] {
+  const line = findFirstMatchLine(body, /<harness>\//u);
+  if (line === undefined) return [];
+  return [
+    {
+      rule: "body-harness-placeholder",
+      severity: "error",
+      message:
+        'body uses the "<harness>/" placeholder; replace with ".cheese/" so all four harnesses share a single project-root runtime directory.',
+      line,
+    },
   ];
 }
 

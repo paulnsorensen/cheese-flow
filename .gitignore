@@ -1,6 +1,7 @@
 node_modules/
 dist/
 coverage/
+.cheese/
 .cheese-flow/
 .codex/
 .claude/

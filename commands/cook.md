@@ -27,7 +27,7 @@ spec into tested code through red-green-refactor discipline.
 
 Accept one of:
 
-- A spec path (typically `<harness>/specs/<slug>.md` from `/mold`).
+- A spec path (typically `.cheese/specs/<slug>.md` from `/mold`).
 - A pasted spec.
 - A precise implementation request with acceptance criteria.
 

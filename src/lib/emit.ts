@@ -12,6 +12,8 @@ import {
   pluginMetadataSchema,
 } from "../domain/harness.js";
 
+const BOOTSTRAP_COMMAND_MARKER = "hooks/cheese-bootstrap.sh";
+
 function filterPortableEvents(source: HooksSource): PortableHooks {
   const portable: PortableHooks = {};
   const portableSet: ReadonlySet<string> = new Set(PORTABLE_EVENTS);
@@ -26,6 +28,20 @@ function filterPortableEvents(source: HooksSource): PortableHooks {
   }
 
   return portable;
+}
+
+function filterBootstrapEntries(portable: PortableHooks): PortableHooks {
+  const result: PortableHooks = {};
+  for (const [event, entries] of Object.entries(portable)) {
+    if (entries === undefined) continue;
+    const kept = entries.filter(
+      (entry) => !entry.command.includes(BOOTSTRAP_COMMAND_MARKER),
+    );
+    if (kept.length > 0) {
+      result[event as PortableEvent] = kept;
+    }
+  }
+  return result;
 }
 
 export async function emitPluginManifest(
@@ -72,7 +88,10 @@ export async function emitHooks(
   outputRoot: string,
 ): Promise<false | string> {
   const adapter = harnessAdapters[harness];
-  const portable = filterPortableEvents(source);
+  let portable = filterPortableEvents(source);
+  if (!adapter.capabilities.bootstrapHook) {
+    portable = filterBootstrapEntries(portable);
+  }
   const payload = adapter.buildHookConfig(portable);
 
   if (payload === null) {

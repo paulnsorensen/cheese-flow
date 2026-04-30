@@ -59,7 +59,7 @@ dialogue actually produced — never more, never less.
 | Input shape | Start mode | Heuristic |
 | --- | --- | --- |
 | Stack trace, "X is broken/slow/flaky" | Diagnose | error markers, `file:line` refs, symptom verbs |
-| File path, PR ref, existing spec under `<harness>/specs/` | Ground | concrete artifact exists; read it first |
+| File path, PR ref, existing spec under `.cheese/specs/` | Ground | concrete artifact exists; read it first |
 | Half-baked design doc with signatures or schemas | Sketch | already has interfaces; refine them |
 | "I want to add X" with concrete nouns | Shape | named the thing → jump to options |
 | "Should we do X? thinking about Y" | Grill | tentative plan exists → stress-test it |
@@ -261,14 +261,13 @@ Confirm in **one** approval prompt covering the artifact set, the slug, and
 the target paths. Render drafts inline first if the user wants to iterate
 before any disk writes.
 
-Output paths (relative to the active harness output root, surfaced as
-`<harness>/...`):
+Output paths (relative to the project root):
 
 | Output | Path |
 | --- | --- |
-| Spec only | `<harness>/specs/<slug>.md` |
-| Issues only | `<harness>/issues/<slug>-001.md`, `-002.md`, ... |
-| Spec + Issues | spec at `<harness>/specs/<slug>.md`; issues at `<harness>/issues/<slug>-001.md`, ... |
+| Spec only | `.cheese/specs/<slug>.md` |
+| Issues only | `.cheese/issues/<slug>-001.md`, `-002.md`, ... |
+| Spec + Issues | spec at `.cheese/specs/<slug>.md`; issues at `.cheese/issues/<slug>-001.md`, ... |
 
 Slug derivation: lowercase the working problem statement, drop stopwords,
 kebab-case, cap at 5 words. Honour user-passed slugs verbatim.
@@ -294,7 +293,7 @@ After writing, offer the next step inline. Never auto-invoke.
 
 | Artifact | Suggested next step |
 | --- | --- |
-| Spec | `/cook <harness>/specs/<slug>.md` |
+| Spec | `/cook .cheese/specs/<slug>.md` |
 | Issues | `gh issue create --body-file <path>` (per file) |
 
 ## Loop detection

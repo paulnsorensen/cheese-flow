@@ -15,9 +15,8 @@ generator: the dialogue is the point, the artifact is the by-product.
 
 Invoke the `mold` skill with `$ARGUMENTS`. The skill owns mode routing,
 Validate Cycle dispatch, interface lockdown via pseudocode, the two-key
-handshake, and atomic artifact extraction to `<harness>/specs/<slug>.md`
-and `<harness>/issues/<slug>-NNN.md`. `<harness>` is the active output
-root for the harness in use.
+handshake, and atomic artifact extraction to `.cheese/specs/<slug>.md`
+and `.cheese/issues/<slug>-NNN.md`.
 
 Do not reimplement the dialogue or extraction logic in this command.
 This file is the user-facing alias and contract; `skills/mold/SKILL.md`
@@ -33,11 +32,11 @@ is the implementation source of truth.
 
 ## What you get
 
-- **Spec** — rich container, written to `<harness>/specs/<slug>.md`.
+- **Spec** — rich container, written to `.cheese/specs/<slug>.md`.
   Always present unless the dialogue produced only standalone bug
   tickets.
 - **Issues** — separate, GitHub-flavored, written to
-  `<harness>/issues/<slug>-NNN.md`. Present when the dialogue surfaced
+  `.cheese/issues/<slug>-NNN.md`. Present when the dialogue surfaced
   side-channel actionables (out-of-scope bugs, follow-ups, parking-lot
   work).
 

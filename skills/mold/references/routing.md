@@ -50,7 +50,7 @@ considered, and explicitly invite a knob redirect.
 | Input | Mode | Reason |
 | --- | --- | --- |
 | `TypeError: cannot read property 'foo' of undefined at app.ts:142` | Diagnose | error keyword + file:line |
-| `<harness>/specs/dark-mode.md` | Ground | spec path; read first |
+| `.cheese/specs/dark-mode.md` | Ground | spec path; read first |
 | `def dispatch(...): ... # what should the return type be?` | Sketch | existing signature with question |
 | `I want to add idempotency to the dispatcher` | Shape | concrete noun, additive verb |
 | `Should we extract the dedup layer into its own slice?` | Grill | tentative verb on a plan |

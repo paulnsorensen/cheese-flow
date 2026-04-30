@@ -27,5 +27,6 @@ export const codexAdapter: HarnessAdapter = {
     agentFrontmatterKeys: new Set<string>(),
     hookEvents: new Set(["sessionStart", "preToolUse", "postToolUse"]),
     toolNames: new Set<string>(),
+    bootstrapHook: true,
   },
 };

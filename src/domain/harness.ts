@@ -2,6 +2,8 @@ import { z } from "zod";
 
 export type HarnessName = "claude-code" | "codex" | "cursor" | "copilot-cli";
 
+export const CHEESE_DIR = ".cheese";
+
 export const PORTABLE_EVENTS = [
   "sessionStart",
   "preToolUse",
@@ -97,6 +99,7 @@ export type HarnessCapabilities = {
   agentFrontmatterKeys: ReadonlySet<string>;
   hookEvents: ReadonlySet<string>;
   toolNames: ReadonlySet<string>;
+  bootstrapHook: boolean;
 };
 
 export interface HarnessAdapter {
