@@ -34,7 +34,10 @@ async function makeTempCwd(): Promise<string> {
   return dir;
 }
 
-function runScript(cwd: string): {
+function runScript(
+  cwd: string,
+  pathOverride?: string,
+): {
   code: number;
   stdout: string;
   stderr: string;
@@ -42,12 +45,22 @@ function runScript(cwd: string): {
   const result = spawnSync("bash", [SCRIPT_PATH], {
     cwd,
     encoding: "utf8",
+    env: pathOverride ? { ...process.env, PATH: pathOverride } : process.env,
   });
   return {
     code: result.status ?? -1,
     stdout: result.stdout ?? "",
     stderr: result.stderr ?? "",
   };
+}
+
+async function makeShimDir(body: string): Promise<string> {
+  const dir = await mkdtemp(path.join(os.tmpdir(), "cheese-shim-"));
+  tempDirs.push(dir);
+  const shim = path.join(dir, "cheese");
+  await writeFile(shim, body, "utf8");
+  await import("node:fs/promises").then((m) => m.chmod(shim, 0o755));
+  return dir;
 }
 
 describe("AC5: hooks/cheese-bootstrap.sh idempotent bootstrap", () => {
@@ -152,5 +165,59 @@ describe("AC5: hooks/cheese-bootstrap.sh idempotent bootstrap", () => {
       .split(/\r?\n/)
       .filter((line: string) => line.length > 0);
     expect(lines).toEqual([".cheese", ".cheese/"]);
+  });
+});
+
+describe("hooks/cheese-bootstrap.sh — CLI handoff (R5)", () => {
+  it("exits 0 when cheese is not on PATH (PR #31 behavior preserved)", async () => {
+    const cwd = await makeTempCwd();
+    // Empty dir prepended to a minimal coreutils PATH — proves the
+    // `command -v cheese` short-circuit fires without breaking mkdir/grep/tail.
+    const empty = await mkdtemp(path.join(os.tmpdir(), "cheese-empty-path-"));
+    tempDirs.push(empty);
+
+    const result = runScript(cwd, `${empty}:/usr/bin:/bin`);
+
+    expect(result.code, `stderr: ${result.stderr}`).toBe(0);
+    const cheeseStat = await stat(path.join(cwd, ".cheese"));
+    expect(cheeseStat.isDirectory()).toBe(true);
+  });
+
+  it("invokes 'cheese session-start' when present and continues on non-zero exit", async () => {
+    const cwd = await makeTempCwd();
+    const callLog = path.join(cwd, "cheese-call.log");
+    const shimDir = await makeShimDir(
+      `#!/usr/bin/env bash\nprintf '%s\\n' "$@" > ${JSON.stringify(callLog)}\nexit 7\n`,
+    );
+    const newPath = `${shimDir}:${process.env.PATH ?? ""}`;
+
+    const result = runScript(cwd, newPath);
+
+    // Hook must NOT propagate the non-zero exit from the CLI handoff.
+    expect(result.code, `stderr: ${result.stderr}`).toBe(0);
+
+    const recorded = await readFile(callLog, "utf8");
+    expect(recorded).toContain("session-start");
+    expect(recorded).toContain("--quiet");
+    expect(recorded).toContain("--max-time");
+  });
+
+  it("invokes 'cheese session-start --root <pwd>' with the worktree path", async () => {
+    const cwd = await makeTempCwd();
+    const callLog = path.join(cwd, "cheese-call.log");
+    const shimDir = await makeShimDir(
+      `#!/usr/bin/env bash\nprintf '%s\\n' "$@" > ${JSON.stringify(callLog)}\nexit 0\n`,
+    );
+    const newPath = `${shimDir}:${process.env.PATH ?? ""}`;
+
+    const result = runScript(cwd, newPath);
+    expect(result.code, `stderr: ${result.stderr}`).toBe(0);
+
+    const recorded = await readFile(callLog, "utf8");
+    expect(recorded).toContain("--root");
+    // Resolve symlinks (macOS /tmp -> /private/tmp); shim records pwd which may be either.
+    const fs = await import("node:fs/promises");
+    const realCwd = await fs.realpath(cwd);
+    expect(recorded.includes(cwd) || recorded.includes(realCwd)).toBe(true);
   });
 });

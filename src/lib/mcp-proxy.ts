@@ -7,6 +7,7 @@ import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
+import { resolveCheeseHome } from "./cheese-home.js";
 
 export type ProxyTransport = {
   start?(): Promise<void>;
@@ -113,12 +114,28 @@ export const defaultClientTransportFactory: ClientTransportFactory = (
   projectRoot,
 ) => {
   const { command, args } = getMcpServerCommand(projectRoot);
+  const env = mcpServerEnv(projectRoot);
   return new StdioClientTransport({
     command,
     args,
     cwd: projectRoot,
+    env,
   }) as unknown as ProxyTransport;
 };
+
+function mcpServerEnv(projectRoot: string): Record<string, string> {
+  const base: Record<string, string> = {};
+  for (const [key, value] of Object.entries(process.env)) {
+    if (typeof value === "string") base[key] = value;
+  }
+  try {
+    const paths = resolveCheeseHome(projectRoot);
+    base.MILKNADO_DB_PATH = paths.milknadoDb;
+  } catch {
+    // best-effort: if not in a git repo, fall back to in-repo default behavior
+  }
+  return base;
+}
 
 export const defaultServerTransportFactory: ServerTransportFactory = () =>
   new StdioServerTransport() as unknown as ProxyTransport;
