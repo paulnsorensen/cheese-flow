@@ -11,6 +11,10 @@ import {
   runAllToolChecks,
 } from "./lib/doctor.js";
 import {
+  dedupeHarnessNames,
+  parseHarnessOverrides,
+} from "./lib/install-plan.js";
+import {
   formatLintReport,
   hasErrors,
   lintSkillsDirectory,
@@ -28,14 +32,13 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const defaultProjectRoot = path.resolve(__dirname, "..");
 
-function parseHarness(value: string): HarnessName {
-  if (harnessNames.includes(value as HarnessName)) {
-    return value as HarnessName;
+function parseHarnessArgument(value: string): HarnessName[] {
+  try {
+    return parseHarnessOverrides([value]);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new InvalidArgumentError(message);
   }
-
-  throw new InvalidArgumentError(
-    `Unsupported harness "${value}". Expected one of: ${harnessNames.join(", ")}.`,
-  );
 }
 
 type CompileCommandOptions = {
@@ -85,10 +88,7 @@ program
     "Harness target(s) to compile for. Defaults to all supported harnesses.",
     (value, previous: HarnessName[] | undefined) => {
       const items = Array.isArray(previous) ? previous : [];
-      return [
-        ...items,
-        ...value.split(",").map((item) => parseHarness(item.trim())),
-      ];
+      return [...items, ...parseHarnessArgument(value)];
     },
     [] as HarnessName[],
   )
