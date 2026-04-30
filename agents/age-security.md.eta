@@ -2,9 +2,9 @@
 name: age-security
 description: Security reviewer in /age — diff-scoped auth bypass, secrets, and taint-shaped concerns in changed code only.
 models:
-  default: claude-haiku-4-5
-  claude-code: claude-haiku-4-5-20251001
-  codex: gpt-5.1-codex
+  default: sonnet
+  claude-code: sonnet
+  codex: gpt-5-codex
 tools:
   - mcp__tilth__tilth_read
   - mcp__tilth__tilth_search

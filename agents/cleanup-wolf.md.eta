@@ -2,9 +2,9 @@
 name: cleanup-wolf
 description: Re-anchors a /cleanup fix when the original tilth_edit hash mismatches; applies via tilth_edit or returns explicit skip.
 models:
-  default: claude-haiku-4-5
-  claude-code: claude-haiku-4-5-20251001
-  codex: gpt-5.1-codex
+  default: haiku
+  claude-code: haiku
+  codex: gpt-5-codex
 tools:
   - mcp__tilth__tilth_read
   - mcp__tilth__tilth_search

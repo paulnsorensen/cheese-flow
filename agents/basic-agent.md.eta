@@ -2,9 +2,9 @@
 name: basic-agent
 description: A starter portable agent definition compiled into harness-specific markdown.
 models:
-  default: gpt-5.1-codex
-  claude-code: claude-sonnet-4-5
-  codex: gpt-5.1-codex
+  default: sonnet
+  claude-code: sonnet
+  codex: gpt-5-codex
 tools:
   - read
   - write

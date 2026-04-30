@@ -2,9 +2,9 @@
 name: milknado-planner
 description: Decomposes a goal into a Mikado-style change manifest and populates the Milknado graph via MCP tools.
 models:
-  default: gpt-5.1-codex
-  claude-code: claude-sonnet-4-5
-  codex: gpt-5.1-codex
+  default: opus
+  claude-code: opus
+  codex: gpt-5-codex
 tools:
   - read
   - mcp__milknado__milknado_graph_summary
