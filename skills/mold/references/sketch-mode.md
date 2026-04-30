@@ -47,25 +47,27 @@ Push back on either, or `1A 2A` to confirm.
 ## Slice placement
 
 Every signature names the **Sliced Bread slice** it lives in before the
-pseudocode is drafted. The slice path — `domains/<name>/`,
-`adapters/<name>/`, `app/`, or `domains/common/` — goes in the sketch's
-`module` field and gates the direction-of-imports check.
+pseudocode is drafted. The slice — `domains/<name>`,
+`adapters/<name>`, `app`, or `domains/common` — goes in the sketch's
+`slice` field. The `module` field records the specific file or module
+path within that slice.
 
 Default decisions:
 
-- **Pure business concept** (entity, value type, port) → `domains/<slice>/`.
+- **Pure business concept** (entity, value type, port) → `domains/<name>`.
   Define the port inside the domain; adapters implement it.
 - **External integration** (DB, third-party SDK, queue, cache, logger) →
-  `adapters/<name>/`. Implements a port from `domains/`.
+  `adapters/<name>`. Implements a port from `domains/`.
 - **Cross-slice orchestration** (use case spanning 2+ domain slices) →
-  `app/use_cases/`.
+  `app/use_cases`.
 - **Pure shape with universal semantics** (Money, UserId, Email) →
-  `domains/common/`. Only when the type has zero behavior and is referenced
+  `domains/common`. Only when the type has zero behavior and is referenced
   by 2+ slices today.
 
-Full rules in `references/sliced-bread.md`. The Sketch gate fails if any
-signature crosses an existing slice's boundary by importing internals
-instead of the crust, or if `common/` would import from a sibling slice.
+Full rules in `references/sliced-bread.md` (repo root, not local to this
+skill). The Sketch gate fails if any signature crosses an existing
+slice's boundary by importing internals instead of the crust, or if
+`domains/common` would import from a sibling slice.
 
 When the chosen option crosses an existing slice's crust, the sketch
 records the imported public name (`from domains.orders import dispatch`)

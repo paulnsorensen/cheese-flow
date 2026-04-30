@@ -47,9 +47,9 @@ dialogue actually produced — never more, never less.
    step.
 4. **Lock down interfaces before crystallizing.** Every cross-slice seam
    gets a pseudocode signature with named unknowns, a recommended answer,
-   and an explicit Sliced Bread slice (`domains/<name>/`,
-   `adapters/<name>/`, or `app/`). Architecture rules in
-   `references/sliced-bread.md`.
+   and an explicit Sliced Bread slice (`domains/<name>`, `adapters/<name>`,
+   `app`, or `domains/common`). Architecture rules in
+   `references/sliced-bread.md` (repo root, not local to this skill).
 5. **Two-key handshake.** Both the user (explicit verb) and the agent
    (coherence self-check) must agree before extraction.
 6. **Heavy delegation.** `/briesearch` for external research, `cheez-search`
@@ -103,10 +103,10 @@ Job: lock modules, responsibilities, I/O contracts, and seams in pseudocode
 signatures, anchored to Sliced Bread slices. Before drafting, parallel
 `cheez-search` for sibling signatures in the same slice so new ones fit
 conventions and respect the crust (the slice's public API).
-Exit when: every public seam has a signature with a slice path; every
-cross-slice call imports from the target slice's crust, never its
-internals. Detail in `references/sketch-mode.md`; architecture rules in
-`references/sliced-bread.md`.
+Exit when: every public seam has a signature and a declared `slice` field;
+   every cross-slice call imports from the target slice's crust, never its
+   internals. Detail in `references/sketch-mode.md`; architecture rules in
+   `references/sliced-bread.md` (repo root, not local to this skill).
 
 ### Grill — adversarial clarification
 Job: stress-test the chosen approach plus sketched interfaces. **One question

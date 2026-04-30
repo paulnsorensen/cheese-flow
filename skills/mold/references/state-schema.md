@@ -27,7 +27,7 @@ briesearch_used: <integer>      # 0..2 unless user lifts the cap
 - ...
 
 ## Sketches (locked interfaces)
-- module: <slice path or file path>
+- module: <file or module path within the slice>
   slice: domains/<name> | adapters/<name> | app | domains/common
   signature: |
     def <name>(
