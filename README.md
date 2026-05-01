@@ -32,11 +32,12 @@ Opinionated scaffolding for portable agents and skills that can be compiled into
 ```bash
 npm install
 npm run build
-npm run compile:claude
-npm run compile:codex
-npm run compile:cursor
-npm run compile:copilot
+
+# Emit bundles for every harness
 npm run compile:all
+
+# Install into whichever local harnesses are detected
+npm run install:auto
 ```
 
 Or use the repository automation entrypoints:
@@ -49,30 +50,52 @@ just build-ci
 Or target specific harnesses directly:
 
 ```bash
+# Bundle emission
 npx tsx src/index.ts compile
-npx tsx src/index.ts compile --harness claude-code
-npx tsx src/index.ts compile --harness codex
-npx tsx src/index.ts compile --harness cursor
-npx tsx src/index.ts compile --harness copilot-cli
+npx tsx src/index.ts compile --harness claude-code,copilot-cli
 npx tsx src/index.ts compile --harness claude-code,codex,cursor,copilot-cli
+
+# Local installation (auto-detect by default)
+npx tsx src/index.ts install
+npx tsx src/index.ts install --harness cursor,copilot-cli
+npx tsx src/index.ts install --harness claude-code,codex
+
+# Force every harness instead of auto-detect
+npm run install:all
+
+# Python demo
 npx tsx src/index.ts milknado
 ```
 
-`cheese compile` emits harness bundles for repo authors and CI. `cheese install` is reserved for future local harness installation.
+`cheese compile` emits harness bundles for repo authors and CI. `cheese install`
+compiles the selected bundles and installs them into local harness surfaces,
+auto-detecting installed harnesses unless you pass `--harness`.
 
-## Installing cheese-flow as a plugin
+## Installing compiled bundles locally
 
-Teammates can install directly from the repo via their harness's native plugin command:
+Point harness installers at the compiled bundle directories (`.claude/`,
+`.codex/`, `.cursor/`, `.copilot/`) instead of the repository root.
 
-```
-# Claude Code
-/plugin install paulnsorensen/cheese-flow
+| Harness | Compiled install surface | What `cheese install` does |
+|---|---|---|
+| Claude Code | `.claude/` | Compiles the bundle, writes local marketplace metadata, and prints `claude plugin marketplace add "<repo>/.claude"` plus the in-app install step. |
+| Codex | `.codex/` | Compiles the bundle, writes local marketplace metadata, and prints `codex plugin marketplace add "<repo>/.codex"` plus the restart/install steps. |
+| Cursor | `.cursor/` | Compiles `.cursor/`; that tree is already the installed surface. |
+| Copilot CLI | `.copilot/` | Compiles `.copilot/` and runs `copilot plugin install "<repo>/.copilot"` when the CLI is available. |
 
-# Copilot CLI
-copilot plugin install paulnsorensen/cheese-flow
+Examples:
 
-# Cursor
-# Configure via .cursor/settings.json pointing at this repo (see Cursor plugin docs)
+```bash
+# Auto-detect installed harnesses and install only those
+npx tsx src/index.ts install
+
+# Explicit multi-harness install
+npx tsx src/index.ts install --harness cursor,copilot-cli
+
+# Bundle emission only, then manual bundle-surface install
+npx tsx src/index.ts compile --harness claude-code,codex
+claude plugin marketplace add ./.claude
+codex plugin marketplace add ./.codex
 ```
 
 Once the package is built or published, the same TUI demo is available through:
@@ -102,12 +125,12 @@ npx cheese-flow milknado
 - `just build-ci` uses the same checks without autofix and is what CI runs
 - Vitest coverage thresholds are set above 90% for statements, branches, functions, and lines
 
-## Example output
+## Example bundle/install surfaces
 
-- Claude Code bundle: `.claude/`
-- Codex bundle: `.codex/`
-- Cursor bundle: `.cursor/`
-- Copilot CLI bundle: `.copilot/`
+- Claude Code bundle/install surface: `.claude/`
+- Codex bundle/install surface: `.codex/`
+- Cursor bundle/install surface: `.cursor/`
+- Copilot CLI bundle/install surface: `.copilot/`
 
 Each bundle contains:
 

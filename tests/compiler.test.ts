@@ -709,6 +709,9 @@ describe("compileHarnessBundles", () => {
       },
     );
 
+    expect(stdout).toContain(
+      "Emit one or more harness bundles from the repository skill and agent sources.",
+    );
     expect(stdout).toContain("-h, --help");
     expect(stdout).toContain("-H, --harness <name...>");
   });
@@ -722,9 +725,12 @@ describe("compileHarnessBundles", () => {
       },
     );
 
+    expect(stdout).toContain(
+      "Compile selected harness bundles and install them into local harness surfaces.",
+    );
     expect(stdout).toContain("-h, --help");
     expect(stdout).toContain("-H, --harness <name...>");
-    expect(stdout).toContain("auto-detect.");
+    expect(stdout).toContain("auto-detected local harnesses.");
   });
 });
 
