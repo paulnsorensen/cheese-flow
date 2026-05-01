@@ -5,6 +5,8 @@ import {
   pascalMatcherHooks,
 } from "./_shared.js";
 
+const CODEX_MANIFEST_KEYS = ["skills", "mcpServers", "apps"] as const;
+
 export const codexAdapter: HarnessAdapter = {
   name: "codex",
   displayName: "Codex",
@@ -18,7 +20,8 @@ export const codexAdapter: HarnessAdapter = {
     "Prefer Codex model identifiers in agent metadata and output.",
   ],
   manifestDir: ".codex-plugin",
-  buildManifest: buildBaseManifest,
+  buildManifest: (metadata, componentPaths) =>
+    buildBaseManifest(metadata, componentPaths, CODEX_MANIFEST_KEYS),
   mcpFileName: ".mcp.json",
   buildHookConfig: (portable) => ({ hooks: pascalMatcherHooks(portable) }),
   buildAgentArtifact: buildPortableAgentArtifact,

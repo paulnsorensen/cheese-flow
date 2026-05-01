@@ -2,6 +2,7 @@ import type {
   AgentArtifact,
   AgentArtifactInput,
   HookEntry,
+  ManifestComponentPaths,
   PluginMetadata,
   PortableHooks,
 } from "../domain/harness.js";
@@ -15,8 +16,24 @@ const PASCAL_MAP: Record<(typeof PORTABLE_EVENTS)[number], string> = {
 
 const DEFAULT_HOOK_TIMEOUT = 600;
 
+type ManifestComponentKey = keyof ManifestComponentPaths;
+
+function pickManifestPaths(
+  componentPaths: ManifestComponentPaths,
+  supportedKeys: readonly ManifestComponentKey[],
+): Record<string, string> {
+  return Object.fromEntries(
+    supportedKeys.flatMap((key) => {
+      const value = componentPaths[key];
+      return value === undefined ? [] : [[key, value]];
+    }),
+  );
+}
+
 export function buildBaseManifest(
   metadata: PluginMetadata,
+  componentPaths: ManifestComponentPaths,
+  supportedKeys: readonly ManifestComponentKey[],
 ): Record<string, unknown> {
   return {
     name: metadata.name,
@@ -27,6 +44,7 @@ export function buildBaseManifest(
     repository: metadata.repository,
     ...(metadata.homepage !== undefined ? { homepage: metadata.homepage } : {}),
     ...(metadata.keywords !== undefined ? { keywords: metadata.keywords } : {}),
+    ...pickManifestPaths(componentPaths, supportedKeys),
   };
 }
 
