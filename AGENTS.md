@@ -24,6 +24,12 @@ just clean       # Remove build artifacts and caches
 
 For anything else, call the underlying tool directly (`npx tsx src/index.ts ...`, `npm run <script>`, `uv run ...`).
 
+## Required host tools
+
+- **Node 22+** and **npm** — TypeScript build, MCP servers (`tilth`, milknado), and `@ast-grep/cli`.
+- **uv** — Python toolchain for `milknado` and `python/` checks.
+- **`sg` (ast-grep)** — invoked from agent prompts (e.g. `nih-scanner`) for AST-shape patterns the tilth MCP doesn't cover. `just install` pulls `@ast-grep/cli` into `node_modules/.bin`; for a global `sg` use `brew install ast-grep`, `cargo install ast-grep`, or `npm i -g @ast-grep/cli`.
+
 ## Project Overview
 
 cheese-flow is opinionated scaffolding for portable agents and skills that compile into harness-specific markdown bundles (Claude Code, Codex, Cursor, Copilot CLI).

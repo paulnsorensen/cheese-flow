@@ -42,6 +42,26 @@ looking at without a second read.
 
 ---
 
+## Choose your search kind
+
+All five rows below are first-class — picking the right one is the difference
+between one call and a long grep walk.
+
+| Goal | Tool | Example |
+|------|------|---------|
+| Find where a symbol is defined / used | `tilth_search` (default `kind: "symbol"`) | `tilth_search(query: "handleAuth", scope: "src/")` |
+| Find every call site of a function | `tilth_search(kind: "callers")` | `tilth_search(query: "validateToken", kind: "callers")` |
+| Find literal strings, TODOs, error messages | `tilth_search(kind: "content")` | `tilth_search(query: "TODO: fix", kind: "content")` |
+| Find lines matching a regex | `tilth_search(kind: "regex")` | `tilth_search(query: "rate.?limit", kind: "regex")` |
+| Match an AST shape (template with metavars) | `sg` (ast-grep, via Bash) | `sg --lang typescript -p 'JSON.parse(JSON.stringify($X))' --json src/` |
+| Module import / blast-radius graph | `tilth_deps` | `tilth_deps(path: "src/auth.ts")` |
+
+**Rule of thumb:** stay in tilth for anything name-shaped or text-shaped.
+Drop to `sg` only when the pattern needs structural metavariables (`$X`,
+`$$$BODY`) that tilth can't express.
+
+---
+
 ## MCP Tool Reference
 
 ### tilth_search — Symbol and Content Search
@@ -138,16 +158,75 @@ Search for text that isn't a code symbol:
 tilth_search(query: "TODO: fix", kind: "content", scope: ".")
 ```
 
-**Regex search:**
-```
-tilth_search(query: "/rate.*limit/i", kind: "content", scope: ".")
-```
-
 Use content search for:
 - Finding TODOs, FIXMEs, NOTEs
 - Searching error messages
-- Finding specific strings or patterns
-- Regex matching
+- Locating specific literal strings
+
+---
+
+## Regex Search — `kind: "regex"`
+
+For patterns that aren't a single literal, switch kinds rather than embedding
+slashes in a content query:
+
+```
+tilth_search(query: "rate.?limit", kind: "regex", scope: ".")
+tilth_search(query: "FIXME\\(.*?\\):", kind: "regex", scope: "src/")
+```
+
+- Full regex syntax — alternation, character classes, lookarounds depending
+  on the engine version.
+- Use `glob` to bound the file set; regex is the most expensive `kind`.
+- Don't wrap the pattern in `/.../` delimiters — pass the bare regex.
+
+---
+
+## AST-shape Patterns — ast-grep fallback
+
+tilth covers names and text. For *shapes* with metavariables — “any call to
+`JSON.parse(JSON.stringify(…))`”, “any `for` loop with `time.Sleep` in its
+body” — use `sg` (ast-grep) via Bash. The agent template's `tools:` frontmatter
+must list `bash` for these calls to land.
+
+```bash
+# AST template: $X is a metavar that matches any single node.
+sg --lang typescript -p 'JSON.parse(JSON.stringify($X))' --json src/
+
+# $$$BODY matches a sequence of statements.
+sg --lang rust -p 'impl std::fmt::Display for $TYPE { $$$BODY }' --json src/
+
+# Bound the scan; never splice unvalidated user input as the path.
+SCOPE=$(realpath "$SCOPE_INPUT")
+sg --lang python -p 're.match($PATTERN, $INPUT)' --json "$SCOPE"
+```
+
+**When `sg` is the right pick:**
+
+- The pattern needs metavars (`$X`, `$$$BODY`) or specific node kinds.
+- You're surveying a structural shape across a directory (NIH scans, anti-pattern
+  sweeps, refactor previews).
+- Tree-sitter symbol search would over-match because the *name* isn't fixed.
+
+**When to stay in tilth:**
+
+- Looking for a known symbol name → `kind: "symbol"`.
+- Looking for a known string or comment → `kind: "content"`.
+- Looking for callers of a known function → `kind: "callers"`.
+- Need the result inlined with file outline + `── calls ──` footer → tilth.
+
+**Hard rules for sg invocations:**
+
+- Validate any path that flows from user input or `$ARGUMENTS` before splicing
+  it into the command line. Reject `;`, `&`, `|`, backtick, `$(`, `>`, `<`,
+  newline. Resolve to an absolute path with `realpath` (or `tilth_files`) and
+  confirm it sits under the repo root.
+- Always pass `--json` and parse defensively — the JSON shape varies between
+  ast-grep versions.
+- Filter test/build/vendor directories with `--globs` or by post-filtering the
+  JSON output.
+
+See `agents/nih-scanner.md.eta` for the canonical multi-language sg recipe.
 
 ---
 
@@ -338,12 +417,20 @@ tilth_deps(path: "src/auth/index.ts")
 # Check ── imported by ── section
 ```
 
+### "Find every `JSON.parse(JSON.stringify(…))` deep-clone hack"
+```bash
+sg --lang typescript -p 'JSON.parse(JSON.stringify($X))' --json src/
+# Switch to sg whenever the pattern needs metavars; tilth has no $X.
+```
+
 ---
 
 ## DO NOT
 
-- **DO NOT use Grep/rg** — use tilth_search
-- **DO NOT blind text search** — use semantic symbol search
+- **DO NOT use Grep/rg** — use `tilth_search`. `sg` (ast-grep) is the *only*
+  sanctioned shell escape, and only for AST-shape patterns tilth can't express.
+- **DO NOT blind text search** — use a semantic `kind` (`symbol`, `callers`,
+  `content`, `regex`) before reaching for `sg`.
 - **DO NOT re-read expanded results** — they're already shown
 - **DO NOT use for file reading** — use cheez-read (tilth_read)
 - **DO NOT use for editing** — use cheez-write (tilth_edit)
