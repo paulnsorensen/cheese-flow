@@ -1,7 +1,7 @@
 ---
 name: cheez-search
 compatibility: Requires tilth MCP server
-allowed-tools: mcp__tilth__tilth_search, mcp__tilth__tilth_deps
+allowed-tools: mcp__tilth__tilth_search, mcp__tilth__tilth_deps, Bash
 description: >
   AST-aware code search using tilth MCP. Finds definitions first, then usages.
   Use tree-sitter structural matching instead of blind text grep. Understand
@@ -44,7 +44,7 @@ looking at without a second read.
 
 ## Choose your search kind
 
-All five rows below are first-class — picking the right one is the difference
+All six rows below are first-class — picking the right one is the difference
 between one call and a long grep walk.
 
 | Goal | Tool | Example |
