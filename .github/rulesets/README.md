@@ -54,4 +54,4 @@ gh api repos/paulnsorensen/cheese-flow/rulesets/<RULESET_ID> --method DELETE
 - `integration_id: 15368` = GitHub Actions (so any check named `build` from Actions counts).
 - `~DEFAULT_BRANCH` follows default-branch renames automatically.
 
-See `.cheese/research/github-rulesets-oss-setup.md` for the full rationale, signed-commits how-to, sync-workflow pattern, and trade-offs.
+This README captures the current rollout guidance and protections; if you want to add deeper rationale, signed-commits how-to, sync-workflow patterns, or trade-off documentation, commit that material somewhere in-repo and reference that committed path here.
