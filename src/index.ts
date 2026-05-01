@@ -10,6 +10,7 @@ import {
   hasBlockingFailure,
   runAllToolChecks,
 } from "./lib/doctor.js";
+import { runInitWizard } from "./lib/init-wizard.js";
 import {
   formatLintReport,
   hasErrors,
@@ -47,6 +48,20 @@ program
     "Compile portable agents and Agent Skills into harness-specific markdown bundles.",
   )
   .version("0.1.0");
+
+program
+  .command("init")
+  .description(
+    "Interactive setup wizard — pick harnesses and install dependencies.",
+  )
+  .option(
+    "--project-root <path>",
+    "Project root that contains ./agents and ./skills.",
+    defaultProjectRoot,
+  )
+  .action(async (options: { projectRoot: string }) => {
+    await runInitWizard({ projectRoot: path.resolve(options.projectRoot) });
+  });
 
 program
   .command("install")
