@@ -68,6 +68,22 @@ describe("compileHarnessBundles command output", () => {
     for (const root of [".claude", ".codex"]) {
       const manifest = await readManifest(projectRoot, root);
       expect(manifest.commands).toEqual(["alpha.md", "beta.md"]);
+      const pluginManifest = JSON.parse(
+        await readFile(
+          path.join(
+            projectRoot,
+            root,
+            root === ".claude" ? ".claude-plugin" : ".codex-plugin",
+            "plugin.json",
+          ),
+          "utf8",
+        ),
+      ) as { commands?: string };
+      if (root === ".claude") {
+        expect(pluginManifest.commands).toBe("./commands/");
+      } else {
+        expect(pluginManifest.commands).toBeUndefined();
+      }
       const copied = await readFile(
         path.join(projectRoot, root, "commands", "alpha.md"),
         "utf8",

@@ -147,7 +147,7 @@ describe("checkFrontmatterPortability", () => {
         bootstrapHook: false,
       },
     } as HarnessAdapter;
-    registry["fifth"] = fifth;
+    registry.fifth = fifth;
 
     try {
       const skillsAfter = checkFrontmatterPortability(
@@ -156,7 +156,7 @@ describe("checkFrontmatterPortability", () => {
       );
       expect(skillsAfter).toEqual([]);
     } finally {
-      delete registry["fifth"];
+      delete registry.fifth;
       for (const [name, adapter] of Object.entries(registry)) {
         const restored = original.get(name);
         if (restored !== undefined) {

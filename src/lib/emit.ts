@@ -5,6 +5,7 @@ import {
   canonicalMcpServers,
   type HarnessName,
   type HooksSource,
+  type ManifestComponentPaths,
   type PluginMetadata,
   PORTABLE_EVENTS,
   type PortableEvent,
@@ -48,6 +49,7 @@ export async function emitPluginManifest(
   harness: HarnessName,
   metadata: PluginMetadata,
   outputRoot: string,
+  componentPaths: ManifestComponentPaths = {},
 ): Promise<string> {
   const parsed = pluginMetadataSchema.safeParse(metadata);
   if (!parsed.success) {
@@ -57,7 +59,7 @@ export async function emitPluginManifest(
   }
 
   const adapter = harnessAdapters[harness];
-  const manifest = adapter.buildManifest(parsed.data);
+  const manifest = adapter.buildManifest(parsed.data, componentPaths);
   const manifestDir = path.join(outputRoot, adapter.manifestDir);
 
   await mkdir(manifestDir, { recursive: true });

@@ -157,7 +157,7 @@ describe("AC5: project-root hooks.json registers cheese-bootstrap.sh", () => {
     const referencesScript = entries.some((entry) => {
       const command =
         typeof entry.command === "string" ? entry.command : undefined;
-      return command !== undefined && command.includes("cheese-bootstrap.sh");
+      return command?.includes("cheese-bootstrap.sh");
     });
     expect(
       referencesScript,

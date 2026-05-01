@@ -13,6 +13,14 @@ const CLAUDE_AGENT_KEYS: ReadonlySet<string> = new Set([
   "permissionMode",
 ]);
 
+const CLAUDE_MANIFEST_KEYS = [
+  "agents",
+  "skills",
+  "commands",
+  "hooks",
+  "mcpServers",
+] as const;
+
 export const claudeCodeAdapter: HarnessAdapter = {
   name: "claude-code",
   displayName: "Claude Code",
@@ -26,7 +34,8 @@ export const claudeCodeAdapter: HarnessAdapter = {
     "Prefer Claude model identifiers in agent metadata and output.",
   ],
   manifestDir: ".claude-plugin",
-  buildManifest: buildBaseManifest,
+  buildManifest: (metadata, componentPaths) =>
+    buildBaseManifest(metadata, componentPaths, CLAUDE_MANIFEST_KEYS),
   mcpFileName: ".mcp.json",
   buildHookConfig: (portable) => ({ hooks: camelCaseHooks(portable) }),
   buildAgentArtifact: (input) =>

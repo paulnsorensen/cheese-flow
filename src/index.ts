@@ -15,6 +15,11 @@ import {
   parseHarnessOverrides,
 } from "./lib/install-plan.js";
 import {
+  formatInstallReport,
+  hasBlockingInstallResult,
+  installHarnesses,
+} from "./lib/installer.js";
+import {
   formatLintReport,
   hasErrors,
   lintSkillsDirectory,
@@ -46,8 +51,13 @@ type CompileCommandOptions = {
   projectRoot: string;
 };
 
+type InstallCommandOptions = {
+  harness: HarnessName[];
+  projectRoot: string;
+};
+
 function resolveHarnessTargets(harness: HarnessName[]): HarnessName[] {
-  return harness.length > 0 ? Array.from(new Set(harness)) : harnessNames;
+  return harness.length > 0 ? dedupeHarnessNames(harness) : harnessNames;
 }
 
 async function runCompileCommand(
@@ -61,12 +71,6 @@ async function runCompileCommand(
   for (const output of outputs) {
     process.stdout.write(`Compiled harness bundle: ${output}\n`);
   }
-}
-
-function failInstallPlaceholder(): never {
-  throw new Error(
-    "`cheese install` is reserved for local harness installation and is not implemented yet. Use `cheese compile` to emit harness bundles.",
-  );
 }
 
 const program = new Command();
@@ -102,10 +106,31 @@ program
 program
   .command("install")
   .description(
-    "Install generated bundles into a local harness workspace. (Not implemented yet.)",
+    "Compile and install one or more harness bundles into the local workspace.",
   )
-  .action(() => {
-    failInstallPlaceholder();
+  .option(
+    "-H, --harness <name...>",
+    "Harness target(s) to install for. Defaults to auto-detect.",
+    (value, previous: HarnessName[] | undefined) => {
+      const items = Array.isArray(previous) ? previous : [];
+      return [...items, ...parseHarnessArgument(value)];
+    },
+    [] as HarnessName[],
+  )
+  .option(
+    "--project-root <path>",
+    "Project root that contains ./agents and ./skills.",
+    defaultProjectRoot,
+  )
+  .action(async (options: InstallCommandOptions) => {
+    const report = await installHarnesses({
+      projectRoot: path.resolve(options.projectRoot),
+      requestedHarnesses: dedupeHarnessNames(options.harness),
+    });
+    process.stdout.write(formatInstallReport(report));
+    if (hasBlockingInstallResult(report)) {
+      process.exitCode = 1;
+    }
   });
 
 program
