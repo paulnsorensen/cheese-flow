@@ -12,7 +12,7 @@ Enter Sketch when:
 - The starting input was already a half-baked design doc with signatures.
 
 If Sketch is mandatory (chosen option touches more than one module or
-introduces a new public interface) and the user tries to skip to Crystallize,
+introduces a new public interface) and the user tries to skip to Curdle,
 the coherence gate blocks the handshake until Sketch runs.
 
 ## The pseudocode-driven question pattern
@@ -121,7 +121,7 @@ before locking the signature. Common cycles:
 
 Sketches live in the state file's `Sketches (locked interfaces)` block
 during the loop, then migrate verbatim into the spec's `Interface Sketches`
-section at Crystallize. Each sketch carries:
+section at Curdle. Each sketch carries:
 
 - `module` — slice path or file path.
 - `slice` — Sliced Bread slice (`domains/<name>`, `adapters/<name>`, `app`, or `domains/common`).

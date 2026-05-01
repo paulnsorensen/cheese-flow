@@ -1,6 +1,6 @@
 ---
 name: mold
-description: Iterative thinking amplifier for fuzzy ideas. Routes input to a starting mode (Explore, Ground, Shape, Sketch, Grill, Diagnose), runs Validate Cycles, locks down interfaces in pseudocode, and crystallizes a spec (and optional issues) only after a two-key handshake.
+description: Iterative thinking amplifier for fuzzy ideas. Routes input to a starting mode (Explore, Ground, Shape, Sketch, Grill, Diagnose), runs Validate Cycles, locks down interfaces in pseudocode, and curdles a spec (and optional issues) only after a two-key handshake.
 argument-hint: "<rough idea | feature request | bug | spec path | design doc>"
 ---
 
@@ -28,7 +28,7 @@ is the implementation source of truth.
 | --- | --- |
 | `/culture` | Same dialogue feel; **never writes**. Use it when there is no artifact intent. |
 | `/briesearch` | External evidence dispatcher. `/mold` calls it through the Validate Cycle. |
-| `/cook` | Implements a crystallized spec. `/mold` ends with a hand-off offer, never an auto-invoke. |
+| `/cook` | Implements a curdled spec. `/mold` ends with a hand-off offer, never an auto-invoke. |
 
 ## What you get
 

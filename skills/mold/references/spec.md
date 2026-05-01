@@ -1,6 +1,6 @@
 # Spec template
 
-The spec is the rich container produced at Crystallize. It absorbs
+The spec is the rich container produced at Curdle. It absorbs
 PRD-leaning, ERD-leaning, decision-log, and interface-sketch content as
 named sections. Functional and non-functional requirements are always
 present. All other conditional sections are populated only when the
@@ -226,7 +226,7 @@ specific evidence (validate cycle id, Grill turn, sibling file ref).
 
 ## Migration from state file
 
-At Crystallize:
+At Curdle:
 
 - `Decisions (resolved)` block in state → `Decisions` section in spec
   (with Context / Decision / Consequences expanded by the agent).

@@ -1,6 +1,6 @@
 ---
 name: mold
-description: Iterative thinking amplifier for fuzzy ideas. Routes input to the right starting mode (Explore, Ground, Shape, Sketch, Grill, Diagnose), runs Validate Cycles to anchor claims, locks down interfaces in pseudocode, and only crystallizes a spec (and optional issues) after a two-key handshake plus a coherence self-check.
+description: Iterative thinking amplifier for fuzzy ideas. Routes input to the right starting mode (Explore, Ground, Shape, Sketch, Grill, Diagnose), runs Validate Cycles to anchor claims, locks down interfaces in pseudocode, and only curdles a spec (and optional issues) after a two-key handshake plus a coherence self-check.
 license: MIT
 compatibility: Works in markdown-based coding harnesses with sub-agent support. Heavy delegation to /briesearch and cheez-* skills. When tilth MCP is absent, substitute the host Read tool for local file references — the no-speculation invariant (Operating Principle 2) still holds.
 metadata:
@@ -26,14 +26,14 @@ without artifact intent (use `/culture`), or library-only research (use
 ## What `/mold` is
 
 A **thinking amplifier**, not a pre-prompt. The dialogue is the point;
-artifacts are the by-product. The terminal step crystallizes whatever the
+artifacts are the by-product. The terminal step curdles whatever the
 dialogue actually produced — never more, never less.
 
 | Companion | Boundary |
 | --- | --- |
 | `/culture` | Same dialogue feel; **never writes**. Use it when there is no artifact intent. |
 | `/briesearch` | External evidence dispatcher. `/mold` calls it through the Validate Cycle. |
-| `/cook` | Implements a crystallized spec. `/mold` ends with a hand-off offer, never an auto-invoke. |
+| `/cook` | Implements a curdled spec. `/mold` ends with a hand-off offer, never an auto-invoke. |
 
 ## Operating principles
 
@@ -45,7 +45,7 @@ dialogue actually produced — never more, never less.
 3. **State a hypothesis before researching.** A bare research dispatch is
    discouraged; the Validate Cycle frame forces commitment plus a judgment
    step.
-4. **Lock down interfaces before crystallizing.** Every cross-slice seam
+4. **Lock down interfaces before curdling.** Every cross-slice seam
    gets a pseudocode signature with named unknowns, a recommended answer,
    and an explicit Sliced Bread slice (`domains/<name>`, `adapters/<name>`,
    `app`, or `domains/common`). Architecture rules in
@@ -55,7 +55,7 @@ dialogue actually produced — never more, never less.
 6. **Heavy delegation.** `/briesearch` for external research, `cheez-search`
    / `cheez-read` for in-repo grounding. Do not reinvent.
 7. **No production writes during the loop.** The only writes happen on
-   Crystallize, after explicit approval.
+   Curdle, after explicit approval.
 
 ## Routing — input shape to starting mode
 
@@ -72,7 +72,7 @@ Detail in `references/routing.md`.
 
 ## The six modes
 
-Crystallize is a terminal state, not a mode.
+Curdle is a terminal state, not a mode.
 
 ### Explore — intent extraction
 Job: collapse ambiguity with high-leverage questions. Borrow the `Beat 0`
@@ -126,7 +126,7 @@ bisection harness, differential loop, ...) before chasing hypotheses.
 The chosen loop becomes the Reproduction block in the bug-shaped spec, so
 `/cook` can verify the fix against the same signal the diagnosis used.
 Diagnose is **diagnostic-only** — hand-off to Shape ("what's the fix?")
-then Crystallize emits a bug-shaped spec plus optional follow-up issues.
+then Curdle emits a bug-shaped spec plus optional follow-up issues.
 Loop menu and discipline in `references/diagnose-mode.md`.
 
 ## The Validate Cycle (cross-mode sub-pattern)
@@ -190,9 +190,9 @@ in `references/state-schema.md`.
 ## User knobs (free-form interrupts)
 
 `explore`, `ground`, `shape`, `sketch`, `grill`, `diagnose`,
-`validate <hypothesis>`, `crystallize`, `pause`, `enough`. The agent honours
-these immediately. `crystallize` initiates the handshake; it does not skip
-the Sketch gate unless the user follows up with `crystallize anyway`.
+`validate <hypothesis>`, `curdle`, `pause`, `enough`. The agent honours
+these immediately. `curdle` initiates the handshake; it does not skip
+the Sketch gate unless the user follows up with `curdle anyway`.
 
 ## Uncertainty markers
 
@@ -205,14 +205,14 @@ the Sketch gate unless the user follows up with `crystallize anyway`.
 
 ## Termination — two-key handshake
 
-**User key:** explicit `crystallize`, `ship it`, `extract`, `that's enough`.
+**User key:** explicit `curdle`, `ship it`, `extract`, `that's enough`.
 Never inferred.
 
 **Agent key:** structured coherence self-check. Print this checklist and
 require every box checked before extraction (or an explicit override):
 
 ```
-Coherence self-check before crystallize:
+Coherence self-check before curdle:
 - [ ] Problem statement: grounded, agreed
 - [ ] At least 2 options weighed (Do Nothing included)
 - [ ] Chosen option grounded in codebase evidence
@@ -225,7 +225,7 @@ Coherence self-check before crystallize:
 - [ ] Reproduction loop captured if Diagnose ran (or `[BLOCKED]` if no loop is possible)
 ```
 
-Guard conditions are mandatory before Crystallize except where noted:
+Guard conditions are mandatory before Curdle except where noted:
 
 - *Ground gate* — at least one Ground pass with a citation before Shape's
   options. Exception: pure greenfield (the agent must say so).
@@ -237,12 +237,12 @@ Guard conditions are mandatory before Crystallize except where noted:
   radius is measured by `cheez-search` callers/imports for the touched
   symbols.
 - *Open hypotheses must settle* — any Validate Cycle launched but unjudged
-  blocks Crystallize unless the user accepts it as `[TBD]`.
+  blocks Curdle unless the user accepts it as `[TBD]`.
 
 If any box is unchecked, name it and propose the smallest move to fill it.
-The user can override with `crystallize anyway`.
+The user can override with `curdle anyway`.
 
-## Crystallize — artifact extraction
+## Curdle — artifact extraction
 
 Two artifact types:
 
@@ -317,7 +317,7 @@ Rules in `references/loop-detection.md`.
 
 ## Rules
 
-- Do not write to production paths during the dialogue. Only Crystallize
+- Do not write to production paths during the dialogue. Only Curdle
   writes files, only after the two-key handshake.
 - Do not direct-call `/briesearch` for unstated questions; wrap external
   evidence in a Validate Cycle.
