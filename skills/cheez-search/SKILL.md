@@ -1,7 +1,7 @@
 ---
 name: cheez-search
 compatibility: Requires tilth MCP server
-allowed-tools: mcp__tilth__tilth_search, mcp__tilth__tilth_deps, Bash
+allowed-tools: mcp__tilth__tilth_search, mcp__tilth__tilth_deps, bash
 description: >
   AST-aware code search using tilth MCP. Finds definitions first, then usages.
   Use tree-sitter structural matching instead of blind text grep. Understand
