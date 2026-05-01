@@ -309,6 +309,7 @@ describe("installHarnessArtifacts", () => {
       "age-correctness.md",
       "age-deslop.md",
       "age-encapsulation.md",
+      "age-nih.md",
       "age-precedent.md",
       "age-security.md",
       "age-spec.md",
@@ -319,6 +320,7 @@ describe("installHarnessArtifacts", () => {
       "cut.md",
       "milknado-executor.md",
       "milknado-planner.md",
+      "nih-scanner.md",
       "press.md",
     ]);
     expect(manifest.skills).toEqual([
@@ -334,6 +336,7 @@ describe("installHarnessArtifacts", () => {
       "milknado-plan",
       "mold",
       "nested-dir",
+      "nih-audit",
       "research",
     ]);
     expect(manifest.commands).toEqual([]);

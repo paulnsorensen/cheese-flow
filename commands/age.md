@@ -1,6 +1,6 @@
 ---
 name: age
-description: Staff Engineer code review. Runs eight orthogonal LLM dimensions (correctness, security, complexity, encapsulation, spec, precedent, deslop, assertions) over the diff and emits a stake-weighted report plus hash-anchored sidecar JSON consumed by /cleanup and /fromage cook.
+description: Staff Engineer code review. Runs nine orthogonal LLM dimensions (correctness, security, complexity, encapsulation, spec, precedent, deslop, assertions, nih) over the diff and emits a stake-weighted report plus hash-anchored sidecar JSON consumed by /cleanup and /fromage cook.
 argument-hint: "[<ref>] [--scope <path>] [--comprehensive]"
 ---
 
@@ -10,7 +10,7 @@ argument-hint: "[<ref>] [--scope <path>] [--comprehensive]"
 with verifiable evidence per observation, so you can decide what is actually
 a problem instead of accepting a verdict on faith.
 
-Eight orthogonal dimensions fan out in parallel over your diff. Each dim
+Nine orthogonal dimensions fan out in parallel over your diff. Each dim
 emits evidence-backed observations. The orchestrator synthesizes a
 stake-weighted report and two sidecar JSON files for downstream automation.
 
@@ -33,9 +33,10 @@ user-facing contract; `skills/age/SKILL.md` is the implementation.
 | `complexity` | medium | Function ≤40 lines, file ≤300, params ≤4, nesting ≤3 |
 | `deslop` | medium | AI anti-patterns, dead code, speculative abstractions |
 | `assertions` | medium | Weak test assertions, existence checks, catch-all errors |
+| `nih` | medium | Diff-scoped reinventions of stdlib or already-installed deps |
 | `precedent` | advisory | Symbol-level history, concurrent PRs touching same paths |
 
-All 8 dims fire on every run. Dims whose rubric does not apply emit
+All 9 dims fire on every run. Dims whose rubric does not apply emit
 `scope_match: false` and are tallied but not rendered as sections.
 
 ## Output Contract

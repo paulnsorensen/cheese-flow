@@ -61,6 +61,10 @@ If no spec file governs the diff, emit `{"observations": [], "scope_match": fals
 
 Write `$RUN_DIR/spec.json` per the per-agent return contract in `skills/age/references/sidecar-schema.md`.
 
+The block below is illustrative — the file paths, line ranges, and spec
+citations are placeholders showing the expected shape, not pointers to
+real files in this repo.
+
 ```json
 {
   "dimension": "spec",
@@ -72,13 +76,13 @@ Write `$RUN_DIR/spec.json` per the per-agent return contract in `skills/age/refe
       "id": "spec-1",
       "file": "src/age/orchestrator.ts",
       "anchor": {"start": "88:b2c", "end": "90:e1d"},
-      "narrative": "D-32 locks all 8 dims to always fire; orchestrator conditionally skips assertions dim when no test files present.",
+      "narrative": "Hypothetical drift: spec locks all dims to always fire; orchestrator conditionally skips a dim when no matching files are present.",
       "bucket": "high",
       "evidence": [
-        ".cheese/specs/age-extraction.md:503 — D-32 decision locks unconditional dispatch",
+        "<path/to/spec.md>:<line> — decision locking unconditional dispatch",
         "src/age/orchestrator.ts:89 — if (hasTestFiles) dispatch('assertions')"
       ],
-      "consideration": "Remove the hasTestFiles guard; assertions dim self-noops via scope_match: false when no tests are in scope."
+      "consideration": "Remove the guard; the dim self-noops via scope_match: false when out of scope."
     }
   ],
   "manual_review_concerns": []
