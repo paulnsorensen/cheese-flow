@@ -93,13 +93,13 @@ Explore (1-3) → Ground (4-5) → Shape (6-8) → [validate cycle 1] → Sketch
   Each sketch is a small block with `module`, `slice`, `signature`,
   `responsibilities`, `seams`, `error_shape`. The `slice` field names the
   Sliced Bread slice (`domains/<name>`, `adapters/<name>`, `app`, or
-  `domains/common`) and gates the crystallize crust check.
+  `domains/common`) and gates the curdle crust check.
 - **Validate cycles** — append-only. Outcomes are exactly one of `SUPPORTED`,
   `CONTRADICTED`, `REFINED`. REFINED cycles point at their refined-form id.
   CONTRADICTED cycles get a `conflict_id` that ties to an `Open questions`
   entry.
 - **Open questions** — every entry carries one of `[?]`, `[TBD]`,
-  `[BLOCKED]`, `[CONFLICT <id>]`. The Crystallize coherence gate fails if
+  `[BLOCKED]`, `[CONFLICT <id>]`. The Curdle coherence gate fails if
   any entry lacks a marker.
 - **Grill turns** — append-only. One line per Grill question. Records the
   branch traversed, the question asked, the agent's recommended answer, and
@@ -119,12 +119,12 @@ Explore (1-3) → Ground (4-5) → Shape (6-8) → [validate cycle 1] → Sketch
 - **Create** — on first turn, after routing picks the entry mode.
 - **Update** — every turn the agent writes the file (replace, not append).
 - **Read** — the agent reads the previous state at the start of each turn.
-- **Migrate to spec** — on Crystallize, the spec template absorbs
+- **Migrate to spec** — on Curdle, the spec template absorbs
   `Decisions`, `Sketches`, `Quality gates`, and (if Diagnose ran) `Reproduction
   loop` verbatim into named sections. Validate cycles feed confidence and the
   spec's evidence rows. `Grill turns` is not migrated — it serves the
   coherence checklist and stays in scratch state.
-- **Cleanup** — after a successful Crystallize *and* the user accepts the
+- **Cleanup** — after a successful Curdle *and* the user accepts the
   hand-off offer, the run directory is removed. Otherwise it stays for the
   OS to evict.
 

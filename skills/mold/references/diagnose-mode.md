@@ -58,7 +58,7 @@ file, log dump, core dump, screen recording with timestamps), or (c)
 permission to add temporary production instrumentation. Do **not** proceed
 to hypothesise without a loop.
 
-If the answer is still "no loop", Crystallize emits an issue with the
+If the answer is still "no loop", Curdle emits an issue with the
 Reproduction block marked `[BLOCKED]` so `/cook` does not silently try
 to fix a bug it cannot verify.
 
@@ -100,17 +100,17 @@ big time saver.
 ## Phase 3 — Confirm root cause
 
 The surviving hypothesis becomes the working root cause. Before
-Crystallize, the agent must:
+Curdle, the agent must:
 
 - Run the Phase 0 loop again with the working root cause held in mind —
   the prediction the hypothesis makes must match what the loop reports.
 - Distinguish "necessary" from "sufficient": is fixing this hypothesis
   enough to make the loop go green, or are there contributing causes?
 - If the loop only goes green when **multiple** hypotheses are addressed,
-  Crystallize emits one spec for the primary fix plus an issue for each
+  Curdle emits one spec for the primary fix plus an issue for each
   contributing cause.
 
-## Hand-off to Crystallize
+## Hand-off to Curdle
 
 The bug-shaped spec absorbs:
 
