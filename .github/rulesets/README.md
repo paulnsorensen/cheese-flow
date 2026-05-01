@@ -5,7 +5,10 @@ files from this directory — apply them with `gh api` or the sync workflow belo
 
 ## Files
 
-- `main.json` — protects `main` (default branch). Status: starts in `evaluate` mode for safe rollout.
+- `main.json` — protects `main` (default branch). Enforcement: `active`.
+
+> Note: `enforcement: "evaluate"` (dry-run mode) is GitHub Enterprise-only.
+> On personal/Pro plans the only valid values are `active` and `disabled`.
 
 ## Apply
 
@@ -27,9 +30,12 @@ gh api repos/paulnsorensen/cheese-flow/rulesets/<RULESET_ID> --method DELETE
 
 ## Rollout
 
-1. Apply with `enforcement: "evaluate"` (the default in `main.json`).
-2. Open a few PRs; check the **Insights → Rule insights** tab for false positives — especially the `build` status-check context name.
-3. Edit `main.json`: change `"evaluate"` → `"active"`. Re-PUT.
+1. Apply (creates the ruleset in `active` mode).
+2. Open a small test PR to confirm the `build` status check is recognized and required.
+3. If the check name drifts (e.g. CI workflow renamed), edit `main.json` and re-PUT.
+
+If you'd rather stage it first, set `"enforcement": "disabled"` before the initial POST,
+then flip to `"active"` and PUT once you've confirmed the rules look right in the UI.
 
 ## What it protects
 
