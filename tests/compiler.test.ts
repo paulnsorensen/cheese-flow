@@ -322,6 +322,9 @@ describe("compileHarnessBundles", () => {
       "milknado-planner.md",
       "nih-scanner.md",
       "press.md",
+      "taste-readability.md",
+      "taste-scope.md",
+      "taste-spec.md",
     ]);
     expect(manifest.skills).toEqual([
       "age",
