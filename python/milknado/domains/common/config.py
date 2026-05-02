@@ -108,7 +108,7 @@ def save_config(config: MilknadoConfig, path: Path) -> None:
         f"quality_gates = {list(config.quality_gates)}",
         f'worktree_pattern = "{config.worktree_pattern}"',
         f"concurrency_limit = {config.concurrency_limit}",
-        f'db_path = "{config.db_path.relative_to(config.project_root)}"',
+        f'db_path = "{_escape_toml_string(str(config.db_path.relative_to(config.project_root) if config.db_path.is_relative_to(config.project_root) else config.db_path))}"',
         f"plugins = {list(config.plugins)}",
         f"stall_threshold_seconds = {config.stall_threshold_seconds}",
         f"dispatch_max_retries = {config.dispatch_max_retries}",

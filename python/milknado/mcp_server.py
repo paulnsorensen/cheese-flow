@@ -71,9 +71,20 @@ def milknado_add_node(
 
 
 def _dict_to_file_change(d: dict) -> FileChange:
-    path = d["path"]
+    change_id = d.get("id")
+    if not isinstance(change_id, str) or not change_id:
+        raise ValueError(f"id must be a non-empty string, got {change_id!r}")
+    path = d.get("path")
+    if not isinstance(path, str) or not path:
+        raise ValueError(f"path must be a non-empty string, got {path!r}")
     if Path(path).is_absolute() or ".." in Path(path).parts:
         raise ValueError(f"path must be repo-relative without traversal, got {path!r}")
+    raw_depends_on = d.get("depends_on") or []
+    if not isinstance(raw_depends_on, (list, tuple)):
+        raise ValueError("depends_on must be a list of strings")
+    for i, dep in enumerate(raw_depends_on):
+        if not isinstance(dep, str):
+            raise ValueError(f"depends_on[{i}] must be a string, got {type(dep).__name__!r}")
     raw_symbols = d.get("symbols") or []
     if not isinstance(raw_symbols, (list, tuple)):
         raise ValueError("symbols must be a list of dicts")
@@ -87,11 +98,11 @@ def _dict_to_file_change(d: dict) -> FileChange:
             raise ValueError(f"symbols[{i}] must have string 'name' and 'file'")
         symbols_list.append(SymbolRef(name=name, file=file))
     return FileChange(
-        id=d["id"],
+        id=change_id,
         path=path,
         edit_kind=d.get("edit_kind", "modify"),
         symbols=tuple(symbols_list),
-        depends_on=tuple(d.get("depends_on", [])),
+        depends_on=tuple(raw_depends_on),
     )
 
 
@@ -99,14 +110,20 @@ _VALID_REASONS = frozenset({"new_file", "new_import", "new_call", "new_type_use"
 
 
 def _dict_to_new_relationship(d: dict) -> NewRelationship:
-    reason = d["reason"]
+    reason = d.get("reason")
     if not isinstance(reason, str):
         raise ValueError(f"reason must be a string, got {type(reason).__name__!r}")
     if reason not in _VALID_REASONS:
         raise ValueError(f"invalid reason: {reason!r}; expected one of {sorted(_VALID_REASONS)}")
+    source_change_id = d.get("source_change_id")
+    if not isinstance(source_change_id, str) or not source_change_id:
+        raise ValueError(f"source_change_id must be a non-empty string, got {source_change_id!r}")
+    dependant_change_id = d.get("dependant_change_id")
+    if not isinstance(dependant_change_id, str) or not dependant_change_id:
+        raise ValueError(f"dependant_change_id must be a non-empty string, got {dependant_change_id!r}")
     return NewRelationship(
-        source_change_id=d["source_change_id"],
-        dependant_change_id=d["dependant_change_id"],
+        source_change_id=source_change_id,
+        dependant_change_id=dependant_change_id,
         reason=cast(RelationshipReason, reason),
     )
 
