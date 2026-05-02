@@ -96,7 +96,7 @@ Taste test is cook-scoped and uses three separate read-only agents:
 
 Each taste agent must return `pass` or `revise`. Pipe every `revise` finding
 back into `cook` as a bounded correction prompt with the original spec, Cook
-Report, and taste evidence.
+report, and taste evidence.
 
 The feedback loop has a hard two-round taste-test limit:
 
