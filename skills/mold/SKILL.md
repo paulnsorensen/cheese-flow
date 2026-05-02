@@ -33,6 +33,7 @@ dialogue actually produced — never more, never less.
 | --- | --- |
 | `/culture` | Same dialogue feel; **never writes**. Use it when there is no artifact intent. |
 | `/briesearch` | External evidence dispatcher. `/mold` calls it through the Validate Cycle. |
+| `/nih-audit` | Whole-repo build-vs-buy sweep. `/mold` calls it from Sketch when multiple library-shaped categories are in play, or offers it at Curdle for migration-style specs. |
 | `/cook` | Implements a curdled spec. `/mold` ends with a hand-off offer, never an auto-invoke. |
 
 ## Operating principles
@@ -102,11 +103,16 @@ Exit when: an option is picked (→ Sketch) or none survive (→ Explore).
 Job: lock modules, responsibilities, I/O contracts, and seams in pseudocode
 signatures, anchored to Sliced Bread slices. Before drafting, parallel
 `cheez-search` for sibling signatures in the same slice so new ones fit
-conventions and respect the crust (the slice's public API).
+conventions and respect the crust (the slice's public API). Run an **NIH
+probe** (single Validate Cycle) before locking any signature whose
+category is library-shaped — retry, validation, UUID, debounce, date,
+argparse, clone, string-case, crypto, sanitizer, format, deep-equality.
+If 2+ such categories are in play, call `/nih-audit` once instead.
 Exit when: every public seam has a signature and a declared `slice` field;
    every cross-slice call imports from the target slice's crust, never its
-   internals. Detail in `references/sketch-mode.md`; architecture rules in
-   `references/sliced-bread.md` (repo root, not local to this skill).
+   internals; library-shaped categories have an NIH probe verdict in
+   `Decisions`. Detail in `references/sketch-mode.md`; architecture rules
+   in `references/sliced-bread.md` (repo root, not local to this skill).
 
 ### Grill — adversarial clarification
 Job: stress-test the chosen approach plus sketched interfaces. **One question
@@ -162,6 +168,7 @@ Detail in `references/validate-cycle.md`.
 | Tool | When | Cap |
 | --- | --- | --- |
 | `/briesearch` (via Validate Cycle) | hypothesis needs external evidence | 2/session |
+| `/nih-audit` | Sketch surfaces 2+ library-shaped categories, or the spec smells migration-shaped | 1/session |
 | `cheez-search` | symbol mention, dependency claim, callers/imports lookup, sibling lookup | unbudgeted |
 | `cheez-read` | file mention, spec read on entry | unbudgeted |
 
@@ -190,9 +197,11 @@ in `references/state-schema.md`.
 ## User knobs (free-form interrupts)
 
 `explore`, `ground`, `shape`, `sketch`, `grill`, `diagnose`,
-`validate <hypothesis>`, `curdle`, `pause`, `enough`. The agent honours
-these immediately. `curdle` initiates the handshake; it does not skip
-the Sketch gate unless the user follows up with `curdle anyway`.
+`validate <hypothesis>`, `nih`, `curdle`, `pause`, `enough`. The agent
+honours these immediately. `curdle` initiates the handshake; it does
+not skip the Sketch gate unless the user follows up with `curdle
+anyway`. `nih` forces an NIH probe at the current sketch even when the
+category does not match the library-shaped trigger words.
 
 ## Uncertainty markers
 
@@ -301,7 +310,11 @@ After writing, offer the next step inline. Never auto-invoke.
 | Artifact | Suggested next step |
 | --- | --- |
 | Spec | `/cook .cheese/specs/<slug>.md` |
+| Migration-shaped spec (≥1 NIH probe verdict of `accept` or `revise`) | `/nih-audit <scope>` first, then `/cook` |
 | Issues | `gh issue create --body-file <path>` (per file) |
+
+"Migration-shaped" is defined in `references/sketch-mode.md` (Migration
+hand-off).
 
 ## Loop detection
 
