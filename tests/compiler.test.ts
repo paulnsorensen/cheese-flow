@@ -324,7 +324,6 @@ describe("installHarnessArtifacts", () => {
       "press.md",
     ]);
     expect(manifest.skills).toEqual([
-      "affine",
       "age",
       "basic-skill",
       "cheez-read",

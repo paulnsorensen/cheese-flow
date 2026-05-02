@@ -39,11 +39,12 @@ rationale is the anchor proxy; record the resulting file in
 
 `suggestion` items are judgment-shaped briefs from `/age` — narrative
 fixes that need an LLM to interpret and write. For each approved
-suggestion, spawn one cook sub-agent with the `agent_brief_for_cook`
-payload (item id, file, rationale, surrounding context). The sub-agent
-applies the change with `cheez-write`. Multiple suggestions targeting
-the same file are serialized so the second sub-agent reads the first's
-result; cross-file suggestions can run in parallel.
+suggestion, spawn one cook sub-agent with `agent_brief_for_cook` as the
+imperative brief, plus `outline_ref` (line range) and `narrative`
+(context) for orientation. The sub-agent applies the change with
+`cheez-write`. Multiple suggestions targeting the same file are
+serialized so the second sub-agent reads the first's result; cross-file
+suggestions can run in parallel.
 
 After each sub-agent returns, record `touched_paths += item.file`.
 

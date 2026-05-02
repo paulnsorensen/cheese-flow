@@ -47,7 +47,7 @@ extra keys beyond the v1 required set above — including
 `pr_thread_id`, `review_body_id`, `reviewer`, `job_id`, `log_excerpt`,
 and `conflicting_paths` — are accepted and ignored by `/cleanup`. The
 required keys are not relaxed; the abort-on-missing behavior is
-preserved. See `skills/affine/references/schema.md` for the v2 shape.
+preserved.
 
 If the file does not exist, fail fast:
 

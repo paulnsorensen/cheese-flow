@@ -1,9 +1,9 @@
 # Sources — sidecar resolution for `/cure`
 
 `/cure` consumes the same v2 additive sidecar shape as `/age` and
-`/affine` (see `skills/affine/references/schema.md`). The only thing
-this reference adds is **which directory** the sidecar lives in and how
-`/cure` picks it.
+`/affine`. The only thing this reference adds is **which directory** the
+sidecar lives in and how `/cure` picks it. The schema fields are
+documented in the Schema section below.
 
 ## Sidecar paths
 
@@ -64,15 +64,25 @@ the upstream skill and re-tries.
 
 ## Schema
 
-The merged item list follows the v2 additive shape from
-`skills/affine/references/schema.md`. v1 required keys
-(`id`, `dimension`, `file`, `anchor`, `content`, `rationale`,
-`category`) are required on every item; v2 optional fields
-(`pr_thread_id`, `review_body_id`, `reviewer`, `job_id`, `log_excerpt`,
-`conflicting_paths`) are tolerated and pass through to the apply router
-when relevant (e.g. `log_excerpt` informs `ci_fix`).
+Fix items and suggestion items have different schemas:
 
-`/cleanup` validates the v1 required keys and aborts on missing fields.
-`/cure` delegates that validation to `/cleanup` for `edit (with anchor)`
-items; for other categories, the apply router enforces the keys it
-needs.
+**Fix items** (from `fixes.json`):
+
+| field | required |
+|-------|----------|
+| `id`, `dimension`, `file` | yes |
+| `anchor` | yes — tilth `line:hash` anchor |
+| `content`, `rationale`, `category` | yes |
+
+**Suggestion items** (from `suggestions.json`):
+
+| field | required |
+|-------|----------|
+| `id`, `dimension`, `file` | yes |
+| `outline_ref` | yes — line range, not a hash anchor |
+| `narrative`, `agent_brief_for_cook` | yes |
+
+V2 optional fields (`pr_thread_id`, `review_body_id`, `reviewer`,
+`job_id`, `log_excerpt`, `conflicting_paths`) are tolerated on either
+type. `/cleanup` validates fix-item keys; the apply router enforces the
+keys each handler needs.

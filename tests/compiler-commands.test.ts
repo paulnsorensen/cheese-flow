@@ -132,7 +132,6 @@ describe("shipped command scaffolds", () => {
     });
 
     const expected = [
-      "affine.md",
       "age.md",
       "briesearch.md",
       "cheese.md",

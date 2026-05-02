@@ -26,9 +26,17 @@ sidecars and the prior items, and emits **only new or changed** items
 as the next iteration:
 
 - An item with a new `id` is **new** → include.
-- An item whose `id` matched a prior item but whose `anchor`,
-  `rationale`, or `content` changed is **changed** → include.
+- An item whose `id` matched a prior item but whose key fields changed is
+  **changed** → include. Key fields by item type:
+  - Fix items: `anchor`, `rationale`, or `content`
+  - Suggestion items: `outline_ref`, `narrative`, or `agent_brief_for_cook`
 - An item that exactly matches a prior item is **unchanged** → drop.
+
+**Scope limitation**: the re-age is scoped to `touched_paths` only. Any
+unapproved items from the prior turn that were on files **not** in
+`touched_paths` will not appear in the scoped re-age and are silently
+dropped. To continue processing those items, re-run `/cure <slug>` after
+the current apply phase completes — the full sidecar will be re-loaded.
 
 If the diff is empty, the loop exits cleanly. The user sees a one-line
 summary; no further turns run.

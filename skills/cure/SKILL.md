@@ -61,10 +61,18 @@ Load `<dir>/<slug>.fixes.json` (required) and the optional companion
 If neither sidecar exists, fail fast with the missing-sidecar error
 documented in `references/sources.md`.
 
-The schema is the v2 additive shape shared with `/age`, `/affine`, and
-`/cleanup` — see `skills/affine/references/schema.md`. v1 required keys
-(`id`, `dimension`, `file`, `anchor`, `content`, `rationale`,
-`category`) are required; v2 optional fields are tolerated.
+Fix items and suggestion items have different required keys:
+
+- **Fix items** (`fixes.json`): `id`, `dimension`, `file`, `anchor`,
+  `content`, `rationale`, `category`. All mechanically-applicable via
+  `tilth_edit`.
+- **Suggestion items** (`suggestions.json`): `id`, `dimension`, `file`,
+  `outline_ref`, `narrative`, `agent_brief_for_cook`. No anchor or content;
+  not mechanically-applicable.
+
+V2 optional fields (`pr_thread_id`, `review_body_id`, `reviewer`,
+`job_id`, `log_excerpt`, `conflicting_paths`) are tolerated on either
+item type and pass through to the apply router when relevant.
 
 ## Phase 2 — User gate
 
@@ -74,6 +82,12 @@ sorted by file within each group:
 ```
 | id | stake | category | dim | location | summary |
 ```
+
+`stake` is not a stored field — derive it from `dimension` using the
+fixed map: high (correctness, security, encapsulation, spec), medium
+(complexity, deslop, assertions, nih), advisory (precedent). `category`
+shows the sub-type for fix items (e.g. `deslop.swallowed_catch`) or
+`suggestion` for suggestion items.
 
 Items are already pre-classified by `/age` (or `/affine`); `/cure` does
 not re-classify. The default selection is **empty** — nothing applies
@@ -93,10 +107,15 @@ and does not chain from `/age`.
 
 ## Phase 3 — Apply
 
-Each approved item dispatches on `category` through the apply router
-(see `references/apply-router.md`):
+Each approved item dispatches on its routing type through the apply
+router (see `references/apply-router.md`). For `/age` sidecars, routing
+is by **sidecar of origin**, not by the `category` field value: all
+`fixes.json` items route as `edit`; all `suggestions.json` items route
+as `suggestion`. The `category` sub-type (e.g. `deslop.swallowed_catch`)
+is informational only. Additional routing types (`ci_fix`, `merge_fix`,
+`design`, `reply`) are introduced by `/affine`'s extended schema.
 
-| category | handler |
+| routing type | handler |
 |---|---|
 | `edit` (with anchor) | `/cleanup <slug>` (single-item synthesized sidecar) |
 | `edit` (no anchor) | direct `cheez-write` (anchor inferred from rationale) |
