@@ -74,7 +74,7 @@ describe("/cook flow artifacts", () => {
     const source = await readSource("commands/cook.md");
 
     expect(source).toContain("cook → taste-test → cook → taste-test → cook");
-    expect(source).toContain("hard two taste-test limit");
+    expect(source).toContain("hard two-round taste-test limit");
     expect(source).toContain("taste-spec");
     expect(source).toContain("taste-readability");
     expect(source).toContain("taste-scope");

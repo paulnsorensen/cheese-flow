@@ -98,7 +98,7 @@ Each taste agent must return `pass` or `revise`. Pipe every `revise` finding
 back into `cook` as a bounded correction prompt with the original spec, Cook
 Report, and taste evidence.
 
-The feedback loop has a hard two taste-test limit:
+The feedback loop has a hard two-round taste-test limit:
 
 1. Best case: `cook → taste-test`, then continue to press when all taste agents
    pass.
