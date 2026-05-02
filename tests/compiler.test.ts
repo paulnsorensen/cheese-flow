@@ -327,12 +327,14 @@ describe("installHarnessArtifacts", () => {
       "taste-spec.md",
     ]);
     expect(manifest.skills).toEqual([
+      "affine",
       "age",
       "basic-skill",
       "cheez-read",
       "cheez-search",
       "cheez-write",
       "cleanup",
+      "cure",
       "gh",
       "merge-resolve",
       "milknado-execute",
