@@ -11,10 +11,16 @@ has a hard 3-turn cap per invocation.
 /age --scope <touched_paths>
 ```
 
-`touched_paths` is the deduplicated union of every non-`reply` item's
-`item.file` from the prior apply phase. `reply` items do not contribute
-to `touched_paths` — they were drafted to a file, not committed to
-disk, so re-aging would find nothing useful and would waste tokens.
+`touched_paths` is the deduplicated union of `item.file` for every
+applied item EXCEPT `reply` and `design`. Both are excluded for the
+same reason: they did not edit production source in this loop.
+
+- `reply` items draft to `.cheese/cure/<slug>.replies.md` and never
+  touch source.
+- `design` items hand off to `/cook` out-of-band on a separate branch.
+  `/cook` runs its own `/age` pass, so this loop must not re-age
+  `item.file` (which `/cook` may not even touch) on `/cook`'s schedule
+  (which is unbounded relative to this loop).
 
 The scoped `/age` writes the same sidecars `/age` always writes:
 `.cheese/age/<slug>.fixes.json` and `.cheese/age/<slug>.suggestions.json`.
@@ -75,18 +81,25 @@ cap can be tuned from real data:
   "applied": 6,
   "skipped": 1,
   "drafted_replies": 2,
+  "dispatched_design": 1,
   "touched_paths": ["src/foo.ts", "src/bar.ts"],
   "reage_new_or_changed": 2
 }
 ```
 
 Each turn appends a row; the file is the basis for tuning the cap.
-`reply` items count toward `drafted_replies` and are excluded from
-`touched_paths` and from the re-age input.
+`reply` items count toward `drafted_replies`; `design` items count
+toward `dispatched_design`. Both are excluded from `touched_paths` and
+from the re-age input.
 
-## Reply exclusion
+## Re-age exclusions
 
-Replies are drafted to `.cheese/cure/<slug>.replies.md` and never touch
-production source. They do **not** add to `touched_paths` and therefore
-do not trigger a re-age pass. The user reads, edits, and posts the
-replies file manually after the loop exits.
+Two item types do not contribute to `touched_paths` and therefore do
+not trigger a re-age pass:
+
+- **`reply`** — drafted to `.cheese/cure/<slug>.replies.md`, never
+  touches source. The user reads, edits, and posts manually after the
+  loop exits.
+- **`design`** — handed off to `/cook` on a separate branch. `/cook`
+  runs its own `/age` pass; this loop has no business re-aging files
+  `/cook` may or may not touch on a schedule it does not control.

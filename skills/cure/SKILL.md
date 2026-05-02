@@ -129,8 +129,12 @@ Cross-slice calls go through public skill entries only (`/cleanup`,
 `/age`, `/cook`, `/merge-resolve`). No reaching into sibling
 internals.
 
-For each non-`reply` item, record `touched_paths += item.file`. Replies
-do not contribute to the next re-age pass.
+For each item that edits production source in this loop (i.e. all
+categories except `reply` and `design`), record
+`touched_paths += item.file`. `reply` items draft to a file and never
+touch source. `design` items hand off to `/cook` out-of-band — `/cook`
+runs its own `/age` pass on its own branch, so this loop does not
+re-age files `/cook` may or may not touch.
 
 ## Phase 4 — Re-age
 

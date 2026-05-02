@@ -62,22 +62,23 @@ merge-resolve skill owns mergiraf, git rerere, and kdiff3; `/cure` does
 not reach into its internals. After merge-resolve returns, the file path
 is added to `touched_paths`.
 
-### `design` → stub spec + `/cook`
+### `design` → stub spec + `/cook` (excluded from re-age)
 
 Architectural changes do not belong in the same loop as line-level
 fixes. Write a stub spec to `.cheese/specs/<slug>-followup.md` with the
 item's rationale as the problem statement, then delegate
 `/cook <spec-path>`. `/cook` runs its full red-green-refactor flow on
-the new spec. The original `/cure` invocation continues with the
-remaining items while `/cook` handles the design item out-of-band.
+the new spec, on its own branch, with its own `/age` pass at the end.
 
-`touched_paths` records `item.file` only — the file that triggered the
-design finding. Files `/cook` itself edits are **not** added to
-`touched_paths` for this loop's re-age pass. This is intentional:
-`/cook` runs out-of-band and may take long; the re-age verifies whether
-the original concern is resolved at its source. Whatever else `/cook`
-touches is reviewed by running `/age` again on its branch, not by this
-loop.
+`design` items do **not** add to `touched_paths` — same exclusion as
+`reply`. Re-aging `item.file` would verify the wrong thing (`/cook`
+may not edit it) at the wrong time (`/cook` may not have finished).
+Verification is `/cook`'s responsibility, not this loop's.
+
+`/cure` records the dispatch in the turn log under `dispatched_design`
+and surfaces it in the loop summary so the user knows a `/cook` task
+was kicked off. The original `/cure` invocation continues with the
+remaining items.
 
 ### `reply` → append to replies file (NEVER posts)
 
