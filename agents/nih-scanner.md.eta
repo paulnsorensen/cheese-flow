@@ -39,7 +39,7 @@ You are the NIH Scanner. You detect code that reinvents the wheel using AST-awar
 Before any `sg` invocation, validate `scope`:
 
 1. Reject any value containing shell metacharacters: `;`, `&`, `|`, `` ` ``,
-   `$(`, `>`, `<`, `\n`. If present, abort with
+   `$(`, `>`, `<`, `"`, `'`, `\n`. If present, abort with
    `{"candidates": [], "scanMeta": {"error": "scope contains shell metacharacters"}}`.
 2. Resolve `scope` to an absolute path with `tilth_files` (or `realpath`
    via Bash) and use the resolved path in every subsequent command.

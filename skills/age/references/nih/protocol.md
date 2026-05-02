@@ -1,9 +1,9 @@
 # NIH dim — pattern catalog
 
-The diff-scoped patterns the `age-nih` agent looks for. The standalone
-audit's category map at `skills/nih-audit/references/categories.md` is
-the canonical superset; this file lists only the patterns that surface
-cleanly in a single PR's added/modified lines.
+The diff-scoped patterns the `age-nih` agent looks for. The whole-repo
+`/nih-audit` skill carries the canonical superset of categories; this file
+lists only the patterns that surface cleanly in a single PR's added or
+modified lines.
 
 ## Tier-1 patterns (diff-flaggable)
 
@@ -58,10 +58,3 @@ itself sufficient evidence that the reviewer doesn't need to be reminded.
   `summary`, not as an observation.
 - Pure business-domain signatures (`Order`, `PricingRule`,
   `Fulfilment`) — the NIH dim is build-vs-buy, not naming.
-
-## Cross-reference
-
-The whole-repo audit lives at `skills/nih-audit/SKILL.md` and uses the
-canonical category map at `skills/nih-audit/references/categories.md`.
-Keep that file as the source of truth for category-to-library pairings;
-this file just enumerates the diff-scoped subset the dim flags.

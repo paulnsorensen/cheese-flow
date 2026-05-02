@@ -19,11 +19,6 @@ Find code reinventing the wheel. Recommend libraries. Score with evidence.
 
 `/nih-audit [scope]` — `scope` defaults to repo root.
 
-This skill is the heavy whole-repo audit. The diff-scoped variant runs as the
-`nih` dim inside `/age`. The lightweight pre-Sketch probe lives in `/mold`.
-Use `/nih-audit` when you want a full sweep with library recommendations and
-migration paths.
-
 ## Phase 0 — Manifest discovery (no LLM)
 
 Find dependency manifests anywhere in scope, excluding `node_modules/`,
@@ -58,7 +53,7 @@ without an installed-deps list there is nothing to cross-reference.
 
 ## Phase 1 — Structural NIH scan
 
-Spawn the `nih-scanner` sub-agent (see `agents/nih-scanner.md.eta`):
+Spawn the `nih-scanner` sub-agent:
 
 ```
 inputs:
@@ -124,7 +119,7 @@ Apply scoring modifiers:
 | Code comment explains NIH choice | -20 |
 | Library covers planned spec features | +10 |
 
-## Phase 4 — Score and synthesize
+## Phase 4a — Score
 
 For every candidate with a library recommendation, run the 4-step
 confidence chain:
@@ -160,6 +155,8 @@ Apply Phase 3 modifiers (spec intent, code comments, planned features) plus:
 | NIH code isolated (1 file, clear boundary) | +5 |
 | NIH code deeply coupled (referenced from >10 files) | -5 |
 
+## Phase 4b — Validate and size
+
 ### Step 4 — independent second pass
 
 For every candidate, score independently from the first pass:
@@ -183,42 +180,7 @@ For every candidate, score independently from the first pass:
 
 Write the full report to `.cheese/nih/<slug>.md`. Render every candidate
 above the threshold; do not silently filter. Each finding follows the
-template in `references/finding-template.md`:
-
-```markdown
-### Finding #N: <title> (Score: NN) [AMBIGUOUS if passes diverge >20]
-
-**NIH Code**: `path/to/file.ts:line-line` (N LOC)
-**Category**: CATEGORY
-**Pattern**: <what was detected>
-
-**Recommended Alternative**: `library-name@version`
-- Licence: MIT/Apache-2.0/BSD
-- Downloads: N/week | Stars: N | Last commit: YYYY-MM-DD
-- Contributors: N
-
-**Code Touchpoints**:
-- `path:line` — implementation (DELETE or REPLACE)
-- `path:line` — import (UPDATE)
-
-**Effort**: S | M | L (N files, N call sites)
-
-**Migration**:
-1. Install: `npm install ...` / `cargo add ...`
-2. Replace: <specific change>
-3. Clean up: <removed files/tests>
-
-**Scoring**:
-- Pass 1: NN (base NN + evidence NN + context NN)
-- Pass 2: NN
-- Final: NN (average)
-
-**Why do it**: <maintenance burden, upstream bugs fixed, stdlib means zero
-deps, covers planned features, ...>
-
-**Why not**: <trivial code not worth a dep, hot path needing control,
-intentional design choice, transitive dep risk, ...>
-```
+template in `references/finding-template.md`.
 
 Top of the report:
 

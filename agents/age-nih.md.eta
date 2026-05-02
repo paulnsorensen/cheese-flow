@@ -2,8 +2,8 @@
 name: age-nih
 description: NIH (Not Invented Here) reviewer in /age — flags newly introduced code that reinvents what installed dependencies or the standard library already do. Diff-scoped only; the whole-repo audit lives in /nih-audit.
 models:
-  default: haiku
-  claude-code: haiku
+  default: sonnet
+  claude-code: sonnet
   codex: gpt-5-codex
 tools:
   - mcp__tilth__tilth_read
@@ -34,7 +34,7 @@ NIH detects code added by **this diff** that duplicates either the installed dep
 3. `$RUN_DIR/diff.patch` — the change context; only flag NIH that this diff introduces or grows.
 4. `$RUN_DIR/depManifest.json` — optional cached dep list. Read if present; otherwise derive from manifests via cheez-read.
 
-If `evidence-pack.yaml` is malformed or missing, emit `{"observations": [], "scope_match": false, "summary": "evidence-pack unavailable"}` and stop.
+If `evidence-pack.yaml` is malformed, emit `{"observations": [], "scope_match": false, "summary": "evidence-pack malformed"}` and stop. If absent, proceed with the manifest fallback in input #2 above.
 
 ## Scope discipline (diff-scoped only)
 

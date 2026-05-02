@@ -10,9 +10,9 @@
       "bucket": "high",
       "narrative": "Hand-rolled UUID v4 generator using Math.random and the xxxx-4xxx template; crypto.randomUUID() in node:crypto covers this exact case with no new dependency.",
       "evidence": [
-        "src/users/uuid.ts:1 generateUserId() uses Math.random() and the xxxx-4xxx template — UUID NIH pattern",
-        "package.json engines.node >= 22 — crypto.randomUUID is stdlib"
+        "src/users/uuid.ts:1 generateUserId() uses Math.random() and the xxxx-4xxx template — UUID NIH pattern"
       ]
     }
-  ]
+  ],
+  "manual_review_concerns": []
 }
