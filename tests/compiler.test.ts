@@ -197,7 +197,7 @@ describe("compileHarnessBundles", () => {
       "utf8",
     );
 
-    await installHarnessArtifacts({
+    await compileHarnessBundles({
       projectRoot,
       harnesses: ["claude-code"],
     });
