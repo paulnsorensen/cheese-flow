@@ -71,6 +71,14 @@ item's rationale as the problem statement, then delegate
 the new spec. The original `/cure` invocation continues with the
 remaining items while `/cook` handles the design item out-of-band.
 
+`touched_paths` records `item.file` only — the file that triggered the
+design finding. Files `/cook` itself edits are **not** added to
+`touched_paths` for this loop's re-age pass. This is intentional:
+`/cook` runs out-of-band and may take long; the re-age verifies whether
+the original concern is resolved at its source. Whatever else `/cook`
+touches is reviewed by running `/age` again on its branch, not by this
+loop.
+
 ### `reply` → append to replies file (NEVER posts)
 
 Append a draft entry to `.cheese/cure/<slug>.replies.md`:
