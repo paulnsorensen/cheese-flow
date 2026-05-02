@@ -54,8 +54,12 @@ describe("compileHarnessBundles", () => {
       "utf8",
     );
 
-    expect(claudeAgent).toContain("claude-sonnet-4-5");
-    expect(codexAgent).toContain("gpt-5.1-codex");
+    expect(parseFrontmatter<{ model: string }>(claudeAgent).data.model).toBe(
+      "sonnet",
+    );
+    expect(parseFrontmatter<{ model: string }>(codexAgent).data.model).toBe(
+      "gpt-5-codex",
+    );
 
     // New emitters: plugin manifest + mcp config appear for both harnesses
     const claudePlugin = JSON.parse(
@@ -120,7 +124,7 @@ describe("compileHarnessBundles", () => {
       permissionMode: string;
     }>(cookAgent);
     expect(data.name).toBe("cook");
-    expect(data.model).toBe("claude-sonnet-4-5");
+    expect(data.model).toBe("sonnet");
     expect(data.skills).toEqual(["cheez-read", "cheez-search", "cheez-write"]);
     expect(data.color).toBe("blue");
     expect(data.permissionMode).toBe("acceptEdits");
@@ -158,7 +162,7 @@ describe("compileHarnessBundles", () => {
       permissionMode?: string;
     }>(cookAgent);
     expect(data.name).toBe("cook");
-    expect(data.model).toBe("gpt-5.1-codex");
+    expect(data.model).toBe("gpt-5-codex");
     expect(data.skills).toBeUndefined();
     expect(data.color).toBeUndefined();
     expect(data.permissionMode).toBeUndefined();
@@ -166,6 +170,51 @@ describe("compileHarnessBundles", () => {
     expect(cookAgent).toContain("- cheez-read");
     expect(cookAgent).toContain("- cheez-search");
     expect(cookAgent).toContain("- cheez-write");
+  });
+
+  it("applies models.yaml pins and overrides during install", async () => {
+    const projectRoot = await mkdtemp(
+      path.join(os.tmpdir(), "cheese-flow-manifest-install-"),
+    );
+    createdDirectories.push(projectRoot);
+    await cp(path.resolve("agents"), path.join(projectRoot, "agents"), {
+      recursive: true,
+    });
+    await cp(path.resolve("skills"), path.join(projectRoot, "skills"), {
+      recursive: true,
+    });
+    await writeFile(
+      path.join(projectRoot, "models.yaml"),
+      [
+        "pins:",
+        "  claude-code:",
+        "    sonnet: claude-sonnet-4-6",
+        "overrides:",
+        "  basic-agent:",
+        "    claude-code: claude-opus-4-7",
+        "",
+      ].join("\n"),
+      "utf8",
+    );
+
+    await installHarnessArtifacts({
+      projectRoot,
+      harnesses: ["claude-code"],
+    });
+
+    const cookAgent = await readFile(
+      path.join(projectRoot, ".claude", "agents", "cook.md"),
+      "utf8",
+    );
+    const cook = parseFrontmatter<{ model: string }>(cookAgent);
+    expect(cook.data.model).toBe("claude-sonnet-4-6");
+
+    const basicAgent = await readFile(
+      path.join(projectRoot, ".claude", "agents", "basic-agent.md"),
+      "utf8",
+    );
+    const basic = parseFrontmatter<{ model: string }>(basicAgent);
+    expect(basic.data.model).toBe("claude-opus-4-7");
   });
 
   it("validates the shipped skill metadata", async () => {
@@ -260,6 +309,7 @@ describe("compileHarnessBundles", () => {
       "age-correctness.md",
       "age-deslop.md",
       "age-encapsulation.md",
+      "age-nih.md",
       "age-precedent.md",
       "age-security.md",
       "age-spec.md",
@@ -270,6 +320,7 @@ describe("compileHarnessBundles", () => {
       "cut.md",
       "milknado-executor.md",
       "milknado-planner.md",
+      "nih-scanner.md",
       "press.md",
     ]);
     expect(manifest.skills).toEqual([
@@ -285,6 +336,7 @@ describe("compileHarnessBundles", () => {
       "milknado-plan",
       "mold",
       "nested-dir",
+      "nih-audit",
       "research",
     ]);
     expect(manifest.commands).toEqual([]);

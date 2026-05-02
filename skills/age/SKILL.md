@@ -1,6 +1,6 @@
 ---
 name: age
-description: Staff Engineer code review orchestrator. Runs eight orthogonal LLM dimensions over a diff and emits a stake-weighted report plus hash-anchored sidecar JSON.
+description: Staff Engineer code review orchestrator. Runs nine orthogonal LLM dimensions over a diff and emits a stake-weighted report plus hash-anchored sidecar JSON.
 license: MIT
 compatibility: Requires Claude Code >= 2.1.30 / claude-agent-sdk >= 0.2.63 (older versions cannot expose tilth tools to plugin sub-agents).
 metadata:
@@ -34,12 +34,12 @@ and `tilth_search`; without them every agent silently misses evidence.
 
 ## Always-Fire Rationale (D-32)
 
-All 8 dims fire on every invocation. Gating by file-type heuristics risks
+All 9 dims fire on every invocation. Gating by file-type heuristics risks
 silent misses. Each agent self-noops with `scope_match: false` + empty
 observations when its rubric does not apply. Empty dims are tallied ("ran
-8; N had findings"); only non-empty dims render as report sections.
+9; N had findings"); only non-empty dims render as report sections.
 
-Cost: ~30-40K Haiku tokens per /age. This is intentional and acceptable
+Cost: ~35-45K Haiku tokens per /age. This is intentional and acceptable
 (see spec D-32, D-21-final).
 
 ## Arguments
@@ -114,7 +114,7 @@ impact_radius: <get_impact_radius output or null>
 No inline source content in the pack. Agents use `cheez-read` for
 follow-up source reads after reviewing the outline.
 
-## Phase 2 — Dispatch All 8 Dim Agents (parallel; D-32)
+## Phase 2 — Dispatch All 9 Dim Agents (parallel; D-32)
 
 Spawn all agents in parallel. Each agent:
 - Reads `$RUN_DIR/evidence-pack.yaml` as primary evidence
@@ -131,6 +131,7 @@ Agents to dispatch:
 - `age-precedent`
 - `age-deslop`
 - `age-assertions`
+- `age-nih`
 
 Pass to each agent: `RUN_DIR`, `REF`, `SCOPE`, `COMPREHENSIVE` flag.
 
@@ -160,13 +161,13 @@ numbers fall within 3 lines of each other become a cross-dim callout.
 ## Orientation
 <1-2 sentence factual description of what the diff does>
 
-Ran 8 dims. <N> had findings. <8-N> were empty (scope_match: false or no observations).
+Ran 9 dims. <N> had findings. <9-N> were empty (scope_match: false or no observations).
 
 ## High-Stake Dimensions
 (correctness, security, encapsulation, spec — non-empty only)
 
 ## Medium-Stake Dimensions
-(complexity, deslop, assertions — non-empty only)
+(complexity, deslop, assertions, nih — non-empty only)
 
 ## Advisory Dimensions
 (precedent — non-empty only)

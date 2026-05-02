@@ -29,6 +29,11 @@ Opinionated scaffolding for portable agents and skills that can be compiled into
 
 ## Getting started
 
+Host prerequisites: Node 22+, `uv`, and `sg` (ast-grep) on `PATH`. The repo's
+`@ast-grep/cli` devDependency keeps a copy in `node_modules/.bin` for the build,
+but agent prompts shell out to bare `sg`, so install it globally too:
+`brew install ast-grep`, `cargo install ast-grep`, or `npm i -g @ast-grep/cli`.
+
 ```bash
 npm install
 npm run build

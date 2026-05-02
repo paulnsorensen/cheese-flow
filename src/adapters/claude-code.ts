@@ -20,7 +20,7 @@ export const claudeCodeAdapter: HarnessAdapter = {
   agentDirectory: "agents",
   skillDirectory: "skills",
   commandDirectory: "commands",
-  defaultModel: "claude-sonnet-4-5",
+  defaultModel: "sonnet",
   notes: [
     "Use concise markdown headings and explicit tool guidance.",
     "Prefer Claude model identifiers in agent metadata and output.",

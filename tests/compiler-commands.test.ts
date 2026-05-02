@@ -138,6 +138,7 @@ describe("shipped command scaffolds", () => {
       "cook.md",
       "culture.md",
       "mold.md",
+      "nih-audit.md",
     ];
     for (const root of [".claude", ".codex"]) {
       const manifest = await readManifest(projectRoot, root);

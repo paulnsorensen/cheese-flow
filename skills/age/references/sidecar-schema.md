@@ -68,10 +68,10 @@ Shape:
 
 - **`dimension`** — must match the dim name (`correctness`, `security`,
   `complexity`, `encapsulation`, `spec`, `precedent`, `deslop`,
-  `assertions`).
+  `assertions`, `nih`).
 - **`stake`** — fixed per dim. Do not vary at runtime.
   - high: `correctness`, `security`, `encapsulation`, `spec`
-  - medium: `complexity`, `deslop`, `assertions`
+  - medium: `complexity`, `deslop`, `assertions`, `nih`
   - advisory: `precedent`
 - **`scope_match`** — `false` when the dim's rubric does not apply to
   this diff. Pair with `observations: []`.

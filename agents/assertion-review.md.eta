@@ -2,9 +2,9 @@
 name: assertion-review
 description: Spec-drift detection via assertion review. Reads the spec, the cut tests, and the cooked implementation, then rates how well each assertion actually verifies a spec requirement.
 models:
-  default: gpt-5.1-codex
-  claude-code: claude-sonnet-4-5
-  codex: gpt-5.1-codex
+  default: sonnet
+  claude-code: sonnet
+  codex: gpt-5-codex
 tools:
   - mcp__tilth__tilth_read
   - mcp__tilth__tilth_search

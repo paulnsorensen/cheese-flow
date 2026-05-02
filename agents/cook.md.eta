@@ -2,9 +2,9 @@
 name: cook
 description: Implementation agent for the /cook flow. Makes failing tests pass with minimal, spec-scoped production changes.
 models:
-  default: gpt-5.1-codex
-  claude-code: claude-sonnet-4-5
-  codex: gpt-5.1-codex
+  default: sonnet
+  claude-code: sonnet
+  codex: gpt-5-codex
 tools:
   - mcp__tilth__tilth_read
   - mcp__tilth__tilth_search

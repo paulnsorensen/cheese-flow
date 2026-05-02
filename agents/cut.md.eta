@@ -2,9 +2,9 @@
 name: cut
 description: Test-slicing agent for the /cook flow. Converts an approved spec into failing behavioral tests before implementation starts.
 models:
-  default: gpt-5.1-codex
-  claude-code: claude-sonnet-4-5
-  codex: gpt-5.1-codex
+  default: sonnet
+  claude-code: sonnet
+  codex: gpt-5-codex
 tools:
   - mcp__tilth__tilth_read
   - mcp__tilth__tilth_search
