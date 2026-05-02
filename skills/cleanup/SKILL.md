@@ -42,6 +42,13 @@ Validate schema: every entry must have all of
 If any entry fails validation, abort with a structured error listing the
 invalid `id` values. Do not apply any fixes from a malformed file.
 
+The validator is **additive** (v2): optional fields are tolerated. Any
+extra keys beyond the v1 required set above — including
+`pr_thread_id`, `review_body_id`, `reviewer`, `job_id`, `log_excerpt`,
+and `conflicting_paths` — are accepted and ignored by `/cleanup`. The
+required keys are not relaxed; the abort-on-missing behavior is
+preserved. See `skills/affine/references/schema.md` for the v2 shape.
+
 If the file does not exist, fail fast:
 
 ```
