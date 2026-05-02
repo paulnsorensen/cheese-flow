@@ -1,6 +1,6 @@
 --- a/src/users/uuid.ts
 +++ b/src/users/uuid.ts
-@@ -0,0 +1,8 @@
+@@ -0,0 +1,7 @@
 +export function generateUserId(): string {
 +  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
 +    const r = (Math.random() * 16) | 0;
@@ -8,4 +8,3 @@
 +    return v.toString(16);
 +  });
 +}
-+
