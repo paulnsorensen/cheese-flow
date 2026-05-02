@@ -1,6 +1,6 @@
 ---
 name: cure
-description: Finish what /age started. Loads both sidecars (fixes + suggestions), renders a unified stake table, gates on user approval, routes each approved item to the right handler (/cleanup, cook sub-agent, cheez-write, /merge-resolve, /cook), then re-ages the touched paths up to a hard 3-turn cap.
+description: Finish what /age started. Loads both sidecars (fixes + suggestions), renders a unified stake table, gates on user approval, routes each approved item to the right handler (/cleanup or a cook sub-agent), then re-ages the touched paths up to a hard 3-turn cap.
 license: MIT
 metadata:
   owner: cheese-flow
@@ -25,41 +25,29 @@ The loop is intentional and bounded:
 load → user gate → apply → re-age → (turn)
 ```
 
-Nothing applies without explicit user approval. Replies are drafted to a
-file, never sent. The re-age verify step has a hard 3-turn cap per
-invocation.
+Nothing applies without explicit user approval. The re-age verify step
+has a hard 3-turn cap per invocation.
 
 ## Arguments
 
 ```
-/cure <slug>                  # auto-detect source (age first, then affine)
-/cure <slug> --from age       # pin source to .cheese/age/<slug>.*
-/cure <slug> --from affine    # pin source to .cheese/affine/<slug>.*
+/cure <slug>
 ```
 
-`slug` is the same slug emitted by `/age` or `/affine`. Source
-disambiguates by directory: `.cheese/age/<slug>.fixes.json` (and
-companion `<slug>.suggestions.json`) vs `.cheese/affine/<slug>.fixes.json`.
-Auto-detect tries age first, then affine; explicit `--from` always
-overrides. See `references/sources.md` for the full resolution table and
-the missing-sidecar error contract.
+`slug` is the same slug emitted by `/age`. `/cure` reads
+`.cheese/age/<slug>.fixes.json` (required) and
+`.cheese/age/<slug>.suggestions.json` (optional). See
+`references/sources.md` for the resolution table and the
+missing-sidecar error contract.
 
 All harnesses share the project-root `.cheese/` runtime directory.
 
 ## Phase 1 — Load
 
-Resolve the source per the auto-detect order or the explicit `--from`
-flag:
-
-1. `--from age` → `.cheese/age/<slug>.*`
-2. `--from affine` → `.cheese/affine/<slug>.*`
-3. Auto-detect: try `.cheese/age/<slug>.fixes.json` first, then
-   `.cheese/affine/<slug>.fixes.json`.
-
-Load `<dir>/<slug>.fixes.json` (required) and the optional companion
-`<dir>/<slug>.suggestions.json`. Merge their items into a single list.
-If neither sidecar exists, fail fast with the missing-sidecar error
-documented in `references/sources.md`.
+Load `.cheese/age/<slug>.fixes.json` (required) and the optional
+companion `.cheese/age/<slug>.suggestions.json`. Merge their items into
+a single list. If the fixes file is missing, fail fast with the
+missing-sidecar error documented in `references/sources.md`.
 
 Fix items and suggestion items have different required keys:
 
@@ -69,10 +57,6 @@ Fix items and suggestion items have different required keys:
 - **Suggestion items** (`suggestions.json`): `id`, `dimension`, `file`,
   `outline_ref`, `narrative`, `agent_brief_for_cook`. No anchor or content;
   not mechanically-applicable.
-
-V2 optional fields (`pr_thread_id`, `review_body_id`, `reviewer`,
-`job_id`, `log_excerpt`, `conflicting_paths`) are tolerated on either
-item type and pass through to the apply router when relevant.
 
 ## Phase 2 — User gate
 
@@ -89,15 +73,14 @@ fixed map: high (correctness, security, encapsulation, spec), medium
 shows the sub-type for fix items (e.g. `deslop.swallowed_catch`) or
 `suggestion` for suggestion items.
 
-Items are already pre-classified by `/age` (or `/affine`); `/cure` does
-not re-classify. The default selection is **empty** — nothing applies
-on a bare return. Recognized verbs:
+Items are already pre-classified by `/age`; `/cure` does not
+re-classify. The default selection is **empty** — nothing applies on a
+bare return. Recognized verbs:
 
 ```
 1,3,5         (specific ids)
 all-high      (every high-stake item)
 none          (default; exit cleanly)
-draft N       (flip item N to category=reply, append to replies file)
 skip N        (drop item N from the change-order)
 ```
 
@@ -107,34 +90,20 @@ and does not chain from `/age`.
 
 ## Phase 3 — Apply
 
-Each approved item dispatches on its routing type through the apply
-router (see `references/apply-router.md`). For `/age` sidecars, routing
-is by **sidecar of origin**, not by the `category` field value: all
-`fixes.json` items route as `edit`; all `suggestions.json` items route
-as `suggestion`. The `category` sub-type (e.g. `deslop.swallowed_catch`)
-is informational only. Additional routing types (`ci_fix`, `merge_fix`,
-`design`, `reply`) are introduced by `/affine`'s extended schema.
+Each approved item dispatches by **sidecar of origin** through the apply
+router (see `references/apply-router.md`): `fixes.json` items route as
+`edit`; `suggestions.json` items route as `suggestion`. The `category`
+sub-type (e.g. `deslop.swallowed_catch`) is informational only.
 
 | routing type | handler |
 |---|---|
-| `edit` (with anchor) | `/cleanup <slug>` (single-item synthesized sidecar) |
-| `edit` (no anchor) | direct `cheez-write` (anchor inferred from rationale) |
+| `edit` | `/cleanup <slug>` (single-item synthesized sidecar) |
 | `suggestion` | spawn one cook sub-agent per item with `agent_brief_for_cook` |
-| `ci_fix` | direct `cheez-write` informed by `log_excerpt` |
-| `merge_fix` | `/merge-resolve <file>` |
-| `design` | stub spec at `.cheese/specs/<slug>-followup.md`, then `/cook <spec-path>` |
-| `reply` | append draft to `.cheese/cure/<slug>.replies.md` — never posts |
 
 Cross-slice calls go through public skill entries only (`/cleanup`,
-`/age`, `/cook`, `/merge-resolve`). No reaching into sibling
-internals.
+`/age`, `/cook`). No reaching into sibling internals.
 
-For each item that edits production source in this loop (i.e. all
-categories except `reply` and `design`), record
-`touched_paths += item.file`. `reply` items draft to a file and never
-touch source. `design` items hand off to `/cook` out-of-band — `/cook`
-runs its own `/age` pass on its own branch, so this loop does not
-re-age files `/cook` may or may not touch.
+For each applied item, record `touched_paths += item.file`.
 
 ## Phase 4 — Re-age
 
@@ -155,45 +124,24 @@ After turn 3, force-exit and surface remaining items as a one-line
 `references/re-age.md` for the full diff semantics, the turn log, and
 the cap rationale.
 
-## Replies file
-
-```
-.cheese/cure/<slug>.replies.md
-
-  ## #<thread_id> — <reviewer> on <file>:<line>
-  > [original comment]
-  Draft reply:
-  <body>
-```
-
-`reply` items are appended verbatim. The file is the deliverable; the
-user reads, edits, and posts manually (the dotfiles `/respond` post-only
-mode is a common follow-up). `/cure` never speaks to GitHub.
-
 ## Rules
 
 - Default selection is empty. The user gate is the only path to apply.
-- `/cure` is invoked manually after `/age` (or `/affine`) prints the
-  hand-off; the orchestrator never chains it on the user's behalf.
-- Source resolution: explicit `--from age` / `--from affine` overrides
-  auto-detect; auto-detect tries age first, then affine.
+- `/cure` is invoked manually after `/age` prints the hand-off; the
+  orchestrator never chains it on the user's behalf.
 - File I/O via `cheez-read` / `cheez-search` / `cheez-write`. No host
   `Read` / `Grep` / `Edit`. Sidecar JSON loads through `cheez-read`;
-  anchor inference for `edit (no anchor)` and `ci_fix` uses
-  `cheez-search`; direct edits use `cheez-write`. Hash-anchored fixes
-  are owned by `/cleanup`, which calls `tilth_edit` natively.
-- Cross-slice calls go through `/cleanup`, `/cook`, `/age`, and
-  `/merge-resolve` only — no reaching into sibling internals.
+  direct edits use `cheez-write`. Hash-anchored fixes are owned by
+  `/cleanup`, which calls `tilth_edit` natively.
+- Cross-slice calls go through `/cleanup`, `/cook`, and `/age` only —
+  no reaching into sibling internals.
 - Re-age cap is 3 turns per invocation. After 3, hand off remaining
   items to the next invocation.
-- Replies never post to GitHub. `reply` items are drafted to
-  `.cheese/cure/<slug>.replies.md` and excluded from `touched_paths`.
 
 ## References
 
-- `references/sources.md` — auto-detect order, `--from` override, the
-  missing-sidecar error contract.
-- `references/apply-router.md` — category → handler mapping, including
-  the `suggestion` → cook sub-agent path.
+- `references/sources.md` — sidecar paths and the missing-sidecar error
+  contract.
+- `references/apply-router.md` — routing-type → handler mapping.
 - `references/re-age.md` — verify loop, diff semantics, 3-turn cap, turn
   log file.
