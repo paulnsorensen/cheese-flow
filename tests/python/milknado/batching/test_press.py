@@ -434,16 +434,16 @@ class TestDictToNewRelationship:
         assert rel.dependant_change_id == "b"
         assert rel.reason == "new_import"
 
-    def test_missing_source_change_id_raises_key_error(self):
-        with pytest.raises(KeyError):
+    def test_missing_source_change_id_raises_value_error(self):
+        with pytest.raises(ValueError, match="source_change_id must be a non-empty string"):
             _dict_to_new_relationship({"dependant_change_id": "b", "reason": "new_import"})
 
-    def test_missing_dependant_change_id_raises_key_error(self):
-        with pytest.raises(KeyError):
+    def test_missing_dependant_change_id_raises_value_error(self):
+        with pytest.raises(ValueError, match="dependant_change_id must be a non-empty string"):
             _dict_to_new_relationship({"source_change_id": "a", "reason": "new_import"})
 
-    def test_missing_reason_raises_key_error(self):
-        with pytest.raises(KeyError):
+    def test_missing_reason_raises_value_error(self):
+        with pytest.raises(ValueError, match="reason must be a string"):
             _dict_to_new_relationship({"source_change_id": "a", "dependant_change_id": "b"})
 
     def test_invalid_reason_string_raises_value_error(self):

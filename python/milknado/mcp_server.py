@@ -120,7 +120,9 @@ def _dict_to_new_relationship(d: dict) -> NewRelationship:
         raise ValueError(f"source_change_id must be a non-empty string, got {source_change_id!r}")
     dependant_change_id = d.get("dependant_change_id")
     if not isinstance(dependant_change_id, str) or not dependant_change_id:
-        raise ValueError(f"dependant_change_id must be a non-empty string, got {dependant_change_id!r}")
+        raise ValueError(
+            f"dependant_change_id must be a non-empty string, got {dependant_change_id!r}"
+        )
     return NewRelationship(
         source_change_id=source_change_id,
         dependant_change_id=dependant_change_id,

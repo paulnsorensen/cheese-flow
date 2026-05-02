@@ -84,14 +84,10 @@ def apply_batches_to_graph(
             oversized=batch.oversized,
             batch_index=batch.index,
         )
-        if batch.depends_on:
-            sorted_deps = sorted(batch.depends_on)
-            primary_parent = node_id_by_batch[sorted_deps[0]]
-            for dep_index in batch.depends_on:
-                graph.add_edge(node.id, node_id_by_batch[dep_index])
-        else:
-            primary_parent = attach_to
-        graph.set_parent_id(node.id, primary_parent)
+        for dep_index in batch.depends_on:
+            dep_node_id = node_id_by_batch[dep_index]
+            graph.add_edge(node.id, dep_node_id)
+            graph.set_parent_id(dep_node_id, node.id)
         if files:
             graph.set_file_ownership(node.id, files)
         node_id_by_batch[batch.index] = node.id
@@ -99,7 +95,9 @@ def apply_batches_to_graph(
 
     for batch in plan.batches:
         if batch.index not in depended_on:
-            graph.add_edge(attach_to, node_id_by_batch[batch.index])
+            node_id = node_id_by_batch[batch.index]
+            graph.add_edge(attach_to, node_id)
+            graph.set_parent_id(node_id, attach_to)
 
     return created
 
