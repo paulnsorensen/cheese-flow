@@ -22,7 +22,7 @@ calls go through public skill entries (`/cleanup`, `/cook`, `/age`,
 ### `edit` (with anchor) → `/cleanup`
 
 Synthesize a minimal sidecar with a single item carrying the v1 required
-keys, write it to `.cheese/cure/<slug>.cure.fixes.json`, and call
+keys, write it to `.cheese/age/<slug>.fixes.json`, and call
 `/cleanup` with the slug. `/cleanup` runs its hash-anchored apply path;
 on hash mismatch the cleanup-wolf re-anchors via narrative match. The
 result feeds back into the loop's `touched_paths`.

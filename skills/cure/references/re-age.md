@@ -39,8 +39,9 @@ next turn. The user can stop the loop at any boundary by selecting
 
 ## 3-turn cap
 
-The loop has a hard cap of **3 turns per invocation** (`turn < 3`).
-After turn 3, force-exit even if the diff is non-empty. Surface the
+The loop has a hard cap of **3 turns per invocation** (`turn <= 3`,
+where turns are 1-indexed). After turn 3, force-exit even if the diff
+is non-empty. Surface the
 remaining items as a one-line "next session" hand-off:
 
 ```

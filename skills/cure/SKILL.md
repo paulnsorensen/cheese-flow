@@ -126,9 +126,9 @@ the prior items and emit only **new or changed** items as the next
 iteration. If empty, the loop exits cleanly.
 
 If non-empty, ask the user whether to continue into the next turn. The
-loop has a hard **3-turn cap** per invocation (`turn < 3`). After turn
-3, force-exit and surface remaining items as a one-line "next session"
-hand-off the user can run as `/cure <slug>` again. See
+loop has a hard **3-turn cap** per invocation (`turn <= 3`, 1-indexed).
+After turn 3, force-exit and surface remaining items as a one-line
+"next session" hand-off the user can run as `/cure <slug>` again. See
 `references/re-age.md` for the full diff semantics, the turn log, and
 the cap rationale.
 
