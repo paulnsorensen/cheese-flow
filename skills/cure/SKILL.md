@@ -173,6 +173,11 @@ mode is a common follow-up). `/cure` never speaks to GitHub.
   hand-off; the orchestrator never chains it on the user's behalf.
 - Source resolution: explicit `--from age` / `--from affine` overrides
   auto-detect; auto-detect tries age first, then affine.
+- File I/O via `cheez-read` / `cheez-search` / `cheez-write`. No host
+  `Read` / `Grep` / `Edit`. Sidecar JSON loads through `cheez-read`;
+  anchor inference for `edit (no anchor)` and `ci_fix` uses
+  `cheez-search`; direct edits use `cheez-write`. Hash-anchored fixes
+  are owned by `/cleanup`, which calls `tilth_edit` natively.
 - Cross-slice calls go through `/cleanup`, `/cook`, `/age`, and
   `/merge-resolve` only — no reaching into sibling internals.
 - Re-age cap is 3 turns per invocation. After 3, hand off remaining
