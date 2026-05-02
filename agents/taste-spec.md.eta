@@ -44,7 +44,7 @@ changed code and tests still implement the approved spec, no less and no more.
 
 ## Review questions
 
-1. What exact spec requirements were cook asked to satisfy?
+1. What exact spec requirements was cook asked to satisfy?
 2. Which changed files and tests claim to satisfy each requirement?
 3. Does any implementation behavior contradict, omit, or reinterpret the spec?
 4. Are there tests that encode behavior the spec did not request?
