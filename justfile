@@ -19,7 +19,7 @@ build:
     npm run lint:skills
     npm run typecheck
     npm run build
-    rtk test npm run test:coverage
+    if command -v rtk >/dev/null 2>&1 && rtk test --help >/dev/null 2>&1; then rtk test npm run test:coverage; else npm run test:coverage; fi
     uv run --group dev ruff format
     uv run --group dev ruff check --fix
     uv run --group dev pytest
