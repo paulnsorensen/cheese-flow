@@ -19,11 +19,19 @@ build:
     npm run lint:skills
     npm run typecheck
     npm run build
-    if command -v rtk >/dev/null 2>&1 && rtk test --help >/dev/null 2>&1; then rtk test npm run test:coverage; else npm run test:coverage; fi
+    just _test-coverage
     uv run --group dev ruff format
     uv run --group dev ruff check --fix
     uv run --group dev pytest
     @echo "Build passed - ready for PR"
+
+_test-coverage:
+    if command -v rtk >/dev/null 2>&1 \
+        && rtk test --help >/dev/null 2>&1; then \
+        rtk test npm run test:coverage; \
+    else \
+        npm run test:coverage; \
+    fi
 
 # Full build no autofix: format check -> lint check -> typecheck -> build -> tests (for CI)
 build-ci:
