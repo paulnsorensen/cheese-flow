@@ -25,6 +25,7 @@ build:
     uv run --group dev pytest
     @echo "Build passed - ready for PR"
 
+# Private build helper; leading underscore keeps it out of the default recipe list.
 _test-coverage:
     if command -v rtk >/dev/null 2>&1 \
         && rtk test --help >/dev/null 2>&1; then \
