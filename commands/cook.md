@@ -1,6 +1,6 @@
 ---
 name: cook
-description: Sequential spec-to-implementation flow that runs cut, cook, press, and (optionally) assertion-review using Cheez skills as the backbone.
+description: Sequential spec-to-implementation flow that runs cut, cook, taste-test, press, and (optionally) assertion-review using Cheez skills as the backbone.
 argument-hint: "<approved spec path or well-scoped implementation request>"
 ---
 
@@ -9,7 +9,7 @@ argument-hint: "<approved spec path or well-scoped implementation request>"
 Use `/cook` when the user has a well-thought-out spec or a focused request
 ready to implement. The flow is intentionally sequential:
 
-**Spec → cut → cook → press → assertion-review (optional) → package-ready report**
+**Spec → cut → cook → taste-test → press → assertion-review (optional) → package-ready report**
 
 It is not a planning factory. It is not a work splitter. It turns one coherent
 spec into tested code through red-green-refactor discipline.
@@ -21,6 +21,7 @@ spec into tested code through red-green-refactor discipline.
 | `/mold` | Produces the spec this command consumes. `/cook` never re-asks design questions answered by mold. |
 | `/cheese` | Routes here when intent is "implement a known spec". |
 | `/age` | Reviews the resulting changes after press finishes. |
+| `taste-*` | Tight cook-scope evaluators that route drift, readability, or scope creep back into cook before press. |
 | `assertion-review` | Optional drift gate after press; surfaces requirements without strong assertions. |
 
 ## Required inputs
@@ -84,7 +85,30 @@ cook must:
 
 If cook reports partial or skipped work, stop and resolve that before press.
 
-## Phase 4 — press
+## Phase 4 — taste-test feedback loop
+
+After cook says "I completed all the changes", run a taste test before press.
+Taste test is cook-scoped and uses three separate read-only agents:
+
+- `taste-spec`: did the cooked implementation drift from the spec?
+- `taste-readability`: is the change as concise and readable as possible?
+- `taste-scope`: did cook add more than it was asked to do?
+
+Each taste agent must return `pass` or `revise`. Pipe every `revise` finding
+back into `cook` as a bounded correction prompt with the original spec, Cook
+Report, and taste evidence.
+
+The feedback loop has a hard two taste-test limit:
+
+1. Best case: `cook → taste-test`, then continue to press when all taste agents
+   pass.
+2. Worst case: `cook → taste-test → cook → taste-test → cook`.
+
+After the second taste test, allow only the final corrective cook pass shown
+above. If that cook pass cannot fully resolve the taste findings, stop and
+report blocked instead of continuing to press.
+
+## Phase 5 — press
 
 Invoke the `press` agent after cook is green.
 
@@ -96,7 +120,7 @@ press must:
 - Score findings and recommend ready, follow-up, or blocked.
 - Complete its self-evaluation checklist.
 
-## Phase 5 — assertion-review (optional spec-drift gate)
+## Phase 6 — assertion-review (optional spec-drift gate)
 
 Invoke `assertion-review` when any of the following hold:
 
@@ -111,13 +135,14 @@ rerun / cook correction / spec amendment.
 If assertion-review's recommendation is anything other than "ready for
 package", route the work back to the appropriate earlier phase.
 
-## Phase 6 — Package-ready report
+## Phase 7 — Package-ready report
 
 Before opening a PR, produce a final self-evaluation:
 
 - [ ] The spec or acceptance criteria are clear.
 - [ ] cut wrote failing tests before production changes.
 - [ ] cook made the tests pass without speculative behavior.
+- [ ] taste-test passed or completed the two-round corrective loop without unresolved findings.
 - [ ] press checked coverage and assertion strength.
 - [ ] assertion-review (if invoked) returned "ready for package".
 - [ ] Relevant quality gates pass.
