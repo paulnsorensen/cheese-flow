@@ -19,6 +19,7 @@ research query template for each.
 | `CRYPTO` | password hashing | "password hashing library for {language}: bcrypt, argon2; never roll your own" |
 | `SECURITY` | HTML/SQL sanitizer | "HTML sanitization library for {language}: DOMPurify, sanitize-html, bleach" |
 | `FORMAT` | number/currency format | "number/currency formatting library for {language}; check stdlib Intl first" |
+| `PATH` | path-joining utility | "path joining in {language}; check stdlib first (Node path.join / path.posix.join, Python pathlib.Path, Go filepath.Join, Rust std::path::Path)" |
 | `COMPARE` | deep equality | "deep equality library for {language}: fast-deep-equal, lodash.isEqual; check stdlib first" |
 
 ## Stdlib-first principle
@@ -41,7 +42,7 @@ Reject (cap at 40) when any of:
 - Last commit > 1 year ago.
 - Fewer than 3 distinct contributors in the last year.
 - Open critical security issues without a fix.
-- GPL licence in a permissive-licenced project (flag, don't auto-cap).
+- GPL licence in a permissive-licensed project (flag, don't auto-cap).
 
 Prefer when:
 

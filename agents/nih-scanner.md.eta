@@ -97,37 +97,37 @@ already covers exact-symbol queries.
 
 ```bash
 # UUID — hand-rolled UUID generation
-sg --lang typescript -p 'Math.random().toString($$$).substring($$$)' --json {scope}
+sg --lang typescript -p 'Math.random().toString($$$).substring($$$)' --json "{scope}"
 
 # CLONE — JSON deep-clone hack
-sg --lang typescript -p 'JSON.parse(JSON.stringify($OBJ))' --json {scope}
+sg --lang typescript -p 'JSON.parse(JSON.stringify($OBJ))' --json "{scope}"
 
 # DEBOUNCE — manual setTimeout/clearTimeout pairs
-sg --lang typescript -p 'clearTimeout($TIMER)' --json {scope}
-sg --lang typescript -p 'setTimeout($FN, $DELAY)' --json {scope}
+sg --lang typescript -p 'clearTimeout($TIMER)' --json "{scope}"
+sg --lang typescript -p 'setTimeout($FN, $DELAY)' --json "{scope}"
 
 # PATH — string-concatenated path joining
-sg --lang typescript -p '$A + "/" + $B' --json {scope}
+sg --lang typescript -p '$A + "/" + $B' --json "{scope}"
 
 # ARGPARSE — manual process.argv slicing
-sg --lang typescript -p 'process.argv.slice($$$)' --json {scope}
-sg --lang typescript -p 'process.argv[$IDX]' --json {scope}
+sg --lang typescript -p 'process.argv.slice($$$)' --json "{scope}"
+sg --lang typescript -p 'process.argv[$IDX]' --json "{scope}"
 
 # VALIDATION — hand-rolled regex validation
-sg --lang typescript -p 'new RegExp($PATTERN).test($INPUT)' --json {scope}
+sg --lang typescript -p 'new RegExp($PATTERN).test($INPUT)' --json "{scope}"
 ```
 
 #### Python
 
 ```bash
 # RETRY — `for _ in range(N): try/except + sleep` shape
-sg --lang python -p 'for $_ in range($N):' --json {scope}
+sg --lang python -p 'for $_ in range($N):' --json "{scope}"
 
 # ARGPARSE — manual sys.argv indexing
-sg --lang python -p 'sys.argv[$IDX]' --json {scope}
+sg --lang python -p 'sys.argv[$IDX]' --json "{scope}"
 
 # VALIDATION — re.match-based validation
-sg --lang python -p 're.match($PATTERN, $INPUT)' --json {scope}
+sg --lang python -p 're.match($PATTERN, $INPUT)' --json "{scope}"
 ```
 
 `logging.basicConfig` and `timedelta` are stdlib — never flag.
@@ -136,21 +136,21 @@ sg --lang python -p 're.match($PATTERN, $INPUT)' --json {scope}
 
 ```bash
 # ERROR — manual Display/Error impls (thiserror alternative)
-sg --lang rust -p 'impl std::fmt::Display for $TYPE { $$$BODY }' --json {scope}
-sg --lang rust -p 'impl std::error::Error for $TYPE { $$$BODY }' --json {scope}
+sg --lang rust -p 'impl std::fmt::Display for $TYPE { $$$BODY }' --json "{scope}"
+sg --lang rust -p 'impl std::error::Error for $TYPE { $$$BODY }' --json "{scope}"
 
 # ARGPARSE — manual env::args (clap alternative)
-sg --lang rust -p 'std::env::args()' --json {scope}
+sg --lang rust -p 'std::env::args()' --json "{scope}"
 
 # SERIALIZATION — manual Serialize impl (serde_derive alternative)
-sg --lang rust -p 'impl Serialize for $TYPE { $$$BODY }' --json {scope}
+sg --lang rust -p 'impl Serialize for $TYPE { $$$BODY }' --json "{scope}"
 ```
 
 #### Go
 
 ```bash
 # ARGPARSE — manual os.Args indexing (cobra/urfave alternative)
-sg --lang go -p 'os.Args[$IDX]' --json {scope}
+sg --lang go -p 'os.Args[$IDX]' --json "{scope}"
 ```
 
 `http.Client{...}` is Go stdlib — not NIH. Generic `for` loops are too
@@ -160,7 +160,7 @@ generic; only flag if the body contains `time.Sleep` (manual retry shape).
 
 ```bash
 # ARGPARSE — case "$1" with >10 options is hand-rolled CLI
-sg --lang bash -p 'case "$1" in' --json {scope}
+sg --lang bash -p 'case "$1" in' --json "{scope}"
 ```
 
 `while getopts` is the stdlib pattern — only flag custom positional parsers.
