@@ -91,12 +91,12 @@ async function readHooksSource(projectRoot: string): Promise<HooksSource> {
 
 const eta = new Eta({ autoEscape: false, autoTrim: false, useWith: true });
 
-type InstallOptions = {
+type CompileBundlesOptions = {
   projectRoot: string;
   harnesses: HarnessName[];
 };
 
-type ProcessHarnessContext = {
+type CompileHarnessBundleContext = {
   harnessName: HarnessName;
   projectRoot: string;
   pluginMetadata: PluginMetadata;
@@ -105,8 +105,8 @@ type ProcessHarnessContext = {
   modelManifest: ModelManifest | null;
 };
 
-export async function installHarnessArtifacts(
-  options: InstallOptions,
+export async function compileHarnessBundles(
+  options: CompileBundlesOptions,
 ): Promise<string[]> {
   const pluginMetadata = await readPluginMetadata(options.projectRoot);
   const modelManifest = await readModelManifest(options.projectRoot);
@@ -115,7 +115,7 @@ export async function installHarnessArtifacts(
   const outputs: string[] = [];
   for (const harnessName of options.harnesses) {
     outputs.push(
-      await processHarness({
+      await compileHarnessBundle({
         harnessName,
         projectRoot: options.projectRoot,
         pluginMetadata,
@@ -128,9 +128,9 @@ export async function installHarnessArtifacts(
   return outputs;
 }
 
-// Removes only the paths this install step re-emits, so user-managed files at
+// Removes only the paths this compile step re-emits, so user-managed files at
 // the harness output root (settings.local.json, personal CLAUDE.md, etc.) are
-// not destroyed when contributors run `cheese install` / `npm run install:<harness>`.
+// not destroyed when contributors run `cheese compile` / `npm run compile:<harness>`.
 async function cleanGeneratedArtifacts(
   adapter: HarnessAdapter,
   outputRoot: string,
@@ -161,7 +161,9 @@ async function cleanGeneratedArtifacts(
   ]);
 }
 
-async function processHarness(context: ProcessHarnessContext): Promise<string> {
+async function compileHarnessBundle(
+  context: CompileHarnessBundleContext,
+): Promise<string> {
   const adapter = harnessAdapters[context.harnessName];
   const outputRoot = path.join(context.projectRoot, adapter.outputRoot);
   const agentOutputDirectory = path.join(outputRoot, adapter.agentDirectory);
