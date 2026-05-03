@@ -333,6 +333,7 @@ describe("compileHarnessBundles", () => {
       "cheez-search",
       "cheez-write",
       "cleanup",
+      "cure",
       "gh",
       "merge-resolve",
       "milknado-execute",
