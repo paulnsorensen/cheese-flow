@@ -87,4 +87,4 @@ Format per callout:
 ---
 
 *Report written to `.cheese/age/<slug>.md`. Fixes: <!-- placeholder: N -->. Suggestions: <!-- placeholder: N -->.*
-*To apply fixes: `/cleanup <slug>` -- To act on suggestions: `/fromage cook --suggestions <slug>`*
+*Next step: `/cure <slug>` — applies fixes, routes suggestions, and re-ages the touched paths.*

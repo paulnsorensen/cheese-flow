@@ -199,13 +199,13 @@ Age report: .cheese/age/<slug>.md
 Fixes:       .cheese/age/<slug>.fixes.json   (<N> entries)
 Suggestions: .cheese/age/<slug>.suggestions.json   (<M> entries)
 
-Next steps:
-  /cleanup <slug>                           — apply mechanical fixes
-  /fromage cook --suggestions <slug>        — act on judgment guidance
+Next step:
+  /cure <slug>                              — apply fixes, route suggestions, re-age
 ```
 
-Do NOT auto-invoke either skill. The amplifier-pure boundary forbids it
-(spec D-14-final). The report is the deliverable; action is the user's call.
+Do NOT auto-invoke /cure. The amplifier-pure boundary forbids it
+(spec D-14-final). The report is the deliverable; the user types the
+hand-off.
 
 ## Phase 5 — Cleanup
 
