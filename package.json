@@ -33,10 +33,6 @@
     "format:check": "biome format .",
     "install:all": "tsx src/index.ts install --harness claude-code,codex,cursor,copilot-cli",
     "install:auto": "tsx src/index.ts install",
-    "install:claude": "tsx src/index.ts install --harness claude-code",
-    "install:codex": "tsx src/index.ts install --harness codex",
-    "install:copilot": "tsx src/index.ts install --harness copilot-cli",
-    "install:cursor": "tsx src/index.ts install --harness cursor",
     "lint:fix": "biome check --write .",
     "lint:check": "biome check .",
     "lint:skills": "tsx src/index.ts lint",
@@ -68,6 +64,7 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
+    "@ast-grep/cli": "^0.42.1",
     "@biomejs/biome": "^2.4.12",
     "@types/node": "^25.6.0",
     "@vitest/coverage-v8": "^4.1.4",

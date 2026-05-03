@@ -1,6 +1,6 @@
 # Issue template
 
-Issues are the second artifact type `/mold` can crystallize. They are
+Issues are the second artifact type `/mold` can curdle. They are
 GitHub-flavored and stand alone — independent enough to be filed as
 `gh issue create --body-file <path>` without the parent spec.
 

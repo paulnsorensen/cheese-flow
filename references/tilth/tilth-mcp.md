@@ -34,7 +34,7 @@ tilth_search(query: "handleAuth", scope: "src/")
 **Parameters:**
 - `query` (required): Symbol name, comma-separated symbols, text string, or regex
 - `scope`: Directory to search in (default: cwd)
-- `kind`: `"symbol"` (default), `"content"`, or `"callers"`
+- `kind`: `"symbol"` (default), `"content"`, `"regex"`, or `"callers"`
 - `expand`: Number of matches to show full source (default: 2)
 - `context`: Path to file being edited — boosts nearby results
 - `glob`: File pattern filter — `"*.rs"`, `"!*.test.ts"`, `"*.{go,rs}"`
@@ -58,11 +58,17 @@ tilth_search(query: "ServeHTTP, HandlersChain, Next", scope: ".")
 tilth_search(query: "validateToken", kind: "callers", scope: ".")
 ```
 
-**Content/regex search:**
+**Content search (literal text):**
 ```
 tilth_search(query: "TODO: fix", kind: "content", scope: ".")
-tilth_search(query: "/rate.*limit/i", kind: "content", scope: ".")
 ```
+
+**Regex search:**
+```
+tilth_search(query: "rate.?limit", kind: "regex", scope: ".")
+tilth_search(query: "FIXME\\(.*?\\):", kind: "regex", scope: "src/")
+```
+Pass the bare regex — do not wrap in `/.../` delimiters.
 
 ### tilth_read — Smart File Reading
 

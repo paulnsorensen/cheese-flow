@@ -17,6 +17,11 @@ import {
 import { emitHooks, emitMcpConfig, emitPluginManifest } from "./emit.js";
 import { parseFrontmatter } from "./frontmatter.js";
 import {
+  applyModelManifest,
+  type ModelManifest,
+  readModelManifest,
+} from "./model-manifest.js";
+import {
   type AgentFrontmatter,
   parseAgentFrontmatter,
   parseCommandFrontmatter,
@@ -109,6 +114,7 @@ type CompileSession = {
   pluginMetadata: PluginMetadata;
   hooksSource: HooksSource;
   skillSourceDirectory: string;
+  modelManifest: ModelManifest | null;
 };
 
 type CompileHarnessBundleContext = {
@@ -121,6 +127,7 @@ async function createCompileSession(
   return {
     projectRoot,
     pluginMetadata: await readPluginMetadata(projectRoot),
+    modelManifest: await readModelManifest(projectRoot),
     hooksSource: await readHooksSource(projectRoot),
     skillSourceDirectory: path.join(projectRoot, "skills"),
   };
@@ -238,6 +245,7 @@ async function compileHarnessBundleFromSession(
     projectRoot: context.projectRoot,
     harness: context.harnessName,
     agentOutputDirectory,
+    modelManifest: context.modelManifest,
   });
   const skills = await copySkills({
     projectRoot: context.projectRoot,
@@ -315,6 +323,7 @@ type CompileAgentsOptions = {
   projectRoot: string;
   harness: HarnessName;
   agentOutputDirectory: string;
+  modelManifest: ModelManifest | null;
 };
 
 async function compileAgents(options: CompileAgentsOptions): Promise<string[]> {
@@ -335,7 +344,13 @@ async function compileAgents(options: CompileAgentsOptions): Promise<string[]> {
     const frontmatter = parseAgentFrontmatter(parsed.data);
     const adapter = harnessAdapters[options.harness];
     const outputFile = `${frontmatter.name}.md`;
-    const resolvedModel = resolveModel(frontmatter.models, options.harness);
+    const baseModel = resolveModel(frontmatter.models, options.harness);
+    const resolvedModel = applyModelManifest({
+      model: baseModel,
+      agentName: frontmatter.name,
+      harness: options.harness,
+      manifest: options.modelManifest,
+    });
     const rendered = eta.renderString(parsed.body, {
       agent: { ...frontmatter, model: resolvedModel },
       harness: adapter,
@@ -465,11 +480,16 @@ export async function previewAgent(
   const source = await readFile(sourcePath, "utf8");
   const parsed = parseFrontmatter<unknown>(source);
   const frontmatter: AgentFrontmatter = parseAgentFrontmatter(parsed.data);
+  const manifest = await readModelManifest(projectRoot);
+  const baseModel = resolveModel(frontmatter.models, harness);
+  const resolvedModel = applyModelManifest({
+    model: baseModel,
+    agentName: frontmatter.name,
+    harness,
+    manifest,
+  });
   const rendered = eta.renderString(parsed.body, {
-    agent: {
-      ...frontmatter,
-      model: resolveModel(frontmatter.models, harness),
-    },
+    agent: { ...frontmatter, model: resolvedModel },
     harness: harnessAdapters[harness],
   }) as string;
 

@@ -32,6 +32,7 @@ import {
   runMcpProxy,
 } from "./lib/mcp-proxy.js";
 import { runMilknadoCommand } from "./lib/milknado.js";
+import { runSessionStart } from "./lib/session-start.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -181,6 +182,30 @@ program
       projectRoot: path.resolve(options.projectRoot),
     });
   });
+
+program
+  .command("session-start")
+  .description(
+    "Run cheese-flow housekeeping (sweep + update check) under a soft time budget. Best-effort; never blocks session start.",
+  )
+  .option("--root <path>", "project root", process.cwd())
+  .option("--quiet", "suppress non-error output", false)
+  .option("--max-time <ms>", "soft budget for housekeeping", "5000")
+  .action(
+    async (options: { root: string; quiet: boolean; maxTime: string }) => {
+      try {
+        await runSessionStart({
+          cwd: path.resolve(options.root),
+          maxTimeMs: Number.parseInt(options.maxTime, 10) || 5000,
+          currentVersion: "0.1.0",
+          quiet: options.quiet,
+        });
+      } catch {
+        // Best-effort: never block session start on housekeeping failure.
+      }
+      process.exit(0);
+    },
+  );
 
 program
   .command("mcp")

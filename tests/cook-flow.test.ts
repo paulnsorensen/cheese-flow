@@ -20,7 +20,7 @@ describe("/cook flow artifacts", () => {
     const command = parseCommandFrontmatter(parsed.data);
 
     expect(command.name).toBe("cook");
-    expect(parsed.body).toContain("cut → cook → press");
+    expect(parsed.body).toContain("cut → cook → taste-test → press");
     expect(parsed.body).toContain("Cheez skills");
     expect(parsed.body).not.toMatch(
       /\b(batch|batching|fleet|parallel worktree)\b/iu,
@@ -28,8 +28,16 @@ describe("/cook flow artifacts", () => {
     expect(parsed.body).not.toMatch(/\bfromage\b/iu);
   });
 
-  it("binds cut, cook, press, and assertion-review to the Cheez skills", async () => {
-    for (const agent of ["cut", "cook", "press", "assertion-review"]) {
+  it("binds cook flow agents to the Cheez skills", async () => {
+    for (const agent of [
+      "cut",
+      "cook",
+      "press",
+      "assertion-review",
+      "taste-spec",
+      "taste-readability",
+      "taste-scope",
+    ]) {
       const source = await readSource(`agents/${agent}.md.eta`);
       const parsed = parseFrontmatter<unknown>(source);
       const frontmatter = parseAgentFrontmatter(parsed.data);
@@ -60,6 +68,16 @@ describe("/cook flow artifacts", () => {
     expect(parsed.body).toContain("STRONG");
     expect(parsed.body).toContain("MISSING");
     expect(parsed.body).toContain("CONTRADICTS");
+  });
+
+  it("runs taste-test as a two-round cook feedback loop", async () => {
+    const source = await readSource("commands/cook.md");
+
+    expect(source).toContain("cook → taste-test → cook → taste-test → cook");
+    expect(source).toContain("hard two-round taste-test limit");
+    expect(source).toContain("taste-spec");
+    expect(source).toContain("taste-readability");
+    expect(source).toContain("taste-scope");
   });
 
   it("wires /cook into the /cheese routing table", async () => {

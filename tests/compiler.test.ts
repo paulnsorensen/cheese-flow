@@ -55,8 +55,12 @@ describe("compileHarnessBundles", () => {
       "utf8",
     );
 
-    expect(claudeAgent).toContain("claude-sonnet-4-5");
-    expect(codexAgent).toContain("gpt-5.1-codex");
+    expect(parseFrontmatter<{ model: string }>(claudeAgent).data.model).toBe(
+      "sonnet",
+    );
+    expect(parseFrontmatter<{ model: string }>(codexAgent).data.model).toBe(
+      "gpt-5-codex",
+    );
 
     // New emitters: plugin manifest + mcp config appear for both harnesses
     const claudePlugin = JSON.parse(
@@ -173,7 +177,7 @@ describe("compileHarnessBundles", () => {
       permissionMode: string;
     }>(cookAgent);
     expect(data.name).toBe("cook");
-    expect(data.model).toBe("claude-sonnet-4-5");
+    expect(data.model).toBe("sonnet");
     expect(data.skills).toEqual(["cheez-read", "cheez-search", "cheez-write"]);
     expect(data.color).toBe("blue");
     expect(data.permissionMode).toBe("acceptEdits");
@@ -211,7 +215,7 @@ describe("compileHarnessBundles", () => {
       permissionMode?: string;
     }>(cookAgent);
     expect(data.name).toBe("cook");
-    expect(data.model).toBe("gpt-5.1-codex");
+    expect(data.model).toBe("gpt-5-codex");
     expect(data.skills).toBeUndefined();
     expect(data.color).toBeUndefined();
     expect(data.permissionMode).toBeUndefined();
@@ -219,6 +223,51 @@ describe("compileHarnessBundles", () => {
     expect(cookAgent).toContain("- cheez-read");
     expect(cookAgent).toContain("- cheez-search");
     expect(cookAgent).toContain("- cheez-write");
+  });
+
+  it("applies models.yaml pins and overrides during install", async () => {
+    const projectRoot = await mkdtemp(
+      path.join(os.tmpdir(), "cheese-flow-manifest-install-"),
+    );
+    createdDirectories.push(projectRoot);
+    await cp(path.resolve("agents"), path.join(projectRoot, "agents"), {
+      recursive: true,
+    });
+    await cp(path.resolve("skills"), path.join(projectRoot, "skills"), {
+      recursive: true,
+    });
+    await writeFile(
+      path.join(projectRoot, "models.yaml"),
+      [
+        "pins:",
+        "  claude-code:",
+        "    sonnet: claude-sonnet-4-6",
+        "overrides:",
+        "  basic-agent:",
+        "    claude-code: claude-opus-4-7",
+        "",
+      ].join("\n"),
+      "utf8",
+    );
+
+    await compileHarnessBundles({
+      projectRoot,
+      harnesses: ["claude-code"],
+    });
+
+    const cookAgent = await readFile(
+      path.join(projectRoot, ".claude", "agents", "cook.md"),
+      "utf8",
+    );
+    const cook = parseFrontmatter<{ model: string }>(cookAgent);
+    expect(cook.data.model).toBe("claude-sonnet-4-6");
+
+    const basicAgent = await readFile(
+      path.join(projectRoot, ".claude", "agents", "basic-agent.md"),
+      "utf8",
+    );
+    const basic = parseFrontmatter<{ model: string }>(basicAgent);
+    expect(basic.data.model).toBe("claude-opus-4-7");
   });
 
   it("validates the shipped skill metadata", async () => {
@@ -313,6 +362,7 @@ describe("compileHarnessBundles", () => {
       "age-correctness.md",
       "age-deslop.md",
       "age-encapsulation.md",
+      "age-nih.md",
       "age-precedent.md",
       "age-security.md",
       "age-spec.md",
@@ -323,7 +373,11 @@ describe("compileHarnessBundles", () => {
       "cut.md",
       "milknado-executor.md",
       "milknado-planner.md",
+      "nih-scanner.md",
       "press.md",
+      "taste-readability.md",
+      "taste-scope.md",
+      "taste-spec.md",
     ]);
     expect(manifest.skills).toEqual([
       "age",
@@ -332,12 +386,14 @@ describe("compileHarnessBundles", () => {
       "cheez-search",
       "cheez-write",
       "cleanup",
+      "cure",
       "gh",
       "merge-resolve",
       "milknado-execute",
       "milknado-plan",
       "mold",
       "nested-dir",
+      "nih-audit",
       "research",
     ]);
     expect(manifest.commands).toEqual([]);
@@ -716,10 +772,45 @@ describe("compileHarnessBundles", () => {
     expect(stdout).toContain("-H, --harness <name...>");
   });
 
-  it("keeps help on -h and uses -H for harness selection on install", async () => {
+  it("compiles every supported harness when --harness is omitted", async () => {
+    const projectRoot = await mkdtemp(
+      path.join(os.tmpdir(), "cheese-flow-cli-"),
+    );
+    createdDirectories.push(projectRoot);
+    await cp(path.resolve("agents"), path.join(projectRoot, "agents"), {
+      recursive: true,
+    });
+    await cp(path.resolve("skills"), path.join(projectRoot, "skills"), {
+      recursive: true,
+    });
+
     const { stdout } = await execFileAsync(
       "npx",
-      ["tsx", "src/index.ts", "install", "--help"],
+      ["tsx", "src/index.ts", "compile", "--project-root", projectRoot],
+      {
+        cwd: path.resolve("."),
+      },
+    );
+
+    const compiledLines = stdout
+      .trim()
+      .split("\n")
+      .filter((line) => line.startsWith("Compiled harness bundle:"));
+    expect(compiledLines).toHaveLength(4);
+    expect(compiledLines).toEqual(
+      expect.arrayContaining([
+        `Compiled harness bundle: ${path.join(projectRoot, ".claude")}`,
+        `Compiled harness bundle: ${path.join(projectRoot, ".codex")}`,
+        `Compiled harness bundle: ${path.join(projectRoot, ".cursor")}`,
+        `Compiled harness bundle: ${path.join(projectRoot, ".copilot")}`,
+      ]),
+    );
+  });
+
+  it("keeps help on -h and uses -H for harness selection on compile", async () => {
+    const { stdout } = await execFileAsync(
+      "npx",
+      ["tsx", "src/index.ts", "compile", "--help"],
       {
         cwd: path.resolve("."),
       },
@@ -731,6 +822,28 @@ describe("compileHarnessBundles", () => {
     expect(stdout).toContain("-h, --help");
     expect(stdout).toContain("-H, --harness <name...>");
     expect(stdout).toContain("auto-detected local harnesses.");
+  });
+
+  it("reserves install for future local installation", async () => {
+    const error = await execFileAsync(
+      "npx",
+      ["tsx", "src/index.ts", "install"],
+      {
+        cwd: path.resolve("."),
+      },
+    ).then(
+      () => undefined,
+      (caughtError): { code?: number; stderr: string } =>
+        caughtError as { code?: number; stderr: string },
+    );
+
+    expect(error?.code).toBe(1);
+    expect(error?.stderr).toContain(
+      "`cheese install` is reserved for local harness installation and is not implemented yet.",
+    );
+    expect(error?.stderr).toContain(
+      "Use `cheese compile` to emit harness bundles.",
+    );
   });
 });
 

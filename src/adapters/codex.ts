@@ -14,7 +14,7 @@ export const codexAdapter: HarnessAdapter = {
   agentDirectory: "agents",
   skillDirectory: "skills",
   commandDirectory: "commands",
-  defaultModel: "gpt-5.1-codex",
+  defaultModel: "gpt-5-codex",
   notes: [
     "Bias instructions toward patch-oriented execution and explicit constraints.",
     "Prefer Codex model identifiers in agent metadata and output.",

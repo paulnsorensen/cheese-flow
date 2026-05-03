@@ -12,7 +12,7 @@ Enter Sketch when:
 - The starting input was already a half-baked design doc with signatures.
 
 If Sketch is mandatory (chosen option touches more than one module or
-introduces a new public interface) and the user tries to skip to Crystallize,
+introduces a new public interface) and the user tries to skip to Curdle,
 the coherence gate blocks the handshake until Sketch runs.
 
 ## The pseudocode-driven question pattern
@@ -107,6 +107,66 @@ work happens through that single skill.
 If the sweep surfaces a sibling that mirrors what we are about to design,
 adopt the sibling's shape unless there is a stated reason to diverge.
 
+## NIH probe
+
+Before locking a signature for any of the **library-shaped categories**
+below, run an NIH probe — a single Validate Cycle that asks "is this a
+wheel that's already been invented?":
+
+| Category | Trigger words in the sketch |
+|----------|------------------------------|
+| `RETRY` | retry, backoff, exponential, jitter |
+| `VALIDATION` | validate, schema, isEmail, isUrl, regex check |
+| `UUID` | uuid, guid, randomId, generateId |
+| `DEBOUNCE` | debounce, throttle, rate-limit |
+| `DATE` | parseDate, formatDate, addDays, diffMinutes |
+| `ARGPARSE` | argv, parseArgs, CLI flags |
+| `CLONE` | deepClone, cloneDeep, structuredClone |
+| `STRING` | slugify, kebabCase, snakeCase, truncate |
+| `CRYPTO` | hashPassword, verifyPassword |
+| `SECURITY` | sanitizeHtml, escapeHtml |
+| `FORMAT` | formatCurrency, formatNumber, Intl wrapper |
+
+Probe shape (anchored as a Validate Cycle so the framing matters):
+
+```
+Launching a validate cycle on hypothesis:
+  "Library X already does <category>; we should not hand-roll a sketch for it."
+
+Plan:
+  cheez-search — confirm we don't already depend on X (depManifest check).
+  /research    — fetch the canonical library for this category in <language>;
+                 prefer stdlib answers; capture downloads + licence + maintenance.
+  Judge        — does the library cover the contract we're about to sketch?
+  Settle       — accept (use library, drop sketch), revise (sketch wraps lib),
+                 or reject (NIH is intentional; record reason in Decisions).
+```
+
+Cap: at most **one** NIH probe per Sketch session (in addition to the
+shared 2-`/research` budget). Use the probe only for library-shaped
+categories — pure business-domain signatures (an Order, a Pricing rule)
+do not need it.
+
+If the probe verdict is **accept**, drop the sketch entirely and replace
+it with a thin call-site note (`use library X for <category>`). If
+**revise**, the sketch becomes a wrapper signature whose body delegates
+to the library — record `wraps: <library>` in the sketch's `seams` block.
+If **reject**, log the reason in `Decisions` so `/age`'s `nih` dim does
+not flag it later.
+
+For a whole-spec build-vs-buy sweep (multiple library-shaped categories
+across the chosen option), prefer a single `/nih-audit <scope>` call
+over N probes — and record one Decision rolling up its findings.
+
+### Migration hand-off
+
+A spec is "migration-shaped" when its `Decisions` block contains an NIH
+probe verdict of `accept` or `revise` — i.e. the dialogue agreed to drop
+or wrap a hand-rolled implementation. In that case the next step is a
+whole-repo `/nih-audit` so the migration finds every other call site, not
+just the one that triggered the probe. The Curdle hand-off table in
+`SKILL.md` routes that path automatically.
+
 ## Validate Cycle inside Sketch
 
 When a signature mirrors an external API ("our `dispatch` matches Stripe's
@@ -121,7 +181,7 @@ before locking the signature. Common cycles:
 
 Sketches live in the state file's `Sketches (locked interfaces)` block
 during the loop, then migrate verbatim into the spec's `Interface Sketches`
-section at Crystallize. Each sketch carries:
+section at Curdle. Each sketch carries:
 
 - `module` — slice path or file path.
 - `slice` — Sliced Bread slice (`domains/<name>`, `adapters/<name>`, `app`, or `domains/common`).

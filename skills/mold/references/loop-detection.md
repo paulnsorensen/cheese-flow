@@ -38,7 +38,7 @@ acknowledgements) **two or more turns in a row**.
 You sound disengaged. Options:
   A. Switch modes — `explore` (back up) | `shape` (skip to options) |
      `sketch` (lock interfaces now).
-  B. Crystallize what we have, even if rough — I'll mark gaps as [TBD].
+  B. Curdle what we have, even if rough — I'll mark gaps as [TBD].
   C. Pause — bail out, no artifacts.
 
 Or just type the knob you want.

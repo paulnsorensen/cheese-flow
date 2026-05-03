@@ -1,5 +1,6 @@
 import { type SpawnOptionsWithoutStdio, spawn } from "node:child_process";
 import path from "node:path";
+import { type CheeseHomePaths, resolveCheeseHome } from "./cheese-home.js";
 
 type OutputChunk = string | Uint8Array;
 
@@ -29,24 +30,34 @@ export type SpawnFn = (
   options: SpawnOptionsWithoutStdio,
 ) => SpawnedProcess;
 
+export type MilknadoCommandOptions = {
+  cheeseHomePaths?: CheeseHomePaths;
+};
+
 export type RunMilknadoCommandOptions = {
   projectRoot: string;
+  cheeseHomePaths?: CheeseHomePaths;
   spawnFn?: SpawnFn;
   stdout?: OutputWriter;
   stderr?: OutputWriter;
 };
 
-const spawnProcess: SpawnFn = (file, args, options) =>
-  spawn(file, args, options);
+const spawnProcess: SpawnFn = spawn as unknown as SpawnFn;
 
 export function getMilknadoBackendScriptPath(projectRoot: string): string {
   return path.join(projectRoot, "python", "milknado.py");
 }
 
-export function getMilknadoCommand(projectRoot: string): {
+export function getMilknadoCommand(
+  projectRoot: string,
+  options: MilknadoCommandOptions = {},
+): {
   command: string;
   args: string[];
+  env: Record<string, string>;
 } {
+  const paths = options.cheeseHomePaths ?? resolveCheeseHome(projectRoot);
+  const dbPath = paths.milknadoDb;
   return {
     command: "uv",
     args: [
@@ -55,7 +66,10 @@ export function getMilknadoCommand(projectRoot: string): {
       projectRoot,
       "python",
       getMilknadoBackendScriptPath(projectRoot),
+      "--db-path",
+      dbPath,
     ],
+    env: { MILKNADO_DB_PATH: dbPath },
   };
 }
 
@@ -65,10 +79,14 @@ export async function runMilknadoCommand(
   const spawnFn = options.spawnFn ?? spawnProcess;
   const stdout = options.stdout ?? process.stdout;
   const stderr = options.stderr ?? process.stderr;
-  const { command, args } = getMilknadoCommand(options.projectRoot);
+  const { command, args, env } = getMilknadoCommand(
+    options.projectRoot,
+    options.cheeseHomePaths ? { cheeseHomePaths: options.cheeseHomePaths } : {},
+  );
   const child = spawnFn(command, args, {
     cwd: options.projectRoot,
     stdio: "pipe",
+    env: { ...process.env, ...env },
   });
 
   child.stdout.on("data", (chunk: OutputChunk) => {

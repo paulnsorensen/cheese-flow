@@ -14,4 +14,8 @@ if ! grep -qxF '.cheese/' .gitignore; then
   printf '%s\n' '.cheese/' >> .gitignore
 fi
 
+if command -v cheese >/dev/null 2>&1; then
+  cheese session-start --root "$(pwd)" --quiet --max-time 5000 >/dev/null 2>&1 || true
+fi
+
 exit 0
