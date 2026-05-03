@@ -119,7 +119,7 @@ describe("compileHarnessBundles command output", () => {
 });
 
 describe("shipped command scaffolds", () => {
-  it("copies all eight scaffolded top-level commands into each harness", async () => {
+  it("copies all scaffolded top-level commands into each harness", async () => {
     const projectRoot = await makeProjectRoot("cheese-flow-shipped-commands-");
     await seedAgentsAndSkills(projectRoot);
     await cp(path.resolve("commands"), path.join(projectRoot, "commands"), {
@@ -140,6 +140,7 @@ describe("shipped command scaffolds", () => {
       "cure.md",
       "mold.md",
       "nih-audit.md",
+      "skill-improver.md",
     ];
     for (const root of [".claude", ".codex"]) {
       const manifest = await readManifest(projectRoot, root);

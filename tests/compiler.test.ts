@@ -322,6 +322,11 @@ describe("compileHarnessBundles", () => {
       "milknado-planner.md",
       "nih-scanner.md",
       "press.md",
+      "skill-improver-activation.md",
+      "skill-improver-context.md",
+      "skill-improver-output-format.md",
+      "skill-improver-prompt-quality.md",
+      "skill-improver-tool-scoping.md",
       "taste-readability.md",
       "taste-scope.md",
       "taste-spec.md",
@@ -342,6 +347,7 @@ describe("compileHarnessBundles", () => {
       "nested-dir",
       "nih-audit",
       "research",
+      "skill-improver",
     ]);
     expect(manifest.commands).toEqual([]);
   });
