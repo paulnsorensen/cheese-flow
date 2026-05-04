@@ -1,5 +1,14 @@
 import { execFile } from "node:child_process";
-import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
+import {
+  access,
+  cp,
+  mkdir,
+  mkdtemp,
+  readFile,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
@@ -27,6 +36,22 @@ afterEach(async () => {
       .map((directory) => rm(directory, { recursive: true, force: true })),
   );
 });
+
+async function makeRuntimeDirectory(prefix: string): Promise<string> {
+  const directory = path.resolve(".test-runtime", `${prefix}-${randomUUID()}`);
+  await mkdir(directory, { recursive: true });
+  createdDirectories.push(directory);
+  return directory;
+}
+
+async function pathExists(filePath: string): Promise<boolean> {
+  try {
+    await access(filePath);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 describe("compileHarnessBundles", () => {
   it("compiles the basic agent template for Claude Code and Codex", async () => {
@@ -753,6 +778,55 @@ describe("compileHarnessBundles", () => {
         `Compiled harness bundle: ${path.join(projectRoot, ".cursor")}`,
         `Compiled harness bundle: ${path.join(projectRoot, ".copilot")}`,
       ]),
+    );
+  });
+
+  it("compiles only explicitly selected harnesses when -H is repeated and comma-separated", async () => {
+    const projectRoot = await makeRuntimeDirectory("compile-cli-explicit");
+    await cp(path.resolve("agents"), path.join(projectRoot, "agents"), {
+      recursive: true,
+    });
+    await cp(path.resolve("skills"), path.join(projectRoot, "skills"), {
+      recursive: true,
+    });
+
+    const { stdout } = await execFileAsync(
+      "npx",
+      [
+        "tsx",
+        "src/index.ts",
+        "compile",
+        "--project-root",
+        projectRoot,
+        "-H",
+        "cursor,copilot-cli",
+        "-H",
+        "cursor",
+      ],
+      {
+        cwd: path.resolve("."),
+      },
+    );
+
+    const compiledLines = stdout
+      .trim()
+      .split("\n")
+      .filter((line) => line.startsWith("Compiled harness bundle:"));
+    expect(compiledLines).toEqual([
+      `Compiled harness bundle: ${path.join(projectRoot, ".cursor")}`,
+      `Compiled harness bundle: ${path.join(projectRoot, ".copilot")}`,
+    ]);
+    await expect(pathExists(path.join(projectRoot, ".cursor"))).resolves.toBe(
+      true,
+    );
+    await expect(pathExists(path.join(projectRoot, ".copilot"))).resolves.toBe(
+      true,
+    );
+    await expect(pathExists(path.join(projectRoot, ".claude"))).resolves.toBe(
+      false,
+    );
+    await expect(pathExists(path.join(projectRoot, ".codex"))).resolves.toBe(
+      false,
     );
   });
 
