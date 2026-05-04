@@ -135,7 +135,7 @@ Launching a validate cycle on hypothesis:
 
 Plan:
   cheez-search — confirm we don't already depend on X (depManifest check).
-  /research    — fetch the canonical library for this category in <language>;
+  /briesearch  — fetch the canonical library for this category in <language>;
                  prefer stdlib answers; capture downloads + licence + maintenance.
   Judge        — does the library cover the contract we're about to sketch?
   Settle       — accept (use library, drop sketch), revise (sketch wraps lib),
@@ -143,7 +143,7 @@ Plan:
 ```
 
 Cap: at most **one** NIH probe per Sketch session (in addition to the
-shared 2-`/research` budget). Use the probe only for library-shaped
+shared 2-`/briesearch` budget). Use the probe only for library-shaped
 categories — pure business-domain signatures (an Order, a Pricing rule)
 do not need it.
 

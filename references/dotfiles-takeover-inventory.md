@@ -49,7 +49,7 @@ personal paths or Claude-only behavior.
 | `init` | `plugins/local/cheese-flow/commands/init.md` | Already cheese-flow branded; should live in the repo as source of truth. |
 | `explore` | `plugins/local/cheese-flow/commands/explore.md` | Core cheese-flow value proposition. |
 | `hello` | `plugins/local/cheese-flow/commands/hello.md` | Cheap install smoke test. |
-| `research` | `commands/research.md` | Thin wrapper around the `research` skill. |
+| `briesearch` | `commands/briesearch.md` | Thin wrapper around the `research` skill. |
 | `diff` | `commands/diff.md` | Thin wrapper around the `diff` skill. |
 | `respond` | `commands/respond.md` | Useful PR-review workflow once GitHub tooling is modeled. |
 | `worktree` | `commands/worktree.md` | Thin wrapper around the `worktree` skill. |

@@ -256,7 +256,9 @@ silent overwrite.
 
 ## Atomic write
 
-Stage to `.cheese/.mold-staging-<run_id>/` (a sibling of the destination,
-guaranteed same filesystem) and `mv` into place. This ensures `mv` is an
+Resolve the canonical project `.cheese/` location using
+`references/canonical-cheese.md`. Stage to
+`.cheese/.mold-staging-<run_id>/` as a sibling of the destination,
+guaranteed same filesystem, and `mv` into place. This ensures `mv` is an
 atomic rename rather than a cross-filesystem copy+delete. On failure, the
 staging directory is removed and no partial files exist in `.cheese/`.

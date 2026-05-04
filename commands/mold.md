@@ -15,8 +15,8 @@ generator: the dialogue is the point, the artifact is the by-product.
 
 Invoke the `mold` skill with `$ARGUMENTS`. The skill owns mode routing,
 Validate Cycle dispatch, interface lockdown via pseudocode, the two-key
-handshake, and atomic artifact extraction to `.cheese/specs/<slug>.md`
-and `.cheese/issues/<slug>-NNN.md`.
+handshake, and atomic artifact extraction to the canonical project
+`.cheese/specs/<slug>.md` and `.cheese/issues/<slug>-NNN.md`.
 
 Do not reimplement the dialogue or extraction logic in this command.
 This file is the user-facing alias and contract; `skills/mold/SKILL.md`
@@ -27,15 +27,16 @@ is the implementation source of truth.
 | Skill | Boundary |
 | --- | --- |
 | `/culture` | Same dialogue feel; **never writes**. Use it when there is no artifact intent. |
-| `/briesearch` | External evidence dispatcher. `/mold` calls it through the Validate Cycle. |
+| `/briesearch` | Evidence dispatcher. `/mold` calls it through the Validate Cycle; it scans prior project research before external sources. |
 | `/cook` | Implements a curdled spec. `/mold` ends with a hand-off offer, never an auto-invoke. |
 
 ## What you get
 
-- **Spec** — rich container, written to `.cheese/specs/<slug>.md`.
+- **Spec** — rich container, written to canonical
+  `.cheese/specs/<slug>.md`.
   Always present unless the dialogue produced only standalone bug
   tickets.
-- **Issues** — separate, GitHub-flavored, written to
+- **Issues** — separate, GitHub-flavored, written to canonical
   `.cheese/issues/<slug>-NNN.md`. Present when the dialogue surfaced
   side-channel actionables (out-of-scope bugs, follow-ups, parking-lot
   work).

@@ -28,7 +28,7 @@ implementation source of truth.
 | --- | --- |
 | `/age` (`nih` dim) | **Diff-scoped**. Flags newly introduced NIH in a single PR. Use for review gating. |
 | `/mold` (Sketch NIH probe) | **Pre-implementation**. Catches NIH before a signature is locked. Use during design. |
-| `/research` | Library discovery dispatcher. `/nih-audit` calls it once per category group. |
+| `/briesearch` | Library discovery dispatcher. `/nih-audit` calls it once per category group. |
 
 ## What you get
 

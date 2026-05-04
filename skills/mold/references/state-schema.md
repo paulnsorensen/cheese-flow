@@ -1,7 +1,8 @@
 # State file schema
 
-`/mold` keeps one scratch state file per run. The path mirrors `/briesearch`'s
-scratch convention so cleanup is predictable.
+`/mold` keeps one scratch state file per run. This mirrors `/briesearch`'s
+temporary fetcher scratch convention, not `/briesearch`'s persistent
+canonical `.cheese/research` report store.
 
 ## Path
 
@@ -127,4 +128,3 @@ Explore (1-3) → Ground (4-5) → Shape (6-8) → [validate cycle 1] → Sketch
 - **Cleanup** — after a successful Curdle *and* the user accepts the
   hand-off offer, the run directory is removed. Otherwise it stays for the
   OS to evict.
-
