@@ -214,7 +214,9 @@ function buildManifestComponentPaths(options: {
       : {}),
     ...(options.commands.length > 0 &&
     options.adapter.commandDirectory !== undefined
-      ? { commands: manifestDirectoryPath(options.adapter.commandDirectory) }
+      ? options.adapter.name === "codex"
+        ? { apps: manifestDirectoryPath(options.adapter.commandDirectory) }
+        : { commands: manifestDirectoryPath(options.adapter.commandDirectory) }
       : {}),
     ...(options.emittedSurface.rules.length > 0
       ? { rules: manifestDirectoryPath("rules") }

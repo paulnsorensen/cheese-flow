@@ -155,6 +155,60 @@ describe("cheese install", () => {
     );
   });
 
+  it("auto-detects Claude Code and Codex from PATH and reports manual next steps", async () => {
+    const projectRoot = await makeProjectRoot("install-manual-auto");
+    const binDirectory = await makeDirectory("install-manual-auto-bin");
+
+    await writeExecutable(binDirectory, "claude");
+    await writeExecutable(binDirectory, "codex");
+
+    const error = await runCheeseInstall(["--project-root", projectRoot], {
+      PATH: binDirectory,
+    }).then(
+      () => undefined,
+      (caughtError) =>
+        caughtError as { code?: number; stdout?: string; stderr?: string },
+    );
+
+    const output = combinedOutput(error ?? {});
+    expect(error?.code).toBe(1);
+    expect(output).toContain("[manual] Claude Code");
+    expect(output).toContain("[manual] Codex");
+    expect(output).toContain("[skipped] Cursor");
+    expect(output).toContain("[skipped] GitHub Copilot CLI");
+    expect(output).toContain(
+      `claude plugin marketplace add ${JSON.stringify(
+        path.join(projectRoot, ".claude"),
+      )}`,
+    );
+    expect(output).toContain(
+      `codex plugin marketplace add ${JSON.stringify(
+        path.join(projectRoot, ".codex"),
+      )}`,
+    );
+    expect(output).toContain(
+      'Open Claude Code, run /plugin, then install "cheese-flow" from "cheese-flow-local".',
+    );
+    expect(output).toContain("Restart Codex.");
+    expect(output).not.toContain("Guidance:");
+    await expect(
+      pathExists(
+        path.join(projectRoot, ".claude", ".claude-plugin", "marketplace.json"),
+      ),
+    ).resolves.toBe(true);
+    await expect(
+      pathExists(
+        path.join(
+          projectRoot,
+          ".codex",
+          ".agents",
+          "plugins",
+          "marketplace.json",
+        ),
+      ),
+    ).resolves.toBe(true);
+  });
+
   it("marks Claude Code and Codex as manual and emits local marketplace helpers", async () => {
     const projectRoot = await makeProjectRoot("install-manual");
     const binDirectory = await makeDirectory("install-manual-bin");
@@ -218,6 +272,59 @@ describe("cheese install", () => {
       source: "local",
       path: "./",
     });
+  });
+
+  it("parses repeated -H install targets and bypasses auto-detect for other harnesses", async () => {
+    const projectRoot = await makeProjectRoot("install-explicit");
+    const binDirectory = await makeDirectory("install-explicit-bin");
+    const copilotLog = path.join(projectRoot, "copilot.log");
+
+    await mkdir(path.join(projectRoot, ".cursor"), { recursive: true });
+    await writeExecutable(binDirectory, "claude");
+    await writeExecutable(binDirectory, "codex");
+    await writeExecutable(
+      binDirectory,
+      "copilot",
+      `#!/bin/sh\nprintf '%s\\n' "$*" >> "${copilotLog}"\nexit 0\n`,
+    );
+
+    const result = await runCheeseInstall(
+      [
+        "--project-root",
+        projectRoot,
+        "-H",
+        "cursor,copilot-cli",
+        "-H",
+        "cursor",
+      ],
+      {
+        PATH: binDirectory,
+      },
+    );
+
+    expect(
+      result.stdout
+        .split("\n")
+        .filter((line) => line.includes("[installed] Cursor")),
+    ).toHaveLength(1);
+    expect(result.stdout).toContain("[installed] GitHub Copilot CLI");
+    expect(result.stdout).toContain("[skipped] Claude Code");
+    expect(result.stdout).toContain("[skipped] Codex");
+    await expect(pathExists(path.join(projectRoot, ".cursor"))).resolves.toBe(
+      true,
+    );
+    await expect(pathExists(path.join(projectRoot, ".copilot"))).resolves.toBe(
+      true,
+    );
+    await expect(pathExists(path.join(projectRoot, ".claude"))).resolves.toBe(
+      false,
+    );
+    await expect(pathExists(path.join(projectRoot, ".codex"))).resolves.toBe(
+      false,
+    );
+    await expect(readFile(copilotLog, "utf8")).resolves.toContain(
+      `plugin install ${path.join(projectRoot, ".copilot")}`,
+    );
   });
 
   it("fails a selected copilot install when the copilot CLI is unavailable", async () => {

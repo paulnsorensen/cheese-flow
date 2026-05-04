@@ -107,11 +107,11 @@ program
 program
   .command("install")
   .description(
-    "Compile selected harness bundles and install them into local harness surfaces.",
+    "Compile and install one or more harness bundles into the local workspace.",
   )
   .option(
     "-H, --harness <name...>",
-    "Harness target(s) to install for. Defaults to auto-detected local harnesses.",
+    "Harness target(s) to install for. Defaults to auto-detect.",
     (value, previous: HarnessName[] | undefined) => {
       const items = Array.isArray(previous) ? previous : [];
       return [...items, ...parseHarnessArgument(value)];
@@ -132,6 +132,7 @@ program
     if (hasBlockingInstallResult(report)) {
       process.exitCode = 1;
     }
+  }
   });
 
 program

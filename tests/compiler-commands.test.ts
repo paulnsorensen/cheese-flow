@@ -78,11 +78,13 @@ describe("compileHarnessBundles command output", () => {
           ),
           "utf8",
         ),
-      ) as { commands?: string };
+      ) as { apps?: string; commands?: string };
       if (root === ".claude") {
         expect(pluginManifest.commands).toBe("./commands/");
+        expect(pluginManifest.apps).toBeUndefined();
       } else {
         expect(pluginManifest.commands).toBeUndefined();
+        expect(pluginManifest.apps).toBe("./commands/");
       }
       const copied = await readFile(
         path.join(projectRoot, root, "commands", "alpha.md"),
