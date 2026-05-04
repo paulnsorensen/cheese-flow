@@ -132,7 +132,6 @@ program
     if (hasBlockingInstallResult(report)) {
       process.exitCode = 1;
     }
-  }
   });
 
 program
