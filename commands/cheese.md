@@ -27,6 +27,7 @@ dispatch occurs.
 | Bug report / stack trace | pasted error, reproduction steps | debug flow (investigate → `/cook`) |
 | File path or glob | `src/auth/login.ts`, `src/**/*.tsx` | focused review (`/age --scope`) |
 | Research question | "what's the best rate limiter library?" | `/briesearch` |
+| Agent/skill quality | "review my agent", "audit this skill", `agents/foo.md.eta` | `/skill-improver` |
 
 ## Dispatch contract
 

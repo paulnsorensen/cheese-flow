@@ -1,0 +1,14 @@
+{
+  "dimension": "output-format",
+  "stake": "medium",
+  "scope_match": true,
+  "observations": [
+    {
+      "id": "output-format-1",
+      "file": "tests/skill-improver-fixtures/output-format/target.md.eta",
+      "anchor": { "start": "30:000" },
+      "bucket": "med",
+      "narrative": "Output section explicitly forbids tables, summary lines, and temp-file pointers — every finding lands as prose in the caller's context with no summary-first layout, no scannable structure, and no detail-vs-summary separation."
+    }
+  ]
+}
