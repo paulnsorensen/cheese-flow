@@ -26,9 +26,11 @@ def test_mikado_graph_uses_env_override(tmp_path: Path, monkeypatch: pytest.Monk
     repo = tmp_path / "repo"
     repo.mkdir()
     override = tmp_path / "cheese-home" / "milknado.db"
+    override.parent.mkdir(parents=True, exist_ok=True)
     monkeypatch.setenv("MILKNADO_DB_PATH", str(override))
 
-    graph = MikadoGraph(repo)
+    db_path = graph_db_path(repo)
+    graph = MikadoGraph(db_path)
     try:
         graph.add_node("seed")
     finally:

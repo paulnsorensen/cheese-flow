@@ -1,26 +1,6 @@
-from .domains.common import MikadoNode, NodeStatus
-from .domains.planning import (
-    Batch,
-    BatchPlan,
-    EditKind,
-    FileChange,
-    NewRelationship,
-    RelationshipReason,
-    SolverStatus,
-    SymbolRef,
-    SymbolSpread,
-)
+"""Milknado — Mikado execution engine vendored into cheese-flow.
 
-__all__ = [
-    "Batch",
-    "BatchPlan",
-    "EditKind",
-    "FileChange",
-    "MikadoNode",
-    "NewRelationship",
-    "NodeStatus",
-    "RelationshipReason",
-    "SolverStatus",
-    "SymbolRef",
-    "SymbolSpread",
-]
+Source lineage: ~/Dev/milknado @ 8a349a7 (PR #29 merged).
+"""
+
+__version__ = "0.3.0"

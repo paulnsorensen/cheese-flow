@@ -1,8 +1,4 @@
-"""Project root resolution for milknado MCP tools.
-
-Infrastructure consumed by the MCP shim — not a domain type, so it lives at
-the package root rather than under ``domains/common``.
-"""
+"""Project root and database path resolution for milknado MCP tools."""
 
 from __future__ import annotations
 
