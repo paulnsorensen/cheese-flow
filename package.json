@@ -1,7 +1,7 @@
 {
   "name": "cheese-flow",
   "version": "0.1.0",
-  "description": "Opinionated coding harness plugin scaffold for portable agents and skills.",
+  "description": "Portable agent and skill bundle compiler with local harness installation helpers.",
   "type": "module",
   "license": "MIT",
   "private": true,
@@ -31,7 +31,8 @@
     "dev": "tsx src/index.ts",
     "format": "biome format --write .",
     "format:check": "biome format .",
-    "install:all": "tsx src/index.ts install",
+    "install:all": "tsx src/index.ts install --harness claude-code,codex,cursor,copilot-cli",
+    "install:auto": "tsx src/index.ts install",
     "install:claude": "tsx src/index.ts install --harness claude-code",
     "install:codex": "tsx src/index.ts install --harness codex",
     "install:copilot": "tsx src/index.ts install --harness copilot-cli",

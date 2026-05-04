@@ -839,8 +839,64 @@ describe("compileHarnessBundles", () => {
       },
     );
 
+    expect(stdout).toContain(
+      "Emit one or more harness bundles from the repository skill and agent sources.",
+    );
     expect(stdout).toContain("-h, --help");
     expect(stdout).toContain("-H, --harness <name...>");
+  });
+
+  it("compiles every supported harness when --harness is omitted", async () => {
+    const projectRoot = await mkdtemp(
+      path.join(os.tmpdir(), "cheese-flow-cli-"),
+    );
+    createdDirectories.push(projectRoot);
+    await cp(path.resolve("agents"), path.join(projectRoot, "agents"), {
+      recursive: true,
+    });
+    await cp(path.resolve("skills"), path.join(projectRoot, "skills"), {
+      recursive: true,
+    });
+
+    const { stdout } = await execFileAsync(
+      "npx",
+      ["tsx", "src/index.ts", "compile", "--project-root", projectRoot],
+      {
+        cwd: path.resolve("."),
+      },
+    );
+
+    const compiledLines = stdout
+      .trim()
+      .split("\n")
+      .filter((line) => line.startsWith("Compiled harness bundle:"));
+    expect(compiledLines).toHaveLength(4);
+    expect(compiledLines).toEqual(
+      expect.arrayContaining([
+        `Compiled harness bundle: ${path.join(projectRoot, ".claude")}`,
+        `Compiled harness bundle: ${path.join(projectRoot, ".codex")}`,
+        `Compiled harness bundle: ${path.join(projectRoot, ".cursor")}`,
+        `Compiled harness bundle: ${path.join(projectRoot, ".copilot")}`,
+      ]),
+    );
+  });
+
+  it("keeps help on -h and uses -H for harness selection on compile", async () => {
+    const { stdout } = await execFileAsync(
+      "npx",
+      ["tsx", "src/index.ts", "compile", "--help"],
+      {
+        cwd: path.resolve("."),
+      },
+    );
+    const normalizedHelp = stdout.replaceAll(/\s+/g, " ");
+
+    expect(stdout).toContain(
+      "Emit one or more harness bundles from the repository skill and agent sources.",
+    );
+    expect(stdout).toContain("-h, --help");
+    expect(stdout).toContain("-H, --harness <name...>");
+    expect(normalizedHelp).toContain("Defaults to all supported harnesses.");
   });
 
   it("keeps help on -h and uses -H for harness selection on install", async () => {

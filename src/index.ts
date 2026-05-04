@@ -79,18 +79,18 @@ const program = new Command();
 program
   .name("cheese")
   .description(
-    "Compile portable agents and Agent Skills into harness-specific markdown bundles.",
+    "Emit and locally install portable agents and Agent Skills as harness-specific markdown bundles.",
   )
   .version("0.1.0");
 
 program
   .command("compile")
   .description(
-    "Compile the repository skill and agent sources into one or more harness bundles.",
+    "Emit one or more harness bundles from the repository skill and agent sources.",
   )
   .option(
     "-H, --harness <name...>",
-    "Harness target(s) to compile for. Defaults to all supported harnesses.",
+    "Harness target(s) to emit. Defaults to all supported harnesses.",
     (value, previous: HarnessName[] | undefined) => {
       const items = Array.isArray(previous) ? previous : [];
       return [...items, ...parseHarnessArgument(value)];
