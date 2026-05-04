@@ -891,11 +891,11 @@ describe("compileHarnessBundles", () => {
     );
 
     expect(stdout).toContain(
-      "Compile selected harness bundles and install them into local harness surfaces.",
+      "Emit one or more harness bundles from the repository skill and agent sources.",
     );
     expect(stdout).toContain("-h, --help");
     expect(stdout).toContain("-H, --harness <name...>");
-    expect(stdout).toContain("auto-detected local harnesses.");
+    expect(stdout).toContain("Defaults to all supported harnesses.");
   });
 
   it("keeps help on -h and uses -H for harness selection on install", async () => {
