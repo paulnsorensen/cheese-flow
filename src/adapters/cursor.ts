@@ -8,6 +8,15 @@ import { parseFrontmatter } from "../lib/frontmatter.js";
 import type { SkillFrontmatter } from "../lib/schemas.js";
 import { buildBaseManifest, buildPortableAgentArtifact } from "./_shared.js";
 
+const CURSOR_MANIFEST_KEYS = [
+  "rules",
+  "skills",
+  "agents",
+  "commands",
+  "hooks",
+  "mcpServers",
+] as const;
+
 function buildRuleContent(description: string, body: string): string {
   return `---\ndescription: ${description}\nglobs:\nalwaysApply: false\n---\n${body.trim()}\n`;
 }
@@ -98,7 +107,8 @@ export const cursorAdapter: HarnessAdapter = {
     "MCP-only tool surface applies; Cursor does not support hooks — hook emission is skipped with an info log.",
   ],
   manifestDir: ".cursor-plugin",
-  buildManifest: buildBaseManifest,
+  buildManifest: (metadata, componentPaths) =>
+    buildBaseManifest(metadata, componentPaths, CURSOR_MANIFEST_KEYS),
   mcpFileName: "mcp.json",
   buildHookConfig: () => null,
   buildAgentArtifact: buildPortableAgentArtifact,

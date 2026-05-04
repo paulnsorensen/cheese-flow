@@ -5,11 +5,20 @@ import {
   camelCaseHooks,
 } from "./_shared.js";
 
+const COPILOT_MANIFEST_KEYS = [
+  "agents",
+  "skills",
+  "commands",
+  "hooks",
+  "mcpServers",
+] as const;
+
 function buildCopilotManifest(
   metadata: PluginMetadata,
+  componentPaths: Parameters<typeof buildBaseManifest>[1],
 ): Record<string, unknown> {
   return {
-    ...buildBaseManifest(metadata),
+    ...buildBaseManifest(metadata, componentPaths, COPILOT_MANIFEST_KEYS),
     category: "development",
     strict: true,
   };
@@ -26,7 +35,8 @@ export const copilotCliAdapter: HarnessAdapter = {
     "Copilot CLI resolves plugin manifests from .claude-plugin/plugin.json as its fourth search path, so the same manifest shape serves both Claude Code and Copilot CLI installations.",
   ],
   manifestDir: ".claude-plugin",
-  buildManifest: buildCopilotManifest,
+  buildManifest: (metadata, componentPaths) =>
+    buildCopilotManifest(metadata, componentPaths),
   mcpFileName: ".mcp.json",
   buildHookConfig: (portable) => ({
     version: 1,

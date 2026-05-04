@@ -73,6 +73,16 @@ export type SurfaceEmissionResult = {
   commands: string[];
 };
 
+export type ManifestComponentPaths = Partial<{
+  agents: string;
+  skills: string;
+  commands: string;
+  hooks: string;
+  mcpServers: string;
+  rules: string;
+  apps: string;
+}>;
+
 export type AgentFrontmatterFields = {
   name: string;
   description: string;
@@ -113,7 +123,10 @@ export interface HarnessAdapter {
   notes: string[];
 
   manifestDir: string;
-  buildManifest(metadata: PluginMetadata): Record<string, unknown>;
+  buildManifest(
+    metadata: PluginMetadata,
+    componentPaths: ManifestComponentPaths,
+  ): Record<string, unknown>;
 
   mcpFileName: string;
 

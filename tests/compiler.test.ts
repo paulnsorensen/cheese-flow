@@ -5,6 +5,7 @@ import path from "node:path";
 import { promisify } from "node:util";
 import { afterEach, describe, expect, it } from "vitest";
 import {
+  compileHarnessBundle,
   compileHarnessBundles,
   previewAgent,
   readSkill,
@@ -67,8 +68,20 @@ describe("compileHarnessBundles", () => {
         path.join(projectRoot, ".claude", ".claude-plugin", "plugin.json"),
         "utf8",
       ),
-    ) as { name: string };
+    ) as {
+      name: string;
+      agents?: string;
+      skills?: string;
+      commands?: string;
+      hooks?: string;
+      mcpServers?: string;
+    };
     expect(claudePlugin.name).toBe("cheese-flow");
+    expect(claudePlugin.agents).toBe("./agents/");
+    expect(claudePlugin.skills).toBe("./skills/");
+    expect(claudePlugin.commands).toBeUndefined();
+    expect(claudePlugin.hooks).toBe("./hooks.json");
+    expect(claudePlugin.mcpServers).toBe("./.mcp.json");
 
     const claudeMcp = JSON.parse(
       await readFile(path.join(projectRoot, ".claude", ".mcp.json"), "utf8"),
@@ -83,14 +96,54 @@ describe("compileHarnessBundles", () => {
         path.join(projectRoot, ".codex", ".codex-plugin", "plugin.json"),
         "utf8",
       ),
-    ) as { name: string };
+    ) as {
+      name: string;
+      skills?: string;
+      mcpServers?: string;
+      agents?: string;
+      commands?: string;
+      hooks?: string;
+    };
     expect(codexPlugin.name).toBe("cheese-flow");
+    expect(codexPlugin.skills).toBe("./skills/");
+    expect(codexPlugin.mcpServers).toBe("./.mcp.json");
+    expect(codexPlugin.agents).toBeUndefined();
+    expect(codexPlugin.commands).toBeUndefined();
+    expect(codexPlugin.hooks).toBeUndefined();
 
     const codexMcp = JSON.parse(
       await readFile(path.join(projectRoot, ".codex", ".mcp.json"), "utf8"),
     ) as { mcpServers: Record<string, unknown> };
     expect(codexMcp.mcpServers).toHaveProperty("tilth");
     expect(codexMcp.mcpServers).toHaveProperty("context7");
+  });
+
+  it("compiles a single harness bundle and returns its metadata", async () => {
+    const projectRoot = await mkdtemp(
+      path.join(os.tmpdir(), "cheese-flow-single-"),
+    );
+    createdDirectories.push(projectRoot);
+    await cp(path.resolve("agents"), path.join(projectRoot, "agents"), {
+      recursive: true,
+    });
+    await cp(path.resolve("skills"), path.join(projectRoot, "skills"), {
+      recursive: true,
+    });
+
+    const compiled = await compileHarnessBundle({
+      projectRoot,
+      harness: "claude-code",
+    });
+
+    expect(compiled.harness).toBe("claude-code");
+    expect(compiled.outputRoot).toBe(path.join(projectRoot, ".claude"));
+    expect(compiled.pluginMetadata.name).toBe("cheese-flow");
+    await expect(
+      readFile(
+        path.join(compiled.outputRoot, ".claude-plugin", "plugin.json"),
+        "utf8",
+      ),
+    ).resolves.toContain('"name": "cheese-flow"');
   });
 
   it("emits agent frontmatter with skills binding for claude-code", async () => {
@@ -383,8 +436,22 @@ describe("compileHarnessBundles", () => {
         path.join(cursorRoot, ".cursor-plugin", "plugin.json"),
         "utf8",
       ),
-    ) as { name: string };
+    ) as {
+      name: string;
+      rules?: string;
+      skills?: string;
+      agents?: string;
+      commands?: string;
+      hooks?: string;
+      mcpServers?: string;
+    };
     expect(pluginJson.name).toBe("cheese-flow");
+    expect(pluginJson.rules).toBe("./rules/");
+    expect(pluginJson.skills).toBe("./skills/");
+    expect(pluginJson.agents).toBe("./agents/");
+    expect(pluginJson.commands).toBe("./commands/");
+    expect(pluginJson.hooks).toBeUndefined();
+    expect(pluginJson.mcpServers).toBe("./mcp.json");
 
     // MCP config at mcp.json (no leading dot for cursor)
     const mcpJson = JSON.parse(
@@ -428,9 +495,22 @@ describe("compileHarnessBundles", () => {
         path.join(copilotRoot, ".claude-plugin", "plugin.json"),
         "utf8",
       ),
-    ) as { name: string; category?: string };
+    ) as {
+      name: string;
+      category?: string;
+      agents?: string;
+      skills?: string;
+      hooks?: string;
+      mcpServers?: string;
+      commands?: string;
+    };
     expect(pluginJson.name).toBe("cheese-flow");
     expect(pluginJson.category).toBe("development");
+    expect(pluginJson.agents).toBe("./agents/");
+    expect(pluginJson.skills).toBe("./skills/");
+    expect(pluginJson.hooks).toBe("./hooks.json");
+    expect(pluginJson.mcpServers).toBe("./.mcp.json");
+    expect(pluginJson.commands).toBeUndefined();
 
     // MCP config
     const mcpJson = JSON.parse(
@@ -689,26 +769,18 @@ describe("compileHarnessBundles", () => {
     expect(stdout).toContain("-H, --harness <name...>");
   });
 
-  it("reserves install for future local installation", async () => {
-    const error = await execFileAsync(
+  it("keeps help on -h and uses -H for harness selection on install", async () => {
+    const { stdout } = await execFileAsync(
       "npx",
-      ["tsx", "src/index.ts", "install"],
+      ["tsx", "src/index.ts", "install", "--help"],
       {
         cwd: path.resolve("."),
       },
-    ).then(
-      () => undefined,
-      (caughtError): { code?: number; stderr: string } =>
-        caughtError as { code?: number; stderr: string },
     );
 
-    expect(error?.code).toBe(1);
-    expect(error?.stderr).toContain(
-      "`cheese install` is reserved for local harness installation and is not implemented yet.",
-    );
-    expect(error?.stderr).toContain(
-      "Use `cheese compile` to emit harness bundles.",
-    );
+    expect(stdout).toContain("-h, --help");
+    expect(stdout).toContain("-H, --harness <name...>");
+    expect(stdout).toContain("auto-detect.");
   });
 });
 

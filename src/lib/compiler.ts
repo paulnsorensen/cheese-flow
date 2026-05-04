@@ -9,8 +9,10 @@ import {
   type HarnessName,
   type HooksSource,
   hooksSourceSchema,
+  type ManifestComponentPaths,
   type PluginMetadata,
   pluginMetadataSchema,
+  type SurfaceEmissionResult,
 } from "../domain/harness.js";
 import { emitHooks, emitMcpConfig, emitPluginManifest } from "./emit.js";
 import { parseFrontmatter } from "./frontmatter.js";
@@ -96,8 +98,18 @@ type CompileBundlesOptions = {
   harnesses: HarnessName[];
 };
 
-type CompileHarnessBundleContext = {
-  harnessName: HarnessName;
+type CompileHarnessBundleOptions = {
+  projectRoot: string;
+  harness: HarnessName;
+};
+
+export type CompiledHarnessBundle = {
+  harness: HarnessName;
+  outputRoot: string;
+  pluginMetadata: PluginMetadata;
+};
+
+type CompileSession = {
   projectRoot: string;
   pluginMetadata: PluginMetadata;
   hooksSource: HooksSource;
@@ -105,25 +117,42 @@ type CompileHarnessBundleContext = {
   modelManifest: ModelManifest | null;
 };
 
+type CompileHarnessBundleContext = {
+  harnessName: HarnessName;
+} & CompileSession;
+
+async function createCompileSession(
+  projectRoot: string,
+): Promise<CompileSession> {
+  return {
+    projectRoot,
+    pluginMetadata: await readPluginMetadata(projectRoot),
+    modelManifest: await readModelManifest(projectRoot),
+    hooksSource: await readHooksSource(projectRoot),
+    skillSourceDirectory: path.join(projectRoot, "skills"),
+  };
+}
+
+export async function compileHarnessBundle(
+  options: CompileHarnessBundleOptions,
+): Promise<CompiledHarnessBundle> {
+  return compileHarnessBundleFromSession({
+    ...(await createCompileSession(options.projectRoot)),
+    harnessName: options.harness,
+  });
+}
+
 export async function compileHarnessBundles(
   options: CompileBundlesOptions,
 ): Promise<string[]> {
-  const pluginMetadata = await readPluginMetadata(options.projectRoot);
-  const modelManifest = await readModelManifest(options.projectRoot);
-  const hooksSource = await readHooksSource(options.projectRoot);
-  const skillSourceDirectory = path.join(options.projectRoot, "skills");
+  const session = await createCompileSession(options.projectRoot);
   const outputs: string[] = [];
   for (const harnessName of options.harnesses) {
-    outputs.push(
-      await compileHarnessBundle({
-        harnessName,
-        projectRoot: options.projectRoot,
-        pluginMetadata,
-        hooksSource,
-        skillSourceDirectory,
-        modelManifest,
-      }),
-    );
+    const compiled = await compileHarnessBundleFromSession({
+      ...session,
+      harnessName,
+    });
+    outputs.push(compiled.outputRoot);
   }
   return outputs;
 }
@@ -161,9 +190,50 @@ async function cleanGeneratedArtifacts(
   ]);
 }
 
-async function compileHarnessBundle(
+function manifestDirectoryPath(relativePath: string): string {
+  return `./${relativePath}/`;
+}
+
+function manifestFilePath(relativePath: string): string {
+  return `./${relativePath}`;
+}
+
+function buildManifestComponentPaths(options: {
+  adapter: HarnessAdapter;
+  agents: string[];
+  skills: string[];
+  commands: string[];
+  emittedSurface: SurfaceEmissionResult;
+}): ManifestComponentPaths {
+  return {
+    ...(options.agents.length > 0
+      ? { agents: manifestDirectoryPath(options.adapter.agentDirectory) }
+      : {}),
+    ...(options.skills.length > 0
+      ? { skills: manifestDirectoryPath(options.adapter.skillDirectory) }
+      : {}),
+    ...(options.commands.length > 0 &&
+    options.adapter.commandDirectory !== undefined
+      ? options.adapter.name === "codex"
+        ? { apps: manifestDirectoryPath(options.adapter.commandDirectory) }
+        : { commands: manifestDirectoryPath(options.adapter.commandDirectory) }
+      : {}),
+    ...(options.emittedSurface.rules.length > 0
+      ? { rules: manifestDirectoryPath("rules") }
+      : {}),
+    ...(options.emittedSurface.commands.length > 0
+      ? { commands: manifestDirectoryPath("commands") }
+      : {}),
+    ...(options.adapter.buildHookConfig({}) !== null
+      ? { hooks: manifestFilePath("hooks.json") }
+      : {}),
+    mcpServers: manifestFilePath(options.adapter.mcpFileName),
+  };
+}
+
+async function compileHarnessBundleFromSession(
   context: CompileHarnessBundleContext,
-): Promise<string> {
+): Promise<CompiledHarnessBundle> {
   const adapter = harnessAdapters[context.harnessName];
   const outputRoot = path.join(context.projectRoot, adapter.outputRoot);
   const agentOutputDirectory = path.join(outputRoot, adapter.agentDirectory);
@@ -197,6 +267,18 @@ async function compileHarnessBundle(
     });
   }
 
+  const emittedSurface =
+    adapter.emitSurface === undefined
+      ? { rules: [], commands: [] }
+      : await adapter.emitSurface(context.skillSourceDirectory, outputRoot);
+  const manifestComponentPaths = buildManifestComponentPaths({
+    adapter,
+    agents,
+    skills,
+    commands,
+    emittedSurface,
+  });
+
   await writeManifest(outputRoot, {
     harness: context.harnessName,
     agents,
@@ -208,15 +290,16 @@ async function compileHarnessBundle(
     context.harnessName,
     context.pluginMetadata,
     outputRoot,
+    manifestComponentPaths,
   );
   await emitMcpConfig(context.harnessName, outputRoot);
   await emitHooks(context.harnessName, context.hooksSource, outputRoot);
 
-  if (adapter.emitSurface !== undefined) {
-    await adapter.emitSurface(context.skillSourceDirectory, outputRoot);
-  }
-
-  return outputRoot;
+  return {
+    harness: context.harnessName,
+    outputRoot,
+    pluginMetadata: context.pluginMetadata,
+  };
 }
 
 type ManifestContents = {
