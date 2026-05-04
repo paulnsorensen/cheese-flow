@@ -889,13 +889,14 @@ describe("compileHarnessBundles", () => {
         cwd: path.resolve("."),
       },
     );
+    const normalizedHelp = stdout.replaceAll(/\s+/g, " ");
 
     expect(stdout).toContain(
       "Emit one or more harness bundles from the repository skill and agent sources.",
     );
     expect(stdout).toContain("-h, --help");
     expect(stdout).toContain("-H, --harness <name...>");
-    expect(stdout).toContain("Defaults to all supported harnesses.");
+    expect(normalizedHelp).toContain("Defaults to all supported harnesses.");
   });
 
   it("keeps help on -h and uses -H for harness selection on install", async () => {
