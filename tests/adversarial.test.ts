@@ -324,8 +324,9 @@ describe("emitHooks — chaos", () => {
     const content = await readFile(result as string, "utf8");
     const config = JSON.parse(content);
 
-    // Empty array is still a valid entry — should be present
-    expect(config.hooks.sessionStart).toBeDefined();
+    // Empty array is still a valid entry — should be present (Claude Code
+    // emits PascalCase event names; see issue #57).
+    expect(config.hooks.SessionStart).toBeDefined();
   });
 
   it("codex: entry with explicit timeout preserves it (not overridden by default)", async () => {
@@ -404,7 +405,8 @@ describe("emitHooks — chaos", () => {
     const content = await readFile(result as string, "utf8");
     const config = JSON.parse(content);
 
-    expect(config.hooks.sessionStart[0].command).toBe(longCommand);
+    // Claude Code wraps each entry in `{ matcher, hooks: [...] }`; see #57.
+    expect(config.hooks.SessionStart[0].hooks[0].command).toBe(longCommand);
   });
 });
 

@@ -1,5 +1,13 @@
 import type { Dirent } from "node:fs";
-import { cp, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import {
+  cp,
+  mkdir,
+  readdir,
+  readFile,
+  rm,
+  stat,
+  writeFile,
+} from "node:fs/promises";
 import path from "node:path";
 import { Eta } from "eta";
 import { stringify as stringifyYaml } from "yaml";
@@ -180,6 +188,13 @@ async function cleanGeneratedArtifacts(
     generatedFiles.push("hooks.json");
   }
 
+  // Bootstrap-hook harnesses also receive a `hooks/` directory containing the
+  // bootstrap script copy. Clean it so re-compiles don't accumulate stale
+  // copies if the source script is renamed or removed.
+  if (adapter.capabilities.bootstrapHook) {
+    generatedDirectories.push("hooks");
+  }
+
   await Promise.all([
     ...generatedDirectories.map((entry) =>
       rm(path.join(outputRoot, entry), { recursive: true, force: true }),
@@ -188,6 +203,28 @@ async function cleanGeneratedArtifacts(
       rm(path.join(outputRoot, entry), { force: true }),
     ),
   ]);
+}
+
+// Bootstrap-hook harnesses (Claude Code, Codex, Copilot CLI) reference
+// `hooks/cheese-bootstrap.sh` from their emitted hooks.json. The source script
+// lives at the project root in `hooks/cheese-bootstrap.sh`; copy it into the
+// bundle so the install surface is self-contained. Without this, the hook
+// runner can't find the script after the plugin is installed.
+async function copyBootstrapScript(
+  projectRoot: string,
+  outputRoot: string,
+): Promise<void> {
+  const sourcePath = path.join(projectRoot, "hooks", "cheese-bootstrap.sh");
+  try {
+    await stat(sourcePath);
+  } catch (error) {
+    if (isFileNotFound(error)) return;
+    throw error;
+  }
+  const targetDir = path.join(outputRoot, "hooks");
+  const targetPath = path.join(targetDir, "cheese-bootstrap.sh");
+  await mkdir(targetDir, { recursive: true });
+  await cp(sourcePath, targetPath, { preserveTimestamps: true });
 }
 
 function manifestDirectoryPath(relativePath: string): string {
@@ -294,6 +331,9 @@ async function compileHarnessBundleFromSession(
   );
   await emitMcpConfig(context.harnessName, outputRoot);
   await emitHooks(context.harnessName, context.hooksSource, outputRoot);
+  if (adapter.capabilities.bootstrapHook) {
+    await copyBootstrapScript(context.projectRoot, outputRoot);
+  }
 
   return {
     harness: context.harnessName,

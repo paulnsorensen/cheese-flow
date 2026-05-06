@@ -30,7 +30,11 @@ describe("emitHooks", () => {
     expect(result).toBe(false);
   });
 
-  it("emits hooks.json with camelCase keys for claude-code", async () => {
+  it("emits hooks.json with PascalCase matcher-wrapped keys for claude-code", async () => {
+    // Claude Code's hooks.json schema requires PascalCase event names
+    // (SessionStart, PreToolUse, ...) and entries wrapped in matcher objects:
+    //   [{ matcher: "*", hooks: [{ type, command, timeout }] }]
+    // See issue #57.
     const outputRoot = await mkdtemp(path.join(os.tmpdir(), "cheese-flow-"));
     createdDirectories.push(outputRoot);
 
@@ -45,8 +49,12 @@ describe("emitHooks", () => {
     const content = await readFile(hooksPath, "utf8");
     const config = JSON.parse(content);
 
-    expect(config.hooks.sessionStart).toBeDefined();
-    expect(config.hooks.preToolUse).toBeDefined();
+    expect(config.hooks.SessionStart).toBeDefined();
+    expect(config.hooks.PreToolUse).toBeDefined();
+    expect(config.hooks.sessionStart).toBeUndefined();
+    expect(config.hooks.SessionStart[0].matcher).toBe("*");
+    expect(config.hooks.SessionStart[0].hooks[0].command).toBe("echo start");
+    expect(config.hooks.SessionStart[0].hooks[0].timeout).toBe(600);
   });
 
   it("emits hooks with PascalCase keys for codex", async () => {
@@ -103,8 +111,8 @@ describe("emitHooks", () => {
     const content = await readFile(hooksPath, "utf8");
     const config = JSON.parse(content);
 
-    expect(config.hooks.sessionStart).toBeDefined();
-    expect(config.hooks.preToolUse).toBeUndefined();
+    expect(config.hooks.SessionStart).toBeDefined();
+    expect(config.hooks.PreToolUse).toBeUndefined();
   });
 
   it("emits sessionStart bootstrap entry for every bootstrapHook=true harness", async () => {
@@ -152,12 +160,23 @@ describe("emitHooks", () => {
     const claudeConfig = JSON.parse(
       await readFile(path.join(claudeRoot, "hooks.json"), "utf8"),
     ) as {
-      hooks: { sessionStart: Array<{ type: string; command: string }> };
+      hooks: {
+        SessionStart: Array<{
+          matcher: string;
+          hooks: Array<{ type: string; command: string; timeout: number }>;
+        }>;
+      };
     };
-    expect(claudeConfig.hooks.sessionStart).toHaveLength(1);
-    expect(claudeConfig.hooks.sessionStart[0]?.type).toBe("command");
-    expect(claudeConfig.hooks.sessionStart[0]?.command).toBe(
-      "bash hooks/cheese-bootstrap.sh",
+    expect(claudeConfig.hooks.SessionStart).toHaveLength(1);
+    expect(claudeConfig.hooks.SessionStart[0]?.matcher).toBe("*");
+    expect(claudeConfig.hooks.SessionStart[0]?.hooks[0]?.type).toBe("command");
+    // Claude Code resolves bootstrap paths via the literal hook-runner
+    // placeholder (not a JS template) so the script is found regardless of
+    // the user's working directory. Constructed via concat to avoid a Biome
+    // false positive on `${...}` inside a string literal.
+    const claudeRunRoot = "$" + "{CLAUDE_PLUGIN_ROOT}";
+    expect(claudeConfig.hooks.SessionStart[0]?.hooks[0]?.command).toBe(
+      `bash ${claudeRunRoot}/hooks/cheese-bootstrap.sh`,
     );
 
     const codexRoot = await mkdtemp(path.join(os.tmpdir(), "cheese-flow-"));
@@ -285,7 +304,8 @@ describe("emitHooks", () => {
     const content = await readFile(hooksPath, "utf8");
     const config = JSON.parse(content);
 
-    expect(config.hooks.sessionStart).toBeDefined();
+    expect(config.hooks.SessionStart).toBeDefined();
     expect(config.hooks.sessionEnd).toBeUndefined();
+    expect(config.hooks.SessionEnd).toBeUndefined();
   });
 });
