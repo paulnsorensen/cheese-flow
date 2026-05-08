@@ -1,4 +1,3 @@
-node_modules/
 dist/
 coverage/
 .cheese/
@@ -7,6 +6,5 @@ coverage/
 .claude/
 .copilot/
 .cursor/
-.vitest/
 .venv/
 __pycache__/

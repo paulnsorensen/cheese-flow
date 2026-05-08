@@ -5,7 +5,7 @@
 **Run `just build` before opening any PR.** It must pass cleanly.
 
 ```
-just build   # full autofix + build + coverage + Python checks/tests
+just build   # full autofix + lint + Python tests
 ```
 
 If `just build` is red, do not open a PR. Fix failing tests or coverage gaps first.
@@ -14,41 +14,38 @@ Lint and format errors are auto-fixed by `just build` — re-run after if files 
 ## Recipes
 
 ```bash
-just install     # Install all dependencies (npm + uv)
+just install     # Install all dependencies (uv)
 just build       # Full pipeline with autofix — use this before every PR
 just build-ci    # Full pipeline no autofix — CI uses this
-just test        # Run vitest (passthrough: just test -t pattern)
-just test-py     # Run pytest (passthrough: just test-py -k pattern)
+just test        # Run pytest (passthrough: just test -k pattern)
 just clean       # Remove build artifacts and caches
 ```
 
-For anything else, call the underlying tool directly (`npx tsx src/index.ts ...`, `npm run <script>`, `uv run ...`).
+For anything else, call the underlying tool directly (`uv run cheese ...`, `uv run --group dev ...`).
 
 ## Required host tools
 
-- **Node 22+** and **npm** — TypeScript build, MCP servers (`tilth`, milknado), and `@ast-grep/cli`.
-- **uv** — Python toolchain for `milknado` and `python/` checks.
-- **`sg` (ast-grep)** — invoked from agent prompts (e.g. `nih-scanner`) for AST-shape patterns the tilth MCP doesn't cover. `just install` pulls `@ast-grep/cli` into `node_modules/.bin`; for a global `sg` use `brew install ast-grep`, `cargo install ast-grep`, or `npm i -g @ast-grep/cli`.
+- **uv** — Python toolchain for the `cheese` CLI, the unified MCP server, and `python/` checks.
+- **`sg` (ast-grep)** — invoked from agent prompts (e.g. `nih-scanner`) for AST-shape patterns the tilth MCP doesn't cover. Install with `brew install ast-grep` or `cargo install ast-grep`.
 
 ## Project Overview
 
 cheese-flow is opinionated scaffolding for portable agents and skills that compile into harness-specific markdown bundles (Claude Code, Codex, Cursor, Copilot CLI).
 
-- **Entry points**: `cheese` CLI (`src/index.ts`), milknado Python TUI (`python/`)
-- **Architecture**: Sliced Bread — vertical slices under `src/lib/` and `src/adapters/`
-- **Templates**: Eta-rendered `agents/*.md.eta` and `skills/*/SKILL.md`
-- **Tests**: `tests/` (vitest, coverage thresholds in `vitest.config.ts`) and `tests/python/` (pytest)
+- **Entry points**: `cheese` CLI (`python/cheese_flow/cli.py`), milknado Python TUI (`python/milknado/`)
+- **Architecture**: Sliced Bread — vertical slices under `python/cheese_flow/lib/` and `python/cheese_flow/adapters/`
+- **Templates**: Jinja2-rendered `agents/*.md.eta` and `skills/*/SKILL.md`
+- **Tests**: `tests/python/` (pytest)
 
 ## Code Style
 
-- TypeScript (Node 22+), formatted with Biome (`biome.json`)
 - Python 3.11+, formatted with ruff (line length 100)
 - Max function: 40 lines, max file: 300 lines, max params: 4
-- camelCase functions (TS) / snake_case (Python), PascalCase classes, SCREAMING_SNAKE_CASE constants, kebab-case files
+- snake_case functions, PascalCase classes, SCREAMING_SNAKE_CASE constants, kebab-case files
 
 ## Engineering Principles
 
-1. Trust nothing from external sources (validate at boundaries — Zod for TS object safety)
+1. Trust nothing from external sources (validate at boundaries — pydantic for object safety)
 2. Fail fast and loud — no silent failures
 3. Separate business logic from infrastructure
 4. YAGNI — only what's needed now

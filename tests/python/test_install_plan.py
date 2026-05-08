@@ -49,13 +49,13 @@ def _get_entry(plan: HarnessInstallPlan, harness: str) -> HarnessInstallPlanEntr
 
 
 def test_find_command_on_path_finds_commands_already_on_path() -> None:
-    result = asyncio.run(find_command_on_path("node"))
+    result = asyncio.run(find_command_on_path("uv"))
     assert isinstance(result, str)
     assert len(result) > 0
 
 
 def test_has_directory_detects_directories_on_disk() -> None:
-    src_path = str(Path("src").resolve())
+    src_path = str(Path("python").resolve())
     missing_path = str(Path("missing-install-plan-directory").resolve())
     assert asyncio.run(has_directory(src_path)) is True
     assert asyncio.run(has_directory(missing_path)) is False

@@ -5,57 +5,30 @@ set dotenv-load := false
 default:
     @just --list
 
-# Install all dependencies (npm + uv)
+# Install all dependencies (uv only)
 install:
-    npm install
     uv sync --group dev
 
-# Full build with autofix: format -> lint -> typecheck -> build -> tests (for devs before PRs)
+# Full build with autofix: format -> lint -> tests (for devs before PRs)
 build:
     rm -rf dist coverage
-    npm install
-    npm run format
-    npm run lint:fix
-    npm run lint:skills
-    npm run typecheck
-    npm run build
-    just _test-coverage
+    uv sync --group dev
     uv run --group dev ruff format
     uv run --group dev ruff check --fix
     uv run --group dev pytest
     @echo "Build passed - ready for PR"
 
-# Private build helper for optional rtk coverage wrapping.
-[private]
-_test-coverage:
-    if command -v rtk >/dev/null 2>&1 \
-        && rtk test --help >/dev/null 2>&1; then \
-        rtk test npm run test:coverage; \
-    else \
-        npm run test:coverage; \
-    fi
-
-# Full build no autofix: format check -> lint check -> typecheck -> build -> tests (for CI)
+# Full build no autofix: format check -> lint check -> tests (for CI)
 build-ci:
     rm -rf dist coverage
-    npm ci
-    npm run format:check
-    npm run lint:check
-    npm run lint:skills
-    npm run typecheck
-    npm run build
-    npm run test:coverage
+    uv sync --group dev
     uv run --group dev ruff format --check
     uv run --group dev ruff check
     uv run --group dev pytest
     @echo "CI build passed"
 
-# Run the TypeScript test suite (passes args through to vitest)
-test *args:
-    npm run test -- {{args}}
-
 # Run the Python test suite (passes args through to pytest)
-test-py *args:
+test *args:
     uv run --group dev pytest {{args}}
 
 # Run /age fixture comparator against every dim under tests/age-fixtures/
@@ -103,6 +76,6 @@ test-age-fixtures:
 # Clean build artifacts and caches
 clean:
     rm -rf dist coverage
-    rm -rf .pytest_cache .ruff_cache htmlcov .coverage node_modules/.cache
+    rm -rf .pytest_cache .ruff_cache htmlcov .coverage
     find . -type d -name __pycache__ -prune -exec rm -rf {} +
     find . -type f -name "*.pyc" -delete
