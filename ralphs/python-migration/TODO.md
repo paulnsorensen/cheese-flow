@@ -12,7 +12,7 @@ US-005 (install-plan), US-006 (harness-detection), and US-007 (harness-compat).
 - [x] US-004 — Port compile pipeline: `compiler.ts` + `emit.ts` + `frontmatter.ts` + `capabilities.ts` + `model-manifest.ts` → `python/cheese_flow/lib/`; Eta `<%= %>` / `<% %>` → Jinja2 `{{ }}` / `{% %}`; `Promise.all` → `asyncio.gather`; commit a byte-parity snapshot fixture for one agent + one skill
 - [x] US-005 — Port `src/lib/install-plan.ts` → `python/cheese_flow/lib/install_plan.py`; port `tests/install-plan.test.ts`
 - [x] US-006 — Port `src/lib/harness-detection.ts` → `python/cheese_flow/lib/harness_detection.py`; port `tests/harness-detection.test.ts`
-- [ ] US-007 — Port `src/lib/harness-compat.ts` → `python/cheese_flow/lib/harness_compat.py`; port `tests/harness-compat.test.ts`
+- [x] US-007 — Port `src/lib/harness-compat.ts` → `python/cheese_flow/lib/harness_compat.py`; port `tests/harness-compat.test.ts`
 - [ ] US-008 — Port `src/lib/installer.ts` → `python/cheese_flow/lib/installer.py`; depends on US-005/006/007; port `tests/installer.test.ts`
 - [ ] US-009 — Port `src/lib/sweeper.ts` → `python/cheese_flow/lib/sweeper.py`; port `tests/sweeper.test.ts`
 - [ ] US-010 — Port `src/lib/session-start.ts` → `python/cheese_flow/lib/session_start.py`; port `tests/session-start.test.ts`
