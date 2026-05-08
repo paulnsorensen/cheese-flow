@@ -18,7 +18,7 @@ US-005 (install-plan), US-006 (harness-detection), and US-007 (harness-compat).
 - [x] US-010 — Port `src/lib/session-start.ts` → `python/cheese_flow/lib/session_start.py`; port `tests/session-start.test.ts`
 - [x] US-011 — Port `src/lib/doctor.ts` → `python/cheese_flow/lib/doctor.py`; port matching vitest cases
 - [x] US-012 — Port `src/lib/cheese-home.ts` → `python/cheese_flow/lib/cheese_home.py`; port `tests/cheese-home.test.ts`
-- [ ] US-013 — Port `src/lib/local-marketplaces.ts` → `python/cheese_flow/lib/local_marketplaces.py`; port matching vitest cases
+- [x] US-013 — Port `src/lib/local-marketplaces.ts` → `python/cheese_flow/lib/local_marketplaces.py`; port matching vitest cases
 - [ ] US-014 — Port lint pipeline: `src/lib/lint-skills.ts` + `lint-skill-rules.ts` → `python/cheese_flow/lib/`; port `tests/lint-skills-directory.test.ts` + `tests/lint-skill-source.test.ts`
 - [ ] US-015 — FastMCP umbrella + Typer CLI: `python/cheese_flow/cli.py` (typer app, 7 subcommands, milknado top-level aliases) + `python/cheese_flow/mcp_server.py` (single FastMCP, `cheese_*` and `milknado_*` prefixed tools, stdio); deletes `src/lib/mcp-proxy.ts`; smoke-test that `cheese mcp tools/list` returns both prefix sets
 - [ ] US-016 — Port any remaining `tests/*.test.ts` files not absorbed by earlier stories to `tests/python/test_*.py`
