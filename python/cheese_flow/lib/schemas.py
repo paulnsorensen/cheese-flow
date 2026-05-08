@@ -94,6 +94,35 @@ class AgentFrontmatter(BaseModel):
     metadata: dict[str, Any] | None = None
 
 
+class PluginAuthorModel(BaseModel):
+    """Mirror of `pluginMetadataSchema.author` (zod)."""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    name: NonEmptyStr
+    email: str | None = None
+    url: str | None = None
+
+
+class PluginMetadataModel(BaseModel):
+    """Mirror of `pluginMetadataSchema` from `src/domain/harness.ts`."""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    name: NonEmptyStr
+    version: NonEmptyStr
+    description: NonEmptyStr
+    author: PluginAuthorModel
+    license: NonEmptyStr
+    repository: NonEmptyStr
+    homepage: str | None = None
+    keywords: list[str] | None = None
+
+
+def parse_plugin_metadata(data: Any) -> PluginMetadataModel:
+    return PluginMetadataModel.model_validate(data)
+
+
 def parse_skill_frontmatter(data: Any) -> SkillFrontmatter:
     return SkillFrontmatter.model_validate(data)
 

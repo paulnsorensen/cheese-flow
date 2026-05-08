@@ -17,6 +17,7 @@ from cheese_flow.lib.harness import (
     PortableEvent,
     PortableHooks,
 )
+from cheese_flow.lib.schemas import parse_plugin_metadata
 
 _BOOTSTRAP_COMMAND_MARKER = "hooks/cheese-bootstrap.sh"
 
@@ -60,6 +61,7 @@ def emit_plugin_manifest(
     output_root: str | Path,
     component_paths: ManifestComponentPaths | None = None,
 ) -> Path:
+    parse_plugin_metadata(metadata)
     component_paths = component_paths or {}
     adapter = HARNESS_ADAPTERS[harness]
     manifest = adapter.buildManifest(metadata, component_paths)
