@@ -14,7 +14,7 @@ US-005 (install-plan), US-006 (harness-detection), and US-007 (harness-compat).
 - [x] US-006 — Port `src/lib/harness-detection.ts` → `python/cheese_flow/lib/harness_detection.py`; port `tests/harness-detection.test.ts`
 - [x] US-007 — Port `src/lib/harness-compat.ts` → `python/cheese_flow/lib/harness_compat.py`; port `tests/harness-compat.test.ts`
 - [x] US-008 — Port `src/lib/installer.ts` → `python/cheese_flow/lib/installer.py`; depends on US-005/006/007; port `tests/installer.test.ts`
-- [ ] US-009 — Port `src/lib/sweeper.ts` → `python/cheese_flow/lib/sweeper.py`; port `tests/sweeper.test.ts`
+- [x] US-009 — Port `src/lib/sweeper.ts` → `python/cheese_flow/lib/sweeper.py`; port `tests/sweeper.test.ts`
 - [ ] US-010 — Port `src/lib/session-start.ts` → `python/cheese_flow/lib/session_start.py`; port `tests/session-start.test.ts`
 - [ ] US-011 — Port `src/lib/doctor.ts` → `python/cheese_flow/lib/doctor.py`; port matching vitest cases
 - [ ] US-012 — Port `src/lib/cheese-home.ts` → `python/cheese_flow/lib/cheese_home.py`; port `tests/cheese-home.test.ts`
