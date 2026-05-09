@@ -1,0 +1,14 @@
+{
+  "dimension": "prompt-quality",
+  "stake": "medium",
+  "scope_match": true,
+  "observations": [
+    {
+      "id": "prompt-quality-1",
+      "file": "tests/skill-improver-fixtures/prompt-quality/target.md.eta",
+      "anchor": { "start": "23:000" },
+      "bucket": "med",
+      "narrative": "Triage agent classifies failures into a small enum (flake, real bug, infra, unknown) but ships no calibration scaffold telling the agent how to bucket borderline cases — judgment task without a confidence rubric will pattern-match the description rather than apply calibrated probabilities."
+    }
+  ]
+}

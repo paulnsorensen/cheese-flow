@@ -1,6 +1,6 @@
 ---
 name: cleanup
-description: Mechanical apply of /age's hash-anchored sidecar fixes via tilth_edit. The cleanup-wolf sub-agent is the only LLM in the path, fired per anchor mismatch.
+description: Mechanical apply of hash-anchored sidecar fixes via tilth_edit. Supports /age slugs and source-qualified sidecars such as skill-improver/<slug>; cleanup-wolf is the only LLM in the path.
 license: MIT
 compatibility: Requires Claude Code >= 2.1.30 / claude-agent-sdk >= 0.2.63 (tilth_edit must be exposed to plugin sub-agents).
 metadata:
@@ -15,26 +15,37 @@ allowed-tools:
 ---
 # Cleanup — Mechanical Fix Apply
 
-Apply `/age` sidecar fixes mechanically via `tilth_edit`. No LLM in the
-happy path. The `cleanup-wolf` sub-agent fires only on hash mismatch.
+Apply sidecar fixes mechanically via `tilth_edit`. No LLM in the happy
+path. The `cleanup-wolf` sub-agent fires only on hash mismatch.
 
 ## Arguments
 
 ```
-/cleanup <slug>
+/cleanup <slug | source/slug>
 ```
 
-`slug` is the same slug produced by `/age`. Resolves to:
+Plain `<slug>` is backward-compatible with `/age` and resolves to:
 
 ```
 .cheese/age/<slug>.fixes.json
 ```
 
+Source-qualified slugs resolve under that source directory:
+
+```
+/cleanup age/<slug>              -> .cheese/age/<slug>.fixes.json
+/cleanup skill-improver/<slug>   -> .cheese/skill-improver/<slug>.fixes.json
+```
+
+Only `age` and `skill-improver` are valid sources. Reject any other
+`source/slug` before loading files.
+
 All harnesses share the project-root `.cheese/` runtime directory.
 
 ## Phase 1 — Load
 
-Load `.cheese/age/<slug>.fixes.json`.
+Resolve the fixes path from the argument, then load
+`.cheese/<source>/<slug>.fixes.json`.
 
 Validate schema: every entry must have all of
 `id`, `dimension`, `file`, `anchor`, `content`, `rationale`, `category`.
@@ -45,8 +56,8 @@ invalid `id` values. Do not apply any fixes from a malformed file.
 If the file does not exist, fail fast:
 
 ```
-ERROR: .cheese/age/<slug>.fixes.json not found.
-Run /age first to generate the fixes sidecar.
+ERROR: .cheese/<source>/<slug>.fixes.json not found.
+Run the matching review skill first to generate the fixes sidecar.
 ```
 
 ## Phase 2 — Apply Each Fix
@@ -92,7 +103,7 @@ match and applies with `tilth_edit`. Returns one of:
 
 ## Phase 3 — Emit Report
 
-Write `.cheese/age/<slug>.cleanup-report.md`:
+Write `.cheese/<source>/<slug>.cleanup-report.md`:
 
 ```markdown
 # Cleanup Report — <slug>

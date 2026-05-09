@@ -1,0 +1,14 @@
+{
+  "dimension": "tool-scoping",
+  "stake": "high",
+  "scope_match": true,
+  "observations": [
+    {
+      "id": "tool-scoping-1",
+      "file": "tests/skill-improver-fixtures/tool-scoping/target.md.eta",
+      "anchor": { "start": "11:000" },
+      "bucket": "high",
+      "narrative": "Body declares 'You are a read-only code auditor' but tools includes tilth_edit and there is no disallowedTools block — the prose constraint is not enforceable."
+    }
+  ]
+}
