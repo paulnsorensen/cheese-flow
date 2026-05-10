@@ -8,6 +8,12 @@ Long-form architectural and engineering references that ship alongside cheese-fl
 |---|---|
 | [tilth/tilth-mcp.md](./tilth/tilth-mcp.md) | **Always when using tilth tools.** Complete reference for tilth_search, tilth_read, tilth_files, tilth_deps, and tilth_edit. Hash anchor format, session deduplication, tree-sitter languages. |
 
+## Runtime Artifact Directories
+
+| Document | When to load |
+|---|---|
+| [canonical-cheese.md](./canonical-cheese.md) | When a skill writes durable research, specs, or issues under `.cheese/`, especially from a linked Git worktree or Conductor workspace. |
+
 ## Sliced Bread Architecture
 
 | Document | When to load |

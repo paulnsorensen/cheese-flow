@@ -15,7 +15,7 @@ Walk the heuristics top-down. The **first** match wins.
 2. **Ground** — the input is, or points at, a concrete artifact:
    - File path that exists in the repo, OR
    - PR or issue reference (URL, `#1234`), OR
-   - A spec path under the active harness root, OR
+   - A spec path under canonical `.cheese/specs/`, OR
    - "Read X and tell me ..." style requests.
 3. **Sketch** — the input contains existing structure to refine:
    - Fenced code blocks containing function signatures or schemas, OR
@@ -50,7 +50,7 @@ considered, and explicitly invite a knob redirect.
 | Input | Mode | Reason |
 | --- | --- | --- |
 | `TypeError: cannot read property 'foo' of undefined at app.ts:142` | Diagnose | error keyword + file:line |
-| `.cheese/specs/dark-mode.md` | Ground | spec path; read first |
+| `.cheese/specs/dark-mode.md` | Ground | canonical spec path; read first |
 | `def dispatch(...): ... # what should the return type be?` | Sketch | existing signature with question |
 | `I want to add idempotency to the dispatcher` | Shape | concrete noun, additive verb |
 | `Should we extract the dedup layer into its own slice?` | Grill | tentative verb on a plan |

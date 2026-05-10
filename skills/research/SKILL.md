@@ -28,11 +28,14 @@ Run the orchestration inline, but keep raw evidence out of the main context:
 
 1. Route sources once and state the committed routing decision.
 2. Spawn fetchers in parallel where the harness supports it.
-3. Have fetchers write findings to scratch files under `$TMPDIR`.
-4. Have one synthesis sub-agent read those scratch files and return the final
+3. Resolve the canonical project `.cheese` root, then spawn knowledge-base
+   scanner sub-agents against `<canonical-project-root>/.cheese/research`.
+4. Have fetchers write findings to scratch files under `$TMPDIR`.
+5. Have one synthesis sub-agent read those scratch files and return the final
    answer.
-5. Write the full report to `.cheese/research/<slugified-topic>.md`.
-6. Delete the scratch directory after the report is written.
+6. Write the full report to
+   `<canonical-project-root>/.cheese/research/<slugified-topic>.md`.
+7. Delete the scratch directory after the report is written.
 
 The caller should see only the routing decision, fetcher status, synthesis,
 and the report path.
@@ -52,6 +55,108 @@ mkdir -p "$RUN_DIR"
 
 Use a 4-6 word kebab-case slug derived from the topic.
 
+## Canonical `.cheese` Resolution
+
+Research reports are durable project knowledge. Do not strand them in a
+throwaway linked worktree's `.cheese/`.
+
+Resolve the canonical project root before reading or writing research:
+
+```bash
+ACTIVE_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+CANONICAL_ROOT="$(
+  git -C "$ACTIVE_ROOT" worktree list --porcelain 2>/dev/null \
+    | awk 'BEGIN { RS=""; FS="\n" } NR == 1 { sub(/^worktree /, "", $1); print $1 }'
+)"
+CANONICAL_ROOT="${CANONICAL_ROOT:-$ACTIVE_ROOT}"
+CHEESE_ROOT="$CANONICAL_ROOT/.cheese"
+RESEARCH_DIR="$CHEESE_ROOT/research"
+mkdir -p "$RESEARCH_DIR"
+```
+
+In a normal checkout, `CANONICAL_ROOT` and `ACTIVE_ROOT` are the same. In a
+Conductor or Git linked worktree, `CANONICAL_ROOT` is the main worktree path.
+
+When a user explicitly provides another output path, honor it. Otherwise all
+research reports go under `$RESEARCH_DIR`.
+
+## Persistent Report Frontmatter
+
+Every report written to `.cheese/research/` must start with YAML frontmatter:
+
+```yaml
+---
+title: "<human title>"
+slug: "<kebab-case-slug>"
+question: "<original user question>"
+created_at: "YYYY-MM-DDTHH:mm:ssZ"
+updated_at: "YYYY-MM-DDTHH:mm:ssZ"
+last_validated_at: "YYYY-MM-DDTHH:mm:ssZ"
+status: "active"
+confidence: 0
+freshness:
+  status: "fresh"
+  source_volatility: "low"
+  half_life_days: 180
+  next_review_at: "YYYY-MM-DDTHH:mm:ssZ"
+  revalidation_reason: ""
+relevance:
+  status: "direct"
+  score: 100
+  matched_terms: []
+tags: []
+sources: []
+related: []
+---
+```
+
+Allowed values:
+
+- `status`: `draft`, `active`, `superseded`, `archived`.
+- `freshness.status`: `fresh`, `stale`, `needs_revalidation`,
+  `unverified`.
+- `freshness.source_volatility`: `low`, `medium`, `high`.
+- `relevance.status`: `direct`, `partial`, `background`, `unrelated`.
+
+When updating an existing report, preserve `created_at`, set `updated_at` and
+`last_validated_at` to the current time, and append any superseded report paths
+to `related`.
+
+## Freshness and Relevance Algorithm
+
+The knowledge-base scan is advisory, but it must judge whether prior research
+can be reused.
+
+For each candidate report:
+
+1. Parse frontmatter. If missing, treat it as `unverified`.
+2. Compute relevance:
+   - `direct` (90-100): same decision, library, API, architecture, or spec.
+   - `partial` (60-89): same domain but different question.
+   - `background` (30-59): useful context only.
+   - `unrelated` (0-29): ignore for synthesis.
+3. Compute volatility:
+   - `high`: model docs, vendor APIs, prices, laws, schedules, benchmarks,
+     package versions, security posture, product features.
+   - `medium`: framework guidance, library usage, current OSS maintenance,
+     local code architecture.
+   - `low`: durable architecture principles, historical explanations,
+     internal decisions that have not been reversed.
+4. Assign freshness half-life:
+   - high: 14 days.
+   - medium: 45 days.
+   - low: 180 days.
+5. Mark `needs_revalidation` when any is true:
+   - age since `last_validated_at` exceeds half-life,
+   - report has no frontmatter or no sources,
+   - relevant local file refs changed since the report date,
+   - cited vendor/library/model docs are likely current-sensitive,
+   - confidence is below 70,
+   - current routed sources contradict the prior report.
+
+Use judgment. A stale but still relevant report can guide search queries, but it
+cannot be the sole evidence for current facts.
+
 ## Phase 1: Classify
 
 Identify:
@@ -60,6 +165,44 @@ Identify:
 - Question type: factual lookup, how-to, comparison, pattern search, API usage
 - Complexity: simple fact, focused question, comparison, or deep analysis
 - Constraints: version, language, framework, performance, license, architecture
+
+## Phase 1.5: Knowledge-Base Scan
+
+Always inspect existing research before external fetching.
+
+Spawn knowledge-base scanner sub-agents against `$RESEARCH_DIR`:
+
+- If the directory is empty, write `<RUN_DIR>/knowledge-base.md` with
+  `Status: unavailable` and reason `no existing research`.
+- If there are 1-20 reports, spawn one scanner.
+- If there are more than 20 reports, spawn up to three scanners sharded by
+  filename or topic. Each scanner writes one scratch file; the synthesis agent
+  reads all completed shard files.
+
+Scanner prompt shape:
+
+```text
+You are scanning the project research knowledge base.
+
+Question: <question>
+Research dir: <RESEARCH_DIR>
+
+Steps:
+1. Read filenames and YAML frontmatter first.
+2. Rank candidate reports by relevance to the question.
+3. For direct or partial matches, read the body enough to extract the prior
+   finding, sources, confidence, freshness status, and revalidation needs.
+4. Apply the freshness and relevance algorithm from the research skill.
+5. Write findings to <RUN_DIR>/knowledge-base-<shard>.md using the scratch
+   schema plus a "Revalidation" section.
+6. Return only: done: <RUN_DIR>/knowledge-base-<shard>.md
+
+Do not browse the web. Do not edit reports. Do not treat stale reports as
+current evidence.
+```
+
+An empty knowledge base does not cap confidence. A relevant but stale or
+contradicted report should lower confidence until revalidated.
 
 ## Phase 2: Route Sources
 
@@ -90,6 +233,7 @@ Source guide:
 | Tavily | Current facts, technical articles, vendor docs, best practices | Use basic for factual lookups, advanced for analysis. |
 | Codebase | Local conventions, existing usage, constraints | Use repository search and reads. |
 | GitHub | Real-world OSS usage patterns | Use `gh` or the harness GitHub integration. |
+| Knowledge Base | Prior `.cheese/research` reports and specs | Always scan before external fetches; revalidate stale direct matches. |
 
 Emit a compact routing block:
 
@@ -99,6 +243,7 @@ ROUTING DECISION:
 - Tavily: YES (query: "<natural-language question>", depth: basic|advanced)
 - Codebase: NO (external-only question)
 - GitHub: NO (not looking for OSS usage patterns)
+- Knowledge Base: YES (always scan project-root .cheese/research)
 ```
 
 ## Phase 3: Execute Fetchers
@@ -196,6 +341,15 @@ Write findings to <RUN_DIR>/codebase.md and return only:
 done: <RUN_DIR>/codebase.md
 ```
 
+### Knowledge-Base Fetcher
+
+The knowledge-base scan runs in Phase 1.5 before source routing completes. If it
+found direct or partial matches, include them as a committed Phase 3 source and
+use the findings to shape external queries.
+
+Do not use prior research as current evidence unless freshness is `fresh` or the
+current run revalidates its load-bearing claims.
+
 ### GitHub Fetcher
 
 Use GitHub for real-world open-source patterns.
@@ -225,8 +379,10 @@ Synthesis task:
 1. Build one evidence row per routed source:
    `Source | Finding | Score | Notes`.
 2. Apply the mechanical confidence cap:
-   - Any unavailable, failed, skipped, or not-spawned source caps overall
-     confidence at 49.
+   - Any unavailable, failed, skipped, or not-spawned committed source caps
+     overall confidence at 49.
+   - Exception: an empty knowledge base with no prior reports does not cap
+     confidence; it is absence of prior evidence, not a failed source.
    - 3+ agreeing sources: 85-100.
    - 2 agreeing sources: 60-84.
    - Disagreement: cap at 49 and explain why.
@@ -252,9 +408,9 @@ Synthesis task:
 ```
 
 After the synthesis block, append a fenced `report-body` block containing a
-full markdown report with source URLs, file refs, and repo links. The
-orchestration layer writes that report body verbatim to
-`.cheese/research/<slug>.md`.
+full markdown report with YAML frontmatter, source URLs, file refs, and repo
+links. The orchestration layer writes that report body verbatim to
+`<canonical-project-root>/.cheese/research/<slug>.md`.
 
 ## Cleanup
 

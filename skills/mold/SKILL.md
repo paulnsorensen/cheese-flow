@@ -32,7 +32,7 @@ dialogue actually produced — never more, never less.
 | Companion | Boundary |
 | --- | --- |
 | `/culture` | Same dialogue feel; **never writes**. Use it when there is no artifact intent. |
-| `/briesearch` | External evidence dispatcher. `/mold` calls it through the Validate Cycle. |
+| `/briesearch` | Evidence dispatcher. `/mold` calls it through the Validate Cycle; it scans prior project research before external sources. |
 | `/nih-audit` | Whole-repo build-vs-buy sweep. `/mold` calls it from Sketch when multiple library-shaped categories are in play, or offers it at Curdle for migration-style specs. |
 | `/cook` | Implements a curdled spec. `/mold` ends with a hand-off offer, never an auto-invoke. |
 
@@ -63,7 +63,7 @@ dialogue actually produced — never more, never less.
 | Input shape | Start mode | Heuristic |
 | --- | --- | --- |
 | Stack trace, "X is broken/slow/flaky" | Diagnose | error markers, `file:line` refs, symptom verbs |
-| File path, PR ref, existing spec under `.cheese/specs/` | Ground | concrete artifact exists; read it first |
+| File path, PR ref, existing spec under canonical `.cheese/specs/` | Ground | concrete artifact exists; read it first |
 | Half-baked design doc with signatures or schemas | Sketch | already has interfaces; refine them |
 | "I want to add X" with concrete nouns | Shape | named the thing → jump to options |
 | "Should we do X? thinking about Y" | Grill | tentative plan exists → stress-test it |
@@ -285,6 +285,11 @@ Output paths (relative to the project root):
 | Issues only | `.cheese/issues/<slug>-001.md`, `-002.md`, ... |
 | Spec + Issues | spec at `.cheese/specs/<slug>.md`; issues at `.cheese/issues/<slug>-001.md`, ... |
 
+Resolve "project root" with `references/canonical-cheese.md`: specs and
+issues are durable knowledge artifacts, so linked worktrees write them to the
+canonical main worktree's `.cheese/` unless the user explicitly gives another
+path.
+
 Slug derivation: lowercase the working problem statement, drop stopwords,
 kebab-case, cap at 5 words. Honour user-passed slugs verbatim.
 
@@ -309,7 +314,7 @@ After writing, offer the next step inline. Never auto-invoke.
 
 | Artifact | Suggested next step |
 | --- | --- |
-| Spec | `/cook .cheese/specs/<slug>.md` |
+| Spec | `/cook <canonical-project-root>/.cheese/specs/<slug>.md` |
 | Migration-shaped spec (≥1 NIH probe verdict of `accept` or `revise`) | `/nih-audit <scope>` first, then `/cook` |
 | Issues | `gh issue create --body-file <path>` (per file) |
 

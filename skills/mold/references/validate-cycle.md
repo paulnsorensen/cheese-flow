@@ -9,7 +9,8 @@ come back" patterns.
 
 1. **State the hypothesis.** Single declarative sentence. Falsifiable. The
    anchor for the rest of the cycle.
-2. **Dispatch evidence.** Usually `/briesearch`. Sometimes `cheez-search`
+2. **Dispatch evidence.** Usually `/briesearch`, which scans the project
+   research knowledge base before external sources. Sometimes `cheez-search`
    or `cheez-read` is enough. Sometimes both run in parallel.
 3. **Judge.** Three outcomes — **SUPPORTED**, **CONTRADICTED**, **REFINED**.
 4. **Settle.** Continue from the mode that invoked the cycle. The mode
@@ -56,7 +57,8 @@ or accept the refined form.
 
 ## Validate Cycle vs. bare `/briesearch`
 
-A bare `/briesearch` is a research dispatch. The Validate Cycle adds:
+A bare `/briesearch` is a research dispatch with prior `.cheese/research`
+context and freshness checks. The Validate Cycle adds:
 
 - The **stated hypothesis** (commitment to an assertion).
 - The **judgment step** (verdict tag, not just a summary).

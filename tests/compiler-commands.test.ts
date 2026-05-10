@@ -164,4 +164,17 @@ describe("shipped command scaffolds", () => {
       expect([...manifest.commands].sort()).toEqual(expected);
     }
   });
+
+  it("documents the briesearch knowledge-base and frontmatter contract", async () => {
+    const source = await readFile(
+      path.resolve("commands/briesearch.md"),
+      "utf8",
+    );
+
+    expect(source).toContain("canonical");
+    expect(source).toContain("project `.cheese/research`");
+    expect(source).toContain("scanner sub-agents");
+    expect(source).toContain("created_at");
+    expect(source).toContain("updated_at");
+  });
 });

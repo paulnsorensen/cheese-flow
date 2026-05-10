@@ -150,9 +150,9 @@ offers:
 
 ```
 Filed:
-  - .cheese/specs/<slug>.md       (1 spec)
-  - .cheese/issues/<slug>-001.md  (1 issue)
-  - .cheese/issues/<slug>-002.md  (1 issue)
+  - <canonical-project-root>/.cheese/specs/<slug>.md       (1 spec)
+  - <canonical-project-root>/.cheese/issues/<slug>-001.md  (1 issue)
+  - <canonical-project-root>/.cheese/issues/<slug>-002.md  (1 issue)
 
 File these as GitHub issues now? (y/N)
 ```

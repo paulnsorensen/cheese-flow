@@ -2,7 +2,7 @@
 name: nih-audit
 description: Scan a codebase for custom code that duplicates what open-source libraries already do, then recommend which libraries to adopt. Detects hand-rolled utility functions, custom retry logic, manual validation, DIY date handling, home-grown argument parsers, and other reinvented wheels. Cross-checks against installed dependencies and open specs. Returns scored migration recommendations with effort estimates. Use when the user mentions reinventing the wheel, asks if there is a library for something they built, wants a build-vs-buy audit, asks "should we just use lodash for this", or wants to find dependency opportunities.
 license: MIT
-compatibility: Requires tilth MCP for AST-aware search. Library discovery delegates to /research; if /research is unavailable, the audit reports candidates without library recommendations.
+compatibility: Requires tilth MCP for AST-aware search. Library discovery delegates to /briesearch; if /briesearch is unavailable, the audit reports candidates without library recommendations.
 metadata:
   owner: cheese-flow
   category: review
@@ -67,21 +67,21 @@ The scanner returns a JSON candidate list inline plus a one-paragraph
 summary. Parse the candidates from the response. If 0 candidates, report
 clean and stop.
 
-## Phase 2 — Library discovery (parallel, /research)
+## Phase 2 — Library discovery (parallel, /briesearch)
 
 Group candidates by `category` (RETRY, UUID, VALIDATION, DATE, DEBOUNCE,
 CLONE, ARGPARSE, STRING, HTTP, SERIALIZATION, ERROR, CRYPTO, SECURITY,
 FORMAT, COMPARE).
 
-For each category, dispatch `/research` with a focused question shape:
+For each category, dispatch `/briesearch` with a focused question shape:
 
 ```
-/research "best <category> library for <language>; must be MIT/Apache/BSD;
+/briesearch "best <category> library for <language>; must be MIT/Apache/BSD;
 list weekly downloads or crates.io downloads, GitHub stars, last commit
 date, contributor count; flag if functionality is in the standard library"
 ```
 
-Cap: max 5 parallel research dispatches. If `/research` is unavailable,
+Cap: max 5 parallel research dispatches. If `/briesearch` is unavailable,
 emit candidates with `recommendation: null` and a note.
 
 For each library returned, capture:
