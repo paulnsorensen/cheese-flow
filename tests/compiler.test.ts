@@ -102,7 +102,9 @@ describe("compileHarnessBundles", () => {
       mcpServers?: string;
     };
     expect(claudePlugin.name).toBe("cheese-flow");
-    expect(claudePlugin.agents).toBe("./agents/");
+    // Claude Code's plugin manifest validator rejects the `agents` key (see
+    // issue #58); rely on the default `./agents/` auto-discovery instead.
+    expect(claudePlugin.agents).toBeUndefined();
     expect(claudePlugin.skills).toBe("./skills/");
     expect(claudePlugin.commands).toBeUndefined();
     expect(claudePlugin.hooks).toBe("./hooks.json");
@@ -141,6 +143,58 @@ describe("compileHarnessBundles", () => {
     ) as { mcpServers: Record<string, unknown> };
     expect(codexMcp.mcpServers).toHaveProperty("tilth");
     expect(codexMcp.mcpServers).toHaveProperty("context7");
+  });
+
+  it("copies hooks/cheese-bootstrap.sh into the bundle for bootstrapHook harnesses", async () => {
+    // Regression test for issue #57: the emitted hooks.json references
+    // `${CLAUDE_PLUGIN_ROOT}/hooks/cheese-bootstrap.sh` (Claude Code) or the
+    // bare `hooks/cheese-bootstrap.sh` path (Codex/Copilot CLI), so the script
+    // must accompany the bundle on disk for the hook runner to find it.
+    const projectRoot = await mkdtemp(
+      path.join(os.tmpdir(), "cheese-flow-bootstrap-"),
+    );
+    createdDirectories.push(projectRoot);
+    await cp(path.resolve("agents"), path.join(projectRoot, "agents"), {
+      recursive: true,
+    });
+    await cp(path.resolve("skills"), path.join(projectRoot, "skills"), {
+      recursive: true,
+    });
+    await cp(path.resolve("hooks"), path.join(projectRoot, "hooks"), {
+      recursive: true,
+    });
+    await cp(path.resolve("hooks.json"), path.join(projectRoot, "hooks.json"));
+
+    await compileHarnessBundles({
+      projectRoot,
+      harnesses: ["claude-code", "codex", "copilot-cli"],
+    });
+
+    for (const bundle of [".claude", ".codex", ".copilot"]) {
+      const bootstrapPath = path.join(
+        projectRoot,
+        bundle,
+        "hooks",
+        "cheese-bootstrap.sh",
+      );
+      expect(
+        await pathExists(bootstrapPath),
+        `${bundle}/hooks/cheese-bootstrap.sh should exist`,
+      ).toBe(true);
+
+      const bundleHooks = JSON.parse(
+        await readFile(path.join(projectRoot, bundle, "hooks.json"), "utf8"),
+      ) as { hooks: Record<string, unknown> };
+
+      // The Claude Code bundle uses a literal hook-runner placeholder
+      // ({CLAUDE_PLUGIN_ROOT}); others reference the script path verbatim.
+      const flat = JSON.stringify(bundleHooks);
+      expect(flat).toContain("cheese-bootstrap.sh");
+      if (bundle === ".claude") {
+        const claudeRunRoot = "$" + "{CLAUDE_PLUGIN_ROOT}";
+        expect(flat).toContain(claudeRunRoot);
+      }
+    }
   });
 
   it("compiles a single harness bundle and returns its metadata", async () => {
@@ -580,12 +634,14 @@ describe("compileHarnessBundles", () => {
       harnesses: ["claude-code", "codex"],
     });
 
-    // claude-code: camelCase hooks
+    // claude-code: PascalCase + matcher wrapper (matches Claude Code's
+    // hooks.json schema; see issue #57)
     const claudeHooks = JSON.parse(
       await readFile(path.join(projectRoot, ".claude", "hooks.json"), "utf8"),
     ) as { hooks: Record<string, unknown> };
-    expect(claudeHooks.hooks).toHaveProperty("preToolUse");
-    expect(claudeHooks.hooks).toHaveProperty("postToolUse");
+    expect(claudeHooks.hooks).toHaveProperty("PreToolUse");
+    expect(claudeHooks.hooks).toHaveProperty("PostToolUse");
+    expect(claudeHooks.hooks).not.toHaveProperty("preToolUse");
 
     // codex: PascalCase hooks with matcher wrapper
     const codexHooks = JSON.parse(
