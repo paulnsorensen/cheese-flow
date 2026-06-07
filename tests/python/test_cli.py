@@ -8,18 +8,14 @@ top-level aliases.
 
 from __future__ import annotations
 
-import os
-
 from cheese_flow.cli import app
 from typer.testing import CliRunner
 
+# Help-text assertions below rely on Typer's plain (Click) help formatter, which
+# renders option names deterministically regardless of terminal width. The
+# session conftest sets ``TYPER_USE_RICH=0`` before typer is imported; with Rich
+# enabled, headless CI panels render with no body text and these assertions fail.
 runner = CliRunner()
-
-# Typer renders help through Rich, which wraps option names to the console
-# width (from ``COLUMNS``). Headless CI runners report a narrow width, so
-# long flags like ``--project-root`` wrap and break substring assertions.
-# Pin a wide width for every help-text assertion so rendering is deterministic.
-WIDE_ENV = {**os.environ, "COLUMNS": "300", "TERMINAL_WIDTH": "300"}
 
 
 def test_root_help_lists_all_seven_subcommands() -> None:
@@ -46,7 +42,7 @@ def test_root_help_lists_milknado_top_level_alias() -> None:
 
 def test_mcp_help_mentions_project_root_option() -> None:
     """Mirrors ``mcp-proxy.test.ts`` "wires up the mcp help" smoke."""
-    result = runner.invoke(app, ["mcp", "--help"], env=WIDE_ENV)
+    result = runner.invoke(app, ["mcp", "--help"])
     assert result.exit_code == 0
     assert "mcp" in result.stdout
     assert "Usage:" in result.stdout
@@ -55,7 +51,7 @@ def test_mcp_help_mentions_project_root_option() -> None:
 
 def test_milknado_help_mentions_project_root() -> None:
     """Mirrors ``milknado.test.ts`` "wires up milknado help" smoke."""
-    result = runner.invoke(app, ["milknado", "--help"], env=WIDE_ENV)
+    result = runner.invoke(app, ["milknado", "--help"])
     assert result.exit_code == 0
     assert "milknado" in result.stdout
     assert "Usage:" in result.stdout
@@ -69,27 +65,27 @@ def test_doctor_help_describes_purpose() -> None:
 
 
 def test_compile_help_documents_harness_flag() -> None:
-    result = runner.invoke(app, ["compile", "--help"], env=WIDE_ENV)
+    result = runner.invoke(app, ["compile", "--help"])
     assert result.exit_code == 0
     assert "-H" in result.stdout
     assert "--harness" in result.stdout
 
 
 def test_install_help_documents_harness_flag() -> None:
-    result = runner.invoke(app, ["install", "--help"], env=WIDE_ENV)
+    result = runner.invoke(app, ["install", "--help"])
     assert result.exit_code == 0
     assert "-H" in result.stdout
     assert "--harness" in result.stdout
 
 
 def test_lint_help_documents_project_root() -> None:
-    result = runner.invoke(app, ["lint", "--help"], env=WIDE_ENV)
+    result = runner.invoke(app, ["lint", "--help"])
     assert result.exit_code == 0
     assert "project-root" in result.stdout.lower()
 
 
 def test_session_start_help_documents_options() -> None:
-    result = runner.invoke(app, ["session-start", "--help"], env=WIDE_ENV)
+    result = runner.invoke(app, ["session-start", "--help"])
     assert result.exit_code == 0
     assert "--root" in result.stdout
     assert "--quiet" in result.stdout
