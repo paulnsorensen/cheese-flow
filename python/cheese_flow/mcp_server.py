@@ -109,14 +109,20 @@ MAX_SUMMARY_DESCRIPTION_LENGTH = 120
 _VALID_REASONS = frozenset({"new_file", "new_import", "new_call", "new_type_use"})
 
 
+def _require_str(d: dict, field: str) -> str:
+    value = d.get(field)
+    if not isinstance(value, str) or not value:
+        raise ValueError(f"{field!r} must be a non-empty string, got {value!r}")
+    return value
+
+
 def _dict_to_file_change(d: dict) -> FileChange:
-    _id = d.get("id")
-    if not isinstance(_id, str) or not _id:
-        raise ValueError(f"change 'id' must be a non-empty string, got {_id!r}")
-    path = d.get("path")
-    if not isinstance(path, str) or not path:
-        raise ValueError(f"change 'path' must be a non-empty string, got {path!r}")
-    symbols = [SymbolRef(name=s["name"], file=s["file"]) for s in d.get("symbols") or []]
+    _id = _require_str(d, "id")
+    path = _require_str(d, "path")
+    symbols = [
+        SymbolRef(name=_require_str(s, "name"), file=_require_str(s, "file"))
+        for s in d.get("symbols") or []
+    ]
     return FileChange(
         id=_id,
         path=path,
@@ -127,12 +133,12 @@ def _dict_to_file_change(d: dict) -> FileChange:
 
 
 def _dict_to_new_relationship(d: dict) -> NewRelationship:
-    reason = d["reason"]
+    reason = _require_str(d, "reason")
     if reason not in _VALID_REASONS:
         raise ValueError(f"invalid reason: {reason!r}; expected one of {sorted(_VALID_REASONS)}")
     return NewRelationship(
-        source_change_id=d["source_change_id"],
-        dependant_change_id=d["dependant_change_id"],
+        source_change_id=_require_str(d, "source_change_id"),
+        dependant_change_id=_require_str(d, "dependant_change_id"),
         reason=reason,
     )
 

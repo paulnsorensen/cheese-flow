@@ -42,6 +42,18 @@ def test_dict_to_file_change_rejects_missing_path() -> None:
         _dict_to_file_change({"id": "c1", "path": ""})
 
 
+def test_dict_to_file_change_rejects_symbol_missing_file() -> None:
+    # Agent-supplied MCP input must fail loud with a clear ValueError,
+    # not a bare KeyError, when a symbol omits its file.
+    with pytest.raises(ValueError, match="file"):
+        _dict_to_file_change({"id": "c1", "path": "src/foo.py", "symbols": [{"name": "foo"}]})
+
+
+def test_dict_to_new_relationship_rejects_missing_reason() -> None:
+    with pytest.raises(ValueError, match="reason"):
+        _dict_to_new_relationship({"source_change_id": "a", "dependant_change_id": "b"})
+
+
 def test_dict_to_new_relationship_rejects_invalid_reason() -> None:
     with pytest.raises(ValueError, match="invalid reason"):
         _dict_to_new_relationship(
