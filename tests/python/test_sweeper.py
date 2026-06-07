@@ -69,9 +69,7 @@ def test_respects_per_repo_milknado_days_override(tmp_path: Path) -> None:
     db = project_dir / "milknado" / "milknado.db"
     db.write_text("x", encoding="utf-8")
     _set_mtime(db, 10)
-    (project_dir / "shared" / "retention.toml").write_text(
-        "milknadoDays = 7\n", encoding="utf-8"
-    )
+    (project_dir / "shared" / "retention.toml").write_text("milknadoDays = 7\n", encoding="utf-8")
 
     report = sweep(SweepOptions(scope="all", home=str(home)))
 
@@ -331,9 +329,7 @@ def test_scope_project_sweeps_only_supplied_project_dir(tmp_path: Path) -> None:
     _set_mtime(db_a, 90)
     _set_mtime(db_b, 90)
 
-    report = sweep(
-        SweepOptions(scope="project", home=str(home), projectDir=str(a))
-    )
+    report = sweep(SweepOptions(scope="project", home=str(home), projectDir=str(a)))
 
     assert report["scannedProjects"] == 1
     reaped = [r["path"] for r in report["reaped"]]

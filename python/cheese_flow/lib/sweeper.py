@@ -192,9 +192,7 @@ def _reap_milknado(
     errors: list[SweepError],
 ) -> None:
     db = os.path.join(project_dir, "milknado", "milknado.db")
-    days = (
-        config.milknadoDays if config.milknadoDays is not None else config.defaultDays
-    )
+    days = config.milknadoDays if config.milknadoDays is not None else config.defaultDays
     if _is_older_than(db, now_ms, days):
         _reap(db, f"milknado.db older than {days}d", dry_run, reaped, errors)
 
@@ -230,12 +228,8 @@ def _sweep_worktree(
     reaped: list[ReapEntry],
     errors: list[SweepError],
 ) -> None:
-    wt_days = (
-        config.worktreeDays if config.worktreeDays is not None else config.defaultDays
-    )
-    if _is_older_than(worktree_dir, now_ms, wt_days) and not _sidecar_target_exists(
-        worktree_dir
-    ):
+    wt_days = config.worktreeDays if config.worktreeDays is not None else config.defaultDays
+    if _is_older_than(worktree_dir, now_ms, wt_days) and not _sidecar_target_exists(worktree_dir):
         _reap(
             worktree_dir,
             f"worktree dir older than {wt_days}d AND .path target gone",
@@ -257,11 +251,7 @@ def _reap_manifests(
     errors: list[SweepError],
 ) -> None:
     manifests = os.path.join(worktree_dir, "manifests")
-    days = (
-        config.manifestsDays
-        if config.manifestsDays is not None
-        else config.defaultDays
-    )
+    days = config.manifestsDays if config.manifestsDays is not None else config.defaultDays
     if _is_older_than(manifests, now_ms, days):
         _reap(manifests, f"manifests older than {days}d", dry_run, reaped, errors)
 
@@ -329,10 +319,7 @@ def _reap(
     if dry_run:
         return
     try:
-        tmp = (
-            f"{os.path.dirname(target)}/{ORPHAN_PREFIX}"
-            f"{_now_ms()}-{os.path.basename(target)}"
-        )
+        tmp = f"{os.path.dirname(target)}/{ORPHAN_PREFIX}{_now_ms()}-{os.path.basename(target)}"
         os.rename(target, tmp)
         if os.path.isdir(tmp) and not os.path.islink(tmp):
             shutil.rmtree(tmp, ignore_errors=True)
