@@ -159,7 +159,8 @@ def test_write_codex_marketplace_emits_trailing_newline(tmp_path: Path) -> None:
 
 @pytest.mark.parametrize("plugin_name", ["foo", "bar-baz", "cheese-flow"])
 def test_marketplace_name_is_plugin_name_with_local_suffix(
-    tmp_path: Path, plugin_name: str,
+    tmp_path: Path,
+    plugin_name: str,
 ) -> None:
     metadata: PluginMetadata = {
         "name": plugin_name,
