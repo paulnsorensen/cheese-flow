@@ -1,8 +1,8 @@
 {
   "mcpServers": {
     "milknado": {
-      "command": "npx",
-      "args": ["tsx", "src/index.ts", "mcp"]
+      "command": "uv",
+      "args": ["run", "cheese", "mcp"]
     },
     "tilth": {
       "command": "npx",

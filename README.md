@@ -2,7 +2,7 @@
 
 > _"The cheese must flow."_
 
-Opinionated scaffolding for portable agents and skills that can be compiled into harness-specific markdown bundles. Aged in TypeScript, served on Sliced Bread, paired nicely with Claude Code, Codex, Cursor, and Copilot. 🧀
+Opinionated scaffolding for portable agents and skills that can be compiled into harness-specific markdown bundles. Aged in Python, served on Sliced Bread, paired nicely with Claude Code, Codex, Cursor, and Copilot. 🧀
 
 ## Why Cheese? Two reasons:
 
@@ -11,38 +11,37 @@ Opinionated scaffolding for portable agents and skills that can be compiled into
 
 ## Stack choices
 
-- **CLI framework:** Commander.js, the most practical general-purpose TypeScript CLI choice for April 2026
-- **Object safety:** Zod
-- **Template engine:** Eta for portable template-to-markdown compilation
+- **CLI framework:** Typer — type-hint-driven Python CLIs that pair naturally with pydantic
+- **Object safety:** pydantic v2
+- **Template engine:** Jinja2 for portable template-to-markdown compilation
 - **Skill format:** Agent Skills compatible `SKILL.md`
+- **MCP server:** FastMCP — a single Python process exposes both `cheese_*` and `milknado_*` tools
 
 ## Repository layout
 
-- `src/` — TypeScript CLI and compiler
-- `agents/` — harness-agnostic Eta markdown templates
+- `python/cheese_flow/` — Python CLI, compiler, and unified MCP server
+- `python/milknado/` — sovereign milknado slice (graph + planning, OR-Tools)
+- `agents/` — harness-agnostic Jinja2 markdown templates
 - `skills/` — portable Agent Skills definitions
 - `references/` — long-form architectural references (Sliced Bread, etc.)
 - `.claude-plugin/` — Claude Code + Copilot CLI plugin manifest
 - `.cursor-plugin/` — Cursor plugin manifest
-- `.mcp.json` — shared MCP server declarations (tilth, Context7, Tavily)
+- `.mcp.json` — shared MCP server declarations (cheese-flow, tilth, Context7, Tavily)
 - `.claude/` / `.codex/` / `.cursor/` / `.copilot/` — generated harness bundles (gitignored)
 
 ## Getting started
 
-Host prerequisites: Node 22+, `uv`, and `sg` (ast-grep) on `PATH`. The repo's
-`@ast-grep/cli` devDependency keeps a copy in `node_modules/.bin` for the build,
-but agent prompts shell out to bare `sg`, so install it globally too:
-`brew install ast-grep`, `cargo install ast-grep`, or `npm i -g @ast-grep/cli`.
+Host prerequisites: `uv` and `sg` (ast-grep) on `PATH`. Install ast-grep
+globally with `brew install ast-grep` or `cargo install ast-grep`.
 
 ```bash
-npm install
-npm run build
+uv sync --group dev
 
 # Emit bundles for every harness
-npm run compile:all
+uv run cheese compile
 
 # Install into whichever local harnesses are detected
-npm run install:auto
+uv run cheese install
 ```
 
 Or use the repository automation entrypoints:
@@ -56,20 +55,17 @@ Or target specific harnesses directly:
 
 ```bash
 # Bundle emission
-npx tsx src/index.ts compile
-npx tsx src/index.ts compile --harness claude-code,copilot-cli
-npx tsx src/index.ts compile --harness claude-code,codex,cursor,copilot-cli
+uv run cheese compile
+uv run cheese compile --harness claude-code,copilot-cli
+uv run cheese compile --harness claude-code,codex,cursor,copilot-cli
 
 # Local installation (auto-detect by default)
-npx tsx src/index.ts install
-npx tsx src/index.ts install --harness cursor,copilot-cli
-npx tsx src/index.ts install --harness claude-code,codex
-
-# Force every harness instead of auto-detect
-npm run install:all
+uv run cheese install
+uv run cheese install --harness cursor,copilot-cli
+uv run cheese install --harness claude-code,codex
 
 # Python demo
-npx tsx src/index.ts milknado
+uv run cheese milknado
 ```
 
 `cheese compile` emits harness bundles for repo authors and CI. `cheese install`
@@ -92,43 +88,42 @@ Examples:
 
 ```bash
 # Auto-detect installed harnesses and install only those
-npx tsx src/index.ts install
+uv run cheese install
 
 # Explicit multi-harness install
-npx tsx src/index.ts install --harness cursor,copilot-cli
+uv run cheese install --harness cursor,copilot-cli
 
 # Bundle emission only, then manual bundle-surface install
-npx tsx src/index.ts compile --harness claude-code,codex
+uv run cheese compile --harness claude-code,codex
 claude plugin marketplace add ./.claude
 codex plugin marketplace add ./.codex
 ```
 
-Once the package is built or published, the same TUI demo is available through:
+Once published to PyPI, install globally with:
 
 ```bash
-npx cheese-flow milknado
+uv tool install cheese-flow
+cheese milknado
 ```
 
 ## What `compile` does
 
-- Validates Agent Skills frontmatter with Zod
-- Validates agent template metadata with Zod
+- Validates Agent Skills frontmatter with pydantic
+- Validates agent template metadata with pydantic
 - Compiles `agents/*.md.eta` into plain markdown for the selected harness
 - Copies `skills/*/SKILL.md` into the harness bundle
 - Writes a small manifest for the generated bundle
 
 ## `milknado`
 
-- Runs a Python backend through `uv run --project ...`
+- Runs the milknado Python backend in-process (same `cheese` interpreter)
 - Streams the Rich-rendered terminal UI to stdout/stderr
 - Uses OR-Tools to solve and display a small linear optimization result
-- Requires `uv` on `PATH`
 
 ## Quality gates
 
-- `just build` installs deps, formats, lints with autofix, typechecks, builds, and runs tests with coverage thresholds
+- `just build` installs deps, formats, lints with autofix, and runs the pytest suite
 - `just build-ci` uses the same checks without autofix and is what CI runs
-- Vitest coverage thresholds are set above 90% for statements, branches, functions, and lines
 
 ## Example bundle/install surfaces
 
