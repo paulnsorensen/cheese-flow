@@ -140,9 +140,7 @@ def _build_auto_detect_install_plan(
         _build_plan_entry(
             _BuildPlanEntryOptions(
                 harness=harness,
-                selection="selected"
-                if detections[harness]["state"] == "detected"
-                else "skipped",
+                selection="selected" if detections[harness]["state"] == "detected" else "skipped",
                 detection=detections[harness],
             )
         )
