@@ -136,9 +136,7 @@ async def default_command_executor(
     stdout = stdout_bytes.decode("utf-8", errors="replace")
     stderr = stderr_bytes.decode("utf-8", errors="replace")
     if process.returncode != 0:
-        error = RuntimeError(
-            f"{command} {' '.join(args)} exited with code {process.returncode}"
-        )
+        error = RuntimeError(f"{command} {' '.join(args)} exited with code {process.returncode}")
         error.stdout = stdout  # type: ignore[attr-defined]
         error.stderr = stderr  # type: ignore[attr-defined]
         raise error
@@ -363,8 +361,7 @@ async def _install_copilot_cli_bundle(
         return {
             "state": "failed",
             "reason": (
-                'GitHub Copilot CLI requires the "copilot" command on PATH to '
-                "finish installation."
+                'GitHub Copilot CLI requires the "copilot" command on PATH to finish installation.'
             ),
             "nextSteps": [f"Install GitHub Copilot CLI, then run {install_command}."],
         }
@@ -397,9 +394,7 @@ async def _install_claude_code_bundle(
         context.bundle.pluginMetadata,
     )
     claude_path = await context.findCommand("claude")
-    add_command = (
-        f"claude plugin marketplace add {_shell_quote(context.bundle.outputRoot)}"
-    )
+    add_command = f"claude plugin marketplace add {_shell_quote(context.bundle.outputRoot)}"
     reason = (
         'Claude Code still requires manual installation, and the "claude" CLI is not '
         "on PATH for the marketplace-add step."
@@ -427,9 +422,7 @@ async def _install_codex_bundle(
         context.bundle.pluginMetadata,
     )
     codex_path = await context.findCommand("codex")
-    add_command = (
-        f"codex plugin marketplace add {_shell_quote(context.bundle.outputRoot)}"
-    )
+    add_command = f"codex plugin marketplace add {_shell_quote(context.bundle.outputRoot)}"
     reason = (
         'Codex still requires manual installation, and the "codex" CLI is not on '
         "PATH for the marketplace-add step."

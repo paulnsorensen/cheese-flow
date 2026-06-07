@@ -77,9 +77,7 @@ def _make_environment(
     async def has_directory(directory_path: str) -> bool:
         return directory_path in surface_set
 
-    async def execute_command(
-        command: str, args: list[str], cwd: str
-    ) -> CommandExecutionResult:
+    async def execute_command(command: str, args: list[str], cwd: str) -> CommandExecutionResult:
         if on_execute is not None:
             on_execute(command, args, cwd)
         return {"stdout": "", "stderr": ""}
@@ -174,21 +172,15 @@ def test_auto_detects_claude_code_and_codex_from_path_and_reports_manual_next_st
     assert "[manual] Codex" in output
     assert "[skipped] Cursor" in output
     assert "[skipped] GitHub Copilot CLI" in output
-    assert (
-        f"claude plugin marketplace add {json.dumps(str(project_root / '.claude'))}"
-    ) in output
-    assert (
-        f"codex plugin marketplace add {json.dumps(str(project_root / '.codex'))}"
-    ) in output
+    assert (f"claude plugin marketplace add {json.dumps(str(project_root / '.claude'))}") in output
+    assert (f"codex plugin marketplace add {json.dumps(str(project_root / '.codex'))}") in output
     assert (
         'Open Claude Code, run /plugin, then install "cheese-flow" from "cheese-flow-local".'
     ) in output
     assert "Restart Codex." in output
     assert "Guidance:" not in output
     assert (project_root / ".claude" / ".claude-plugin" / "marketplace.json").exists()
-    assert (
-        project_root / ".codex" / ".agents" / "plugins" / "marketplace.json"
-    ).exists()
+    assert (project_root / ".codex" / ".agents" / "plugins" / "marketplace.json").exists()
 
 
 def test_marks_claude_code_and_codex_as_manual_and_emits_local_marketplace_helpers(
@@ -210,13 +202,9 @@ def test_marks_claude_code_and_codex_as_manual_and_emits_local_marketplace_helpe
 
     assert report["ok"] is False
     assert "[manual] Claude Code" in output
-    assert (
-        f"claude plugin marketplace add {json.dumps(str(project_root / '.claude'))}"
-    ) in output
+    assert (f"claude plugin marketplace add {json.dumps(str(project_root / '.claude'))}") in output
     assert "[manual] Codex" in output
-    assert (
-        f"codex plugin marketplace add {json.dumps(str(project_root / '.codex'))}"
-    ) in output
+    assert (f"codex plugin marketplace add {json.dumps(str(project_root / '.codex'))}") in output
     assert "Restart Codex." in output
     assert 'Open /plugins, choose "cheese-flow-local"' in output
 
@@ -228,9 +216,9 @@ def test_marks_claude_code_and_codex_as_manual_and_emits_local_marketplace_helpe
     assert claude_marketplace["plugins"][0]["source"] == "./"
 
     codex_marketplace = json.loads(
-        (
-            project_root / ".codex" / ".agents" / "plugins" / "marketplace.json"
-        ).read_text(encoding="utf-8")
+        (project_root / ".codex" / ".agents" / "plugins" / "marketplace.json").read_text(
+            encoding="utf-8"
+        )
     )
     assert codex_marketplace["plugins"][0]["source"] == {
         "source": "local",
@@ -260,17 +248,13 @@ def test_parses_repeated_harness_overrides_and_bypasses_auto_detect_for_other_ha
     report = asyncio.run(
         install_harnesses(
             project_root=str(project_root),
-            requested_harnesses=parse_harness_overrides(
-                ["cursor,copilot-cli", "cursor"]
-            ),
+            requested_harnesses=parse_harness_overrides(["cursor,copilot-cli", "cursor"]),
             environment=environment,
         )
     )
     output = format_install_report(report)
 
-    assert (
-        len([line for line in output.split("\n") if "[installed] Cursor" in line]) == 1
-    )
+    assert len([line for line in output.split("\n") if "[installed] Cursor" in line]) == 1
     assert "[installed] GitHub Copilot CLI" in output
     assert "[skipped] Claude Code" in output
     assert "[skipped] Codex" in output
