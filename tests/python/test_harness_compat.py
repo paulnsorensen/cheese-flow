@@ -74,9 +74,7 @@ def test_flags_lowercase_permission_glob_syntax() -> None:
 
 
 def test_returns_no_findings_for_skills_using_only_portable_fields() -> None:
-    assert (
-        check_frontmatter_portability({"name": "x", "description": "y"}, "skill") == []
-    )
+    assert check_frontmatter_portability({"name": "x", "description": "y"}, "skill") == []
 
 
 def test_flags_model_and_context_fork_on_a_skill_2_findings() -> None:
@@ -228,8 +226,7 @@ def test_does_not_flag_camelcase_hook_events() -> None:
 def test_does_not_flag_camelcase_stop_in_body() -> None:
     findings = check_body_harness_idioms("Fires stop, subagentStop events.")
     assert not any(
-        f["rule"] in {"body-pascal-hook-event", "body-harness-only-hook-event"}
-        for f in findings
+        f["rule"] in {"body-pascal-hook-event", "body-harness-only-hook-event"} for f in findings
     )
 
 
@@ -258,9 +255,7 @@ def test_flags_harness_specific_path_markers() -> None:
 def test_attaches_a_1_based_line_number_to_each_body_finding() -> None:
     body = "line 1\nline 2 with Agent(\nline 3\n"
     findings = check_body_harness_idioms(body)
-    agent_finding = next(
-        (f for f in findings if f["rule"] == "body-claude-only-tool"), None
-    )
+    agent_finding = next((f for f in findings if f["rule"] == "body-claude-only-tool"), None)
     assert agent_finding is not None
     assert agent_finding.get("line") == 2
 

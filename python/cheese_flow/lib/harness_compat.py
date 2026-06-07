@@ -86,8 +86,6 @@ def check_frontmatter_portability(
     findings: list[HarnessCompatFinding] = []
 
     for key, supported_by in support.items():
-        if frontmatter.get(key) is None and key not in frontmatter:
-            continue
         if frontmatter.get(key) is None:
             continue
         if len(supported_by) == len(all_adapters):
@@ -95,9 +93,7 @@ def check_frontmatter_portability(
         if key == "context" and frontmatter[key] == "inline":
             continue
 
-        unsupported: list[HarnessName] = [
-            n for n in all_adapters if n not in supported_by
-        ]
+        unsupported: list[HarnessName] = [n for n in all_adapters if n not in supported_by]
         supported_names = ", ".join(_display_name(n) for n in supported_by)
         unsupported_names = ", ".join(_display_name(n) for n in unsupported)
         findings.append(
@@ -181,9 +177,7 @@ def _collect_tool_findings(body: str) -> list[HarnessCompatFinding]:
 def _collect_event_findings(body: str) -> list[HarnessCompatFinding]:
     all_adapters: list[HarnessName] = list(HARNESS_ADAPTERS.keys())
     hook_adapter_count = sum(
-        1
-        for n in all_adapters
-        if len(HARNESS_ADAPTERS[n].capabilities.hookEvents) > 0
+        1 for n in all_adapters if len(HARNESS_ADAPTERS[n].capabilities.hookEvents) > 0
     )
     findings: list[HarnessCompatFinding] = []
     for camel_event, supported_by in event_support().items():
@@ -224,9 +218,7 @@ def _event_finding(
             ),
             "line": line,
         }
-    unsupported: list[HarnessName] = [
-        n for n in all_adapters if n not in supported_by
-    ]
+    unsupported: list[HarnessName] = [n for n in all_adapters if n not in supported_by]
     supported_names = ", ".join(_display_name(n) for n in supported_by)
     unsupported_names = ", ".join(_display_name(n) for n in unsupported)
     return {
@@ -266,9 +258,7 @@ async def _setup_skill_dir(tmp_root: Path, skill_name: str, skill_source: str) -
     skills_dir = tmp_root / "skills"
     skill_dir = skills_dir / skill_name
     await asyncio.to_thread(skill_dir.mkdir, parents=True, exist_ok=True)
-    await asyncio.to_thread(
-        (skill_dir / "SKILL.md").write_text, skill_source, encoding="utf8"
-    )
+    await asyncio.to_thread((skill_dir / "SKILL.md").write_text, skill_source, encoding="utf8")
     return skills_dir
 
 
@@ -280,9 +270,7 @@ async def _try_adapter_install(
     output_root = tmp_root / adapter.outputRoot
     skill_output_root = output_root / adapter.skillDirectory
     try:
-        await asyncio.to_thread(
-            skill_output_root.mkdir, parents=True, exist_ok=True
-        )
+        await asyncio.to_thread(skill_output_root.mkdir, parents=True, exist_ok=True)
         await _simulate_copy_skills(skills_dir, skill_output_root)
         if adapter.emitSurface is not None:
             await adapter.emitSurface(str(skills_dir), str(output_root))
@@ -291,9 +279,7 @@ async def _try_adapter_install(
         return {
             "rule": f"compile-{adapter.name}-failed",
             "severity": "error",
-            "message": (
-                f"{adapter.displayName} adapter failed to emit: {error}"
-            ),
+            "message": (f"{adapter.displayName} adapter failed to emit: {error}"),
         }
 
 
@@ -301,15 +287,12 @@ async def _simulate_copy_skills(skills_dir: Path, skill_output_root: Path) -> No
     entries = await asyncio.to_thread(_list_directories, skills_dir)
     for entry in entries:
         skill_readme_path = entry / "SKILL.md"
-        content = await asyncio.to_thread(
-            skill_readme_path.read_text, encoding="utf8"
-        )
+        content = await asyncio.to_thread(skill_readme_path.read_text, encoding="utf8")
         parsed_data, _ = parse_frontmatter(content)
         frontmatter = parse_skill_frontmatter(parsed_data)
         if frontmatter.name != entry.name:
             raise ValueError(
-                f'Skill directory "{entry.name}" must match frontmatter '
-                f'name "{frontmatter.name}".'
+                f'Skill directory "{entry.name}" must match frontmatter name "{frontmatter.name}".'
             )
         destination = skill_output_root / entry.name
         await asyncio.to_thread(_copy_tree_force, entry, destination)
@@ -325,13 +308,9 @@ def _copy_tree_force(source: Path, destination: Path) -> None:
     shutil.copytree(source, destination)
 
 
-async def compile_test_skill(
-    skill_name: str, skill_source: str
-) -> list[HarnessCompatFinding]:
+async def compile_test_skill(skill_name: str, skill_source: str) -> list[HarnessCompatFinding]:
     findings: list[HarnessCompatFinding] = []
-    tmp_root = Path(
-        await asyncio.to_thread(tempfile.mkdtemp, prefix="cheese-compile-")
-    )
+    tmp_root = Path(await asyncio.to_thread(tempfile.mkdtemp, prefix="cheese-compile-"))
     try:
         skills_dir = await _setup_skill_dir(tmp_root, skill_name, skill_source)
         for adapter in _ordered_adapters():
