@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from typing import Any
 
 from cheese_flow.lib.harness import (
@@ -22,7 +23,7 @@ _PASCAL_MAP: dict[str, str] = {
 
 _DEFAULT_HOOK_TIMEOUT = 600
 
-_EMPTY_AGENT_KEYS: frozenset[str] = frozenset()
+_EMPTY_AGENT_KEYS: tuple[str, ...] = ()
 
 
 def _pick_manifest_paths(
@@ -103,8 +104,16 @@ def _build_skills_appendix(skills: list[str]) -> str:
 
 def build_base_agent_artifact(
     artifact_input: AgentArtifactInput,
-    agent_frontmatter_keys: frozenset[str],
+    agent_frontmatter_keys: Iterable[str],
 ) -> AgentArtifact:
+    """Build the agent artifact, iterating ``agent_frontmatter_keys`` in order.
+
+    The TS implementation iterates a ``Set`` whose insertion order matches the
+    declared key tuple; Python ``frozenset`` is unordered, so callers must pass
+    an ordered iterable (tuple/list) to keep the rendered YAML byte-identical.
+    """
+    keys = tuple(agent_frontmatter_keys)
+    key_set: frozenset[str] = frozenset(keys)
     frontmatter = artifact_input.frontmatter
     data: dict[str, Any] = {
         "name": frontmatter["name"],
@@ -115,7 +124,7 @@ def build_base_agent_artifact(
     if len(tools) > 0:
         data["tools"] = tools
     raw: dict[str, Any] = dict(frontmatter)
-    for key in agent_frontmatter_keys:
+    for key in keys:
         value = raw.get(key)
         if value is None:
             continue
@@ -123,11 +132,7 @@ def build_base_agent_artifact(
             continue
         data[key] = value
     skills = frontmatter["skills"]
-    appendix = (
-        ""
-        if "skills" in agent_frontmatter_keys or len(skills) == 0
-        else _build_skills_appendix(skills)
-    )
+    appendix = "" if "skills" in key_set or len(skills) == 0 else _build_skills_appendix(skills)
     return AgentArtifact(frontmatter=data, appendix=appendix)
 
 

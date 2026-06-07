@@ -19,15 +19,14 @@ from cheese_flow.lib.harness import (
     PortableHooks,
 )
 
-CLAUDE_AGENT_KEYS: frozenset[str] = frozenset(
-    {
-        "skills",
-        "color",
-        "effort",
-        "disallowedTools",
-        "permissionMode",
-    },
+CLAUDE_AGENT_KEY_ORDER: tuple[str, ...] = (
+    "skills",
+    "color",
+    "effort",
+    "disallowedTools",
+    "permissionMode",
 )
+CLAUDE_AGENT_KEYS: frozenset[str] = frozenset(CLAUDE_AGENT_KEY_ORDER)
 
 CLAUDE_MANIFEST_KEYS: tuple[str, ...] = (
     "agents",
@@ -50,7 +49,7 @@ def _build_hook_config(portable: PortableHooks) -> dict[str, Any]:
 
 
 def _build_agent_artifact(artifact_input: AgentArtifactInput) -> AgentArtifact:
-    return build_base_agent_artifact(artifact_input, CLAUDE_AGENT_KEYS)
+    return build_base_agent_artifact(artifact_input, CLAUDE_AGENT_KEY_ORDER)
 
 
 claude_code_adapter = HarnessAdapter(
