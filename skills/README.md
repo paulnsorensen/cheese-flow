@@ -237,9 +237,7 @@ should not need to know each target filesystem layout.
 Skills are linted against the [Agent Skills format](https://agentskills.io/specification):
 
 ```bash
-npm run lint:skills
-# or
-npx tsx src/index.ts lint
+uv run cheese lint
 ```
 
 The linter enforces:
