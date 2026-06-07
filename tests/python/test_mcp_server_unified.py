@@ -67,7 +67,8 @@ def test_milknado_plan_batches_tool_executes_end_to_end() -> None:
     result = fn(
         changes=[{"id": "c1", "path": "src/ok.py", "edit_kind": "modify"}],
     )
-    assert result["solver_status"] == "STUB"
+    assert "solver_status" in result
+    assert result["solver_status"] in {"OPTIMAL", "FEASIBLE", "INFEASIBLE", "UNKNOWN"}
     assert result["batches"][0]["change_ids"] == ["c1"]
 
 
