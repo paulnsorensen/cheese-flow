@@ -1,10 +1,8 @@
 """Port of `src/lib/session-start.ts` — update checks + housekeeping.
 
 Mirrors the TS surface: ``check_for_update``, ``should_check_update``,
-``record_nudged_version``, ``run_session_start``. The TS module imports
-``ensureCheeseHome`` from ``./cheese-home.ts``; US-012 hasn't ported
-``cheese-home.ts`` yet, so this file inlines the minimal surface
-(``_ensure_cheese_home``). When US-012 lands, the inlined helper moves there.
+``record_nudged_version``, ``run_session_start``. Delegates to
+``cheese_home.ensure_cheese_home`` for the ``~/.cheese`` tree.
 
 The TS abort/timeout protocol on ``fetch`` translates to ``asyncio.wait_for``:
 the abort behaviour under test ("returns null when fetch times out") is
@@ -15,8 +13,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-import os
-import subprocess
 import sys
 import time
 import urllib.request
@@ -26,6 +22,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from cheese_flow.lib.cheese_home import CheeseHomeOptions, ensure_cheese_home
 from cheese_flow.lib.sweeper import SweepOptions, SweepReport, sweep
 
 DEFAULT_REGISTRY_URL = "https://registry.npmjs.org/cheese-flow/latest"
@@ -227,7 +224,7 @@ async def run_session_start(opts: RunSessionStartOptions) -> SessionStartResult:
     def remaining_ms() -> int:
         return int((deadline - time.monotonic()) * 1000)
 
-    paths = _ensure_cheese_home(opts.cwd, home=opts.home)
+    paths = ensure_cheese_home(opts.cwd, CheeseHomeOptions(home=opts.home))
 
     result = SessionStartResult(ok=True)
 
@@ -270,68 +267,3 @@ async def run_session_start(opts: RunSessionStartOptions) -> SessionStartResult:
                 _record_check(paths.root, update.latestVersion, prior, now)
 
     return result
-
-
-# ---------- inlined cheese-home helper (US-012 will absorb this) ----------
-
-
-@dataclass
-class _CheeseHomePaths:
-    root: str
-    projectDir: str
-    milknadoDb: str
-    worktreeDir: str
-    manifestsDir: str
-    runsDir: str
-    sharedDir: str
-
-
-def _path_slug(abs_path: str) -> str:
-    return abs_path.replace("/", "-")
-
-
-def _discover_canonical_repo(cwd: str) -> str:
-    try:
-        result = subprocess.run(
-            ["git", "worktree", "list", "--porcelain"],
-            cwd=cwd,
-            capture_output=True,
-            text=True,
-            check=True,
-        )
-    except (subprocess.CalledProcessError, FileNotFoundError) as error:
-        raise RuntimeError(
-            f"discoverCanonicalRepo: {cwd} is not inside a git repo: {error}"
-        ) from error
-    out = result.stdout
-    first_line = out.split("\n", 1)[0] if out else ""
-    if not first_line.startswith("worktree "):
-        raise RuntimeError(
-            f"discoverCanonicalRepo: {cwd} is not inside a git worktree (no 'worktree' line)"
-        )
-    return str(Path(first_line[len("worktree ") :]).resolve())
-
-
-def _ensure_cheese_home(cwd: str, *, home: str | None = None) -> _CheeseHomePaths:
-    root = home if home is not None else str(Path.home() / ".cheese")
-    canonical_repo = _discover_canonical_repo(cwd)
-    repo_slug = _path_slug(canonical_repo)
-    worktree_path = str(Path(cwd).resolve())
-    wt_slug = _path_slug(worktree_path)
-    project_dir = os.path.join(root, "projects", repo_slug)
-    worktree_dir = os.path.join(project_dir, "worktrees", wt_slug)
-    paths = _CheeseHomePaths(
-        root=root,
-        projectDir=project_dir,
-        milknadoDb=os.path.join(project_dir, "milknado", "milknado.db"),
-        worktreeDir=worktree_dir,
-        manifestsDir=os.path.join(worktree_dir, "manifests"),
-        runsDir=os.path.join(worktree_dir, "runs"),
-        sharedDir=os.path.join(project_dir, "shared"),
-    )
-    os.makedirs(os.path.dirname(paths.milknadoDb), exist_ok=True)
-    os.makedirs(paths.manifestsDir, exist_ok=True)
-    os.makedirs(paths.runsDir, exist_ok=True)
-    os.makedirs(paths.sharedDir, exist_ok=True)
-    Path(worktree_dir, ".path").write_text(f"{worktree_path}\n", encoding="utf-8")
-    return paths

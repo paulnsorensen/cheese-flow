@@ -5,10 +5,9 @@ entries and any non-fatal errors. Atomic deletion via rename-into-orphan-then-rm
 24h debounce via ``.last-sweep`` mtime, per-repo retention overrides via
 ``shared/retention.toml``.
 
-The TS module imports ``readRetentionConfig`` and ``RetentionConfig`` from
-``./cheese-home.ts``. US-012 hasn't ported ``cheese-home.ts`` yet, so this file
-inlines the minimal retention-config surface. When US-012 lands, the inlined
-helpers can move there.
+Retention-config surface lives in ``cheese_home`` (port of
+``src/lib/cheese-home.ts``); this module re-exports ``RetentionConfig`` for
+existing import sites.
 """
 
 from __future__ import annotations
@@ -21,27 +20,21 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal, TypedDict
 
+from cheese_flow.lib.cheese_home import RetentionConfig, read_retention_config
+
 DEBOUNCE_MS = 24 * 60 * 60 * 1000
 ORPHAN_PREFIX = ".reap-"
-DEFAULT_RETENTION_DAYS = 30
-_RETENTION_NUMERIC_KEYS: frozenset[str] = frozenset(
-    {
-        "defaultDays",
-        "milknadoDays",
-        "manifestsDays",
-        "runsDays",
-        "worktreeDays",
-    }
-)
 
-
-@dataclass
-class RetentionConfig:
-    defaultDays: int = DEFAULT_RETENTION_DAYS
-    milknadoDays: int | None = None
-    manifestsDays: int | None = None
-    runsDays: int | None = None
-    worktreeDays: int | None = None
+__all__ = [
+    "DEBOUNCE_MS",
+    "ORPHAN_PREFIX",
+    "ReapEntry",
+    "RetentionConfig",
+    "SweepError",
+    "SweepOptions",
+    "SweepReport",
+    "sweep",
+]
 
 
 class ReapEntry(TypedDict):
@@ -82,47 +75,6 @@ def _to_now_ms(now: float | None) -> int:
     return int(now)
 
 
-def _read_retention_config(project_dir: str) -> RetentionConfig:
-    toml_path = Path(project_dir) / "shared" / "retention.toml"
-    try:
-        body = toml_path.read_text(encoding="utf-8")
-    except OSError:
-        return RetentionConfig()
-    return _parse_retention_toml(body)
-
-
-def _strip_comment(line: str) -> str:
-    hash_idx = line.find("#")
-    return line if hash_idx < 0 else line[:hash_idx]
-
-
-def _parse_retention_toml(body: str) -> RetentionConfig:
-    config: dict[str, int] = {"defaultDays": DEFAULT_RETENTION_DAYS}
-    for raw_line in body.splitlines():
-        line = _strip_comment(raw_line).strip()
-        if line == "" or line.startswith("["):
-            continue
-        eq = line.find("=")
-        if eq < 0:
-            continue
-        key = line[:eq].strip()
-        value = line[eq + 1 :].strip()
-        if key not in _RETENTION_NUMERIC_KEYS:
-            continue
-        try:
-            parsed = int(value, 10)
-        except ValueError:
-            continue
-        config[key] = parsed
-    return RetentionConfig(
-        defaultDays=config.get("defaultDays", DEFAULT_RETENTION_DAYS),
-        milknadoDays=config.get("milknadoDays"),
-        manifestsDays=config.get("manifestsDays"),
-        runsDays=config.get("runsDays"),
-        worktreeDays=config.get("worktreeDays"),
-    )
-
-
 def sweep(opts: SweepOptions) -> SweepReport:
     start = _now_ms()
     now_ms = _to_now_ms(opts.now)
@@ -140,7 +92,7 @@ def sweep(opts: SweepOptions) -> SweepReport:
     reaped: list[ReapEntry] = []
     errors: list[SweepError] = []
     for project_dir in project_dirs:
-        config = _read_retention_config(project_dir)
+        config = read_retention_config(project_dir)
         _sweep_project(project_dir, config, now_ms, opts.dryRun, reaped, errors)
     if not opts.dryRun:
         _touch_file(last_sweep, now_ms)
