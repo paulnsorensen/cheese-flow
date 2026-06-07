@@ -80,17 +80,13 @@ def test_creates_deep_non_existent_output_root_path(tmp_path: Path) -> None:
 def test_second_write_to_same_harness_overwrites_first(tmp_path: Path) -> None:
     emit_plugin_manifest("claude-code", BASE_METADATA, tmp_path)
     emit_plugin_manifest("claude-code", {**BASE_METADATA, "version": "9.9.9"}, tmp_path)
-    manifest = json.loads(
-        (tmp_path / ".claude-plugin" / "plugin.json").read_text(encoding="utf-8")
-    )
+    manifest = json.loads((tmp_path / ".claude-plugin" / "plugin.json").read_text(encoding="utf-8"))
     assert manifest["version"] == "9.9.9"
 
 
 def test_copilot_cli_manifest_includes_category_and_strict_fields(tmp_path: Path) -> None:
     emit_plugin_manifest("copilot-cli", BASE_METADATA, tmp_path)
-    manifest = json.loads(
-        (tmp_path / ".claude-plugin" / "plugin.json").read_text(encoding="utf-8")
-    )
+    manifest = json.loads((tmp_path / ".claude-plugin" / "plugin.json").read_text(encoding="utf-8"))
     assert manifest["category"] == "development"
     assert manifest["strict"] is True
 
@@ -98,9 +94,7 @@ def test_copilot_cli_manifest_includes_category_and_strict_fields(tmp_path: Path
 def test_cursor_manifest_includes_homepage_and_keywords_when_supplied(tmp_path: Path) -> None:
     metadata = {**BASE_METADATA, "homepage": "https://example.com", "keywords": ["a", "b"]}
     emit_plugin_manifest("cursor", metadata, tmp_path)
-    manifest = json.loads(
-        (tmp_path / ".cursor-plugin" / "plugin.json").read_text(encoding="utf-8")
-    )
+    manifest = json.loads((tmp_path / ".cursor-plugin" / "plugin.json").read_text(encoding="utf-8"))
     assert manifest["homepage"] == "https://example.com"
     assert manifest["keywords"] == ["a", "b"]
 

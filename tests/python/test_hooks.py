@@ -122,9 +122,7 @@ def test_places_bootstrap_command_at_structurally_correct_path_per_harness(
     copilot_config = json.loads((copilot_root / "hooks.json").read_text(encoding="utf-8"))
     assert copilot_config["version"] == 1
     assert len(copilot_config["hooks"]["sessionStart"]) == 1
-    assert (
-        copilot_config["hooks"]["sessionStart"][0]["command"] == "bash hooks/cheese-bootstrap.sh"
-    )
+    assert copilot_config["hooks"]["sessionStart"][0]["command"] == "bash hooks/cheese-bootstrap.sh"
 
 
 def test_skips_emission_for_cursor_when_bootstrap_hook_disabled(tmp_path: Path) -> None:

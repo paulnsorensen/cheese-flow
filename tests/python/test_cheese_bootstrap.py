@@ -144,7 +144,7 @@ def test_invokes_session_start_when_present_and_continues_on_nonzero_exit(
     call_log = cwd / "cheese-call.log"
     shim_dir = _make_shim_dir(
         tmp_path,
-        f'#!/usr/bin/env bash\nprintf \'%s\\n\' "$@" > {call_log!s}\nexit 7\n',
+        f"#!/usr/bin/env bash\nprintf '%s\\n' \"$@\" > {call_log!s}\nexit 7\n",
     )
     new_path = f"{shim_dir}:{os.environ.get('PATH', '')}"
 
@@ -163,7 +163,7 @@ def test_invokes_session_start_with_root_pointing_at_worktree(tmp_path: Path) ->
     call_log = cwd / "cheese-call.log"
     shim_dir = _make_shim_dir(
         tmp_path,
-        f'#!/usr/bin/env bash\nprintf \'%s\\n\' "$@" > {call_log!s}\nexit 0\n',
+        f"#!/usr/bin/env bash\nprintf '%s\\n' \"$@\" > {call_log!s}\nexit 0\n",
     )
     new_path = f"{shim_dir}:{os.environ.get('PATH', '')}"
 
