@@ -53,8 +53,7 @@ TOOL_CHECKS: list[ToolCheck] = [
         tier="required",
         purpose="Tree-sitter code intelligence used by exploration skills.",
         installHint=(
-            "Bundled with cheese-flow. If missing, install globally: "
-            "npm install -g cheese-flow"
+            "Bundled with cheese-flow. If missing, install globally: npm install -g cheese-flow"
         ),
     ),
     ToolCheck(
@@ -76,9 +75,7 @@ def _spawn_env() -> dict[str, str]:
     env = dict(os.environ)
     existing_path = env.get("PATH", "")
     env["PATH"] = (
-        f"{BUNDLED_BIN_DIR}{os.pathsep}{existing_path}"
-        if existing_path
-        else BUNDLED_BIN_DIR
+        f"{BUNDLED_BIN_DIR}{os.pathsep}{existing_path}" if existing_path else BUNDLED_BIN_DIR
     )
     return env
 

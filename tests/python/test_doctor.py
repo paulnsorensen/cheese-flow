@@ -99,16 +99,8 @@ def test_format_report_renders_missing_results_with_install_hint() -> None:
 def test_has_blocking_failure_is_true_only_for_missing_required_tools() -> None:
     assert has_blocking_failure([_result(tier="required", ok=False)]) is True
     assert has_blocking_failure([_result(tier="required", ok=True)]) is False
-    assert (
-        has_blocking_failure([_result(name="rtk", tier="suggested", ok=False)])
-        is False
-    )
-    assert (
-        has_blocking_failure(
-            [_result(name="mergiraf", tier="recommended", ok=False)]
-        )
-        is False
-    )
+    assert has_blocking_failure([_result(name="rtk", tier="suggested", ok=False)]) is False
+    assert has_blocking_failure([_result(name="mergiraf", tier="recommended", ok=False)]) is False
 
 
 def test_run_tool_check_returns_version_for_real_executable(
