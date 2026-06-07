@@ -13,14 +13,14 @@ import asyncio
 from pathlib import Path
 
 from mcp.server.fastmcp import FastMCP
-from milknado.config import project_root as resolve_milknado_root
-from milknado.domains.graph import add_node as milknado_add_node_impl
-from milknado.domains.graph import graph_summary as milknado_graph_summary_impl
-from milknado.domains.planning import (
-    dict_to_file_change,
-    dict_to_new_relationship,
-    plan_batches_stub,
-    plan_to_dict,
+from milknado._mcp_core import open_graph
+from milknado._mcp_core import resolve_project_root as resolve_milknado_root
+from milknado.domains.batching import (
+    BatchPlan,
+    FileChange,
+    NewRelationship,
+    SymbolRef,
+    plan_batches,
 )
 
 from cheese_flow.adapters import HARNESS_NAMES
@@ -104,6 +104,58 @@ def cheese_lint(project_root: str) -> str:
     return format_lint_report(report)
 
 
+MAX_SUMMARY_DESCRIPTION_LENGTH = 120
+
+_VALID_REASONS = frozenset({"new_file", "new_import", "new_call", "new_type_use"})
+
+
+def _dict_to_file_change(d: dict) -> FileChange:
+    _id = d.get("id")
+    if not isinstance(_id, str) or not _id:
+        raise ValueError(f"change 'id' must be a non-empty string, got {_id!r}")
+    path = d.get("path")
+    if not isinstance(path, str) or not path:
+        raise ValueError(f"change 'path' must be a non-empty string, got {path!r}")
+    symbols = [SymbolRef(name=s["name"], file=s["file"]) for s in d.get("symbols") or []]
+    return FileChange(
+        id=_id,
+        path=path,
+        edit_kind=d.get("edit_kind", "modify"),
+        symbols=tuple(symbols),
+        depends_on=tuple(d.get("depends_on") or []),
+    )
+
+
+def _dict_to_new_relationship(d: dict) -> NewRelationship:
+    reason = d["reason"]
+    if reason not in _VALID_REASONS:
+        raise ValueError(f"invalid reason: {reason!r}; expected one of {sorted(_VALID_REASONS)}")
+    return NewRelationship(
+        source_change_id=d["source_change_id"],
+        dependant_change_id=d["dependant_change_id"],
+        reason=reason,
+    )
+
+
+def _plan_to_dict(plan: BatchPlan) -> dict:
+    return {
+        "batches": [
+            {
+                "index": b.index,
+                "change_ids": list(b.change_ids),
+                "depends_on": list(b.depends_on),
+                "oversized": b.oversized,
+            }
+            for b in plan.batches
+        ],
+        "spread_report": [
+            {"symbol": {"name": ss.symbol.name, "file": ss.symbol.file}, "spread": ss.spread}
+            for ss in plan.spread_report
+        ],
+        "solver_status": plan.solver_status,
+    }
+
+
 @mcp.tool()
 def milknado_graph_summary(project_root: str = "") -> str:
     """Return Mikado nodes (id, status, description) for the given project.
@@ -113,7 +165,18 @@ def milknado_graph_summary(project_root: str = "") -> str:
             ``MILKNADO_PROJECT_ROOT`` environment variable.
     """
     root = resolve_milknado_root(project_root or None)
-    return milknado_graph_summary_impl(root)
+    graph, _cfg = open_graph(root)
+    try:
+        nodes = graph.get_all_nodes()
+        if not nodes:
+            return "(empty graph)"
+        return "\n".join(
+            f"id={node.id} status={node.status.value} "
+            f"description={node.description[:MAX_SUMMARY_DESCRIPTION_LENGTH]!r}"
+            for node in nodes
+        )
+    finally:
+        graph.close()
 
 
 @mcp.tool()
@@ -131,7 +194,12 @@ def milknado_add_node(
             ``MILKNADO_PROJECT_ROOT`` environment variable.
     """
     root = resolve_milknado_root(project_root or None)
-    return milknado_add_node_impl(description, parent_id, root)
+    graph, _cfg = open_graph(root)
+    try:
+        node = graph.add_node(description, parent_id=parent_id)
+        return f"created node id={node.id} description={node.description!r}"
+    finally:
+        graph.close()
 
 
 @mcp.tool()
@@ -145,16 +213,15 @@ def milknado_plan_batches(
     Args:
         changes: List of file-change dicts with keys id, path, edit_kind,
             symbols, and depends_on.
-        budget: Token budget per batch (default 70 000). Currently unused by
-            the stub.
+        budget: Token budget per batch (default 70 000).
         new_relationships: Optional list of additional dependency edges to
             inject, each with source_change_id, dependant_change_id, and
             reason.
     """
-    file_changes = [dict_to_file_change(c) for c in changes]
-    rels = tuple(dict_to_new_relationship(r) for r in (new_relationships or []))
-    plan = plan_batches_stub(file_changes, budget, rels)
-    return plan_to_dict(plan)
+    file_changes = [_dict_to_file_change(c) for c in changes]
+    rels = tuple(_dict_to_new_relationship(r) for r in (new_relationships or []))
+    plan = plan_batches(file_changes, budget, new_relationships=rels)
+    return _plan_to_dict(plan)
 
 
 def run() -> None:

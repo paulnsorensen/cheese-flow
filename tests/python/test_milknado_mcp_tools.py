@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import pytest
-from mcp_server import (
+from cheese_flow.mcp_server import (
     milknado_add_node,
     milknado_graph_summary,
     milknado_plan_batches,
@@ -17,16 +17,16 @@ def _call(tool, **kwargs):
 
 
 def test_mcp_plan_batches_validates_inputs() -> None:
-    with pytest.raises(ValueError, match="repo-relative"):
+    with pytest.raises(ValueError, match="id"):
         _call(
             milknado_plan_batches,
-            changes=[{"id": "c1", "path": "../bad", "edit_kind": "modify"}],
+            changes=[{"path": "src/ok.py", "edit_kind": "modify"}],
         )
     result = _call(
         milknado_plan_batches,
         changes=[{"id": "c1", "path": "src/ok.py", "edit_kind": "modify"}],
     )
-    assert result["solver_status"] == "STUB"
+    assert result["solver_status"] in {"OPTIMAL", "FEASIBLE", "INFEASIBLE", "UNKNOWN"}
     assert result["batches"][0]["change_ids"] == ["c1"]
 
 

@@ -7,9 +7,10 @@ requires-python = ">=3.11"
 dependencies = [
   "jinja2==3.1.6",
   "mcp==1.27.0",
-  "ortools==9.14.6206",
+  "milknado",
+  "ortools>=9.15.6755",
   "pydantic==2.13.4",
-  "rich==14.2.0",
+  "rich>=15.0.0",
   "ruamel.yaml==0.19.1",
   "typer==0.25.1",
 ]
@@ -27,9 +28,12 @@ dev = [
 requires = ["uv_build>=0.11.7,<0.12.0"]
 build-backend = "uv_build"
 
+[tool.uv.sources]
+milknado = { git = "https://github.com/paulnsorensen/milknado" }
+
 [tool.uv.build-backend]
 module-root = "python"
-module-name = ["cheese_flow", "milknado"]
+module-name = "cheese_flow"
 
 [tool.pytest.ini_options]
 testpaths = ["tests/python"]
