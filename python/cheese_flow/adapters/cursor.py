@@ -47,10 +47,7 @@ def _build_hook_config(_portable: PortableHooks) -> None:
 
 
 def _build_rule_content(description: str, body: str) -> str:
-    return (
-        f"---\ndescription: {description}\nglobs:\nalwaysApply: false\n---\n"
-        f"{body.strip()}\n"
-    )
+    return f"---\ndescription: {description}\nglobs:\nalwaysApply: false\n---\n{body.strip()}\n"
 
 
 async def _emit_skill(
@@ -77,9 +74,7 @@ async def _emit_skill(
     return (str(rule_path), str(command_path))
 
 
-async def _emit_cursor_skill_surface(
-    skills_dir: str, output_root: str
-) -> SurfaceEmissionResult:
+async def _emit_cursor_skill_surface(skills_dir: str, output_root: str) -> SurfaceEmissionResult:
     skills_path = Path(skills_dir)
     if not skills_path.is_dir():
         return {"rules": [], "commands": []}

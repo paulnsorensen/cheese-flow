@@ -53,17 +53,13 @@ from cheese_flow.lib.schemas import (
 DEFAULT_PLUGIN_METADATA: PluginMetadata = {
     "name": "cheese-flow",
     "version": "0.1.0",
-    "description": (
-        "Opinionated coding harness plugin scaffold for portable agents and skills."
-    ),
+    "description": ("Opinionated coding harness plugin scaffold for portable agents and skills."),
     "author": {"name": "Paul Sorensen"},
     "license": "MIT",
     "repository": "https://github.com/paulnsorensen/cheese-flow",
 }
 
-_FOREACH_OPEN = re.compile(
-    r"<%\s*([\w.]+)\.forEach\(\s*function\s*\(\s*(\w+)\s*\)\s*\{\s*%>"
-)
+_FOREACH_OPEN = re.compile(r"<%\s*([\w.]+)\.forEach\(\s*function\s*\(\s*(\w+)\s*\)\s*\{\s*%>")
 _FOREACH_CLOSE = re.compile(r"<%\s*\}\)\s*%>")
 _OUTPUT_TAG = re.compile(r"<%=\s*(.*?)\s*%>", re.DOTALL)
 
@@ -125,7 +121,7 @@ def _fold_flow_value(value: str, indent: str, indent_at_start: int) -> str:
     parts = [value[: folds[0]]]
     for idx, fold in enumerate(folds):
         next_fold = folds[idx + 1] if idx + 1 < len(folds) else len(value)
-        parts.append(f"\n{indent}{value[fold + 1:next_fold]}")
+        parts.append(f"\n{indent}{value[fold + 1 : next_fold]}")
     return "".join(parts)
 
 
@@ -271,9 +267,7 @@ def _validate_plugin_metadata(parsed: Any) -> PluginMetadata:
     try:
         validated = _PluginMetadataModel.model_validate(parsed)
     except ValidationError as error:
-        raise ValueError(
-            f"Plugin metadata validation failed: {error}"
-        ) from error
+        raise ValueError(f"Plugin metadata validation failed: {error}") from error
     return validated.model_dump(exclude_none=True)  # type: ignore[return-value]
 
 
@@ -460,9 +454,7 @@ async def _compile_harness_bundle_from_session(
         commands=commands,
     )
 
-    emit_plugin_manifest(
-        harness_name, session.pluginMetadata, output_root, component_paths
-    )
+    emit_plugin_manifest(harness_name, session.pluginMetadata, output_root, component_paths)
     emit_mcp_config(harness_name, output_root)
     emit_hooks(harness_name, session.hooksSource, output_root)
 
@@ -530,9 +522,7 @@ async def _compile_agents(
             harness=adapter,
         )
 
-        final_content = _build_agent_file(
-            frontmatter, adapter, resolved_model, rendered
-        )
+        final_content = _build_agent_file(frontmatter, adapter, resolved_model, rendered)
         (agent_output_directory / output_file).write_text(final_content, encoding="utf-8")
         compiled.append(output_file)
 
@@ -545,9 +535,7 @@ def _render_template(template_body: str, *, agent: dict[str, Any], harness: Harn
     return template.render(it={"agent": agent, "harness": harness})
 
 
-async def _copy_skills(
-    *, project_root: Path, skill_output_directory: Path
-) -> list[str]:
+async def _copy_skills(*, project_root: Path, skill_output_directory: Path) -> list[str]:
     source_directory = project_root / "skills"
     entries = sorted(p.name for p in source_directory.iterdir())
     copied: list[str] = []
@@ -562,8 +550,7 @@ async def _copy_skills(
 
         if frontmatter.name != entry_name:
             raise ValueError(
-                f'Skill directory "{entry_name}" must match frontmatter '
-                f'name "{frontmatter.name}".'
+                f'Skill directory "{entry_name}" must match frontmatter name "{frontmatter.name}".'
             )
 
         destination = skill_output_directory / entry_name
@@ -575,9 +562,7 @@ async def _copy_skills(
     return copied
 
 
-async def _copy_commands(
-    *, project_root: Path, command_output_directory: Path
-) -> list[str]:
+async def _copy_commands(*, project_root: Path, command_output_directory: Path) -> list[str]:
     source_directory = project_root / "commands"
     if not source_directory.exists():
         return []
@@ -594,8 +579,7 @@ async def _copy_commands(
 
         if frontmatter.name != base_name:
             raise ValueError(
-                f'Command file "{entry_name}" must match frontmatter '
-                f'name "{frontmatter.name}".'
+                f'Command file "{entry_name}" must match frontmatter name "{frontmatter.name}".'
             )
 
         shutil.copyfile(source_path, command_output_directory / entry_name)
@@ -604,9 +588,7 @@ async def _copy_commands(
     return copied
 
 
-async def preview_agent(
-    project_root: str | Path, agent_file: str, harness: HarnessName
-) -> str:
+async def preview_agent(project_root: str | Path, agent_file: str, harness: HarnessName) -> str:
     project_root = Path(project_root)
     source_path = project_root / "agents" / agent_file
     source = source_path.read_text(encoding="utf-8")
@@ -622,9 +604,7 @@ async def preview_agent(
     )
     agent_context = frontmatter.model_dump(by_alias=True, exclude_none=True)
     agent_context["model"] = resolved_model
-    rendered = _render_template(
-        body, agent=agent_context, harness=HARNESS_ADAPTERS[harness]
-    )
+    rendered = _render_template(body, agent=agent_context, harness=HARNESS_ADAPTERS[harness])
     return rendered.strip()
 
 

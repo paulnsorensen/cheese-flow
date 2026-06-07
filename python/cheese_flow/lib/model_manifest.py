@@ -21,14 +21,10 @@ AgentSlugStr = Annotated[str, StringConstraints(pattern=r"^[a-z][a-z0-9-]*$")]
 class HarnessPins(BaseModel):
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
-    claude_code: dict[NonEmptyStr, NonEmptyStr] | None = Field(
-        default=None, alias="claude-code"
-    )
+    claude_code: dict[NonEmptyStr, NonEmptyStr] | None = Field(default=None, alias="claude-code")
     codex: dict[NonEmptyStr, NonEmptyStr] | None = None
     cursor: dict[NonEmptyStr, NonEmptyStr] | None = None
-    copilot_cli: dict[NonEmptyStr, NonEmptyStr] | None = Field(
-        default=None, alias="copilot-cli"
-    )
+    copilot_cli: dict[NonEmptyStr, NonEmptyStr] | None = Field(default=None, alias="copilot-cli")
 
     def get(self, harness: HarnessName) -> dict[str, str] | None:
         if harness == "claude-code":
@@ -82,18 +78,14 @@ def read_model_manifest(project_root: str | Path) -> ModelManifest | None:
     try:
         parsed = _read_yaml(manifest_path)
     except YAMLError as error:
-        raise ValueError(
-            f"Invalid models.yaml at {manifest_path}: {error}"
-        ) from error
+        raise ValueError(f"Invalid models.yaml at {manifest_path}: {error}") from error
 
     payload = parsed if parsed is not None else {}
 
     try:
         return ModelManifest.model_validate(payload)
     except ValidationError as error:
-        raise ValueError(
-            f"Invalid models.yaml at {manifest_path}: {error}"
-        ) from error
+        raise ValueError(f"Invalid models.yaml at {manifest_path}: {error}") from error
 
 
 def apply_model_manifest(

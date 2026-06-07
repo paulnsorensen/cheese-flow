@@ -80,9 +80,7 @@ def test_returns_input_model_when_manifest_is_none() -> None:
 
 
 def test_returns_input_model_when_no_pin_or_override_matches() -> None:
-    manifest = ModelManifest.model_validate(
-        {"pins": {"codex": {"gpt-5-codex": "gpt-5.3-codex"}}}
-    )
+    manifest = ModelManifest.model_validate({"pins": {"codex": {"gpt-5-codex": "gpt-5.3-codex"}}})
     assert apply_model_manifest(**_BASE_INPUT, manifest=manifest) == "sonnet"  # type: ignore[arg-type]
 
 

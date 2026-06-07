@@ -42,11 +42,7 @@ def _filter_bootstrap_entries(portable: PortableHooks) -> PortableHooks:
     for event, entries in portable.items():
         if entries is None:
             continue
-        kept = [
-            entry
-            for entry in entries
-            if _BOOTSTRAP_COMMAND_MARKER not in entry["command"]
-        ]
+        kept = [entry for entry in entries if _BOOTSTRAP_COMMAND_MARKER not in entry["command"]]
         if len(kept) > 0:
             event_key: PortableEvent = event  # type: ignore[assignment]
             result[event_key] = kept

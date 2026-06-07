@@ -132,11 +132,7 @@ def build_base_agent_artifact(
             continue
         data[key] = value
     skills = frontmatter["skills"]
-    appendix = (
-        ""
-        if "skills" in key_set or len(skills) == 0
-        else _build_skills_appendix(skills)
-    )
+    appendix = "" if "skills" in key_set or len(skills) == 0 else _build_skills_appendix(skills)
     return AgentArtifact(frontmatter=data, appendix=appendix)
 
 

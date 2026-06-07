@@ -43,33 +43,19 @@ def _stage_project(tmp_path: Path) -> Path:
 
 def test_byte_parity_snapshot_basic_agent_claude_code(tmp_path: Path) -> None:
     project_root = _stage_project(tmp_path)
-    asyncio.run(
-        compile_harness_bundles(
-            project_root=project_root, harnesses=["claude-code"]
-        )
-    )
-    actual = (project_root / ".claude" / "agents" / "basic-agent.md").read_text(
-        encoding="utf-8"
-    )
-    expected = (FIXTURE_DIR / "basic-agent.claude-code.md").read_text(
-        encoding="utf-8"
-    )
+    asyncio.run(compile_harness_bundles(project_root=project_root, harnesses=["claude-code"]))
+    actual = (project_root / ".claude" / "agents" / "basic-agent.md").read_text(encoding="utf-8")
+    expected = (FIXTURE_DIR / "basic-agent.claude-code.md").read_text(encoding="utf-8")
     assert actual == expected, "basic-agent.md drifted from the byte-parity fixture"
 
 
 def test_byte_parity_snapshot_basic_skill_claude_code(tmp_path: Path) -> None:
     project_root = _stage_project(tmp_path)
-    asyncio.run(
-        compile_harness_bundles(
-            project_root=project_root, harnesses=["claude-code"]
-        )
-    )
-    actual = (
-        project_root / ".claude" / "skills" / "basic-skill" / "SKILL.md"
-    ).read_text(encoding="utf-8")
-    expected = (FIXTURE_DIR / "basic-skill.claude-code.md").read_text(
+    asyncio.run(compile_harness_bundles(project_root=project_root, harnesses=["claude-code"]))
+    actual = (project_root / ".claude" / "skills" / "basic-skill" / "SKILL.md").read_text(
         encoding="utf-8"
     )
+    expected = (FIXTURE_DIR / "basic-skill.claude-code.md").read_text(encoding="utf-8")
     assert actual == expected, "basic-skill SKILL.md drifted from the byte-parity fixture"
 
 
@@ -78,18 +64,16 @@ def test_compiles_basic_agent_template_for_claude_code_and_codex(
 ) -> None:
     project_root = _stage_project(tmp_path)
     outputs = asyncio.run(
-        compile_harness_bundles(
-            project_root=project_root, harnesses=["claude-code", "codex"]
-        )
+        compile_harness_bundles(project_root=project_root, harnesses=["claude-code", "codex"])
     )
     assert len(outputs) == 2
 
-    claude_agent = (
-        project_root / ".claude" / "agents" / "basic-agent.md"
-    ).read_text(encoding="utf-8")
-    codex_agent = (
-        project_root / ".codex" / "agents" / "basic-agent.md"
-    ).read_text(encoding="utf-8")
+    claude_agent = (project_root / ".claude" / "agents" / "basic-agent.md").read_text(
+        encoding="utf-8"
+    )
+    codex_agent = (project_root / ".codex" / "agents" / "basic-agent.md").read_text(
+        encoding="utf-8"
+    )
 
     claude_data, _ = parse_frontmatter(claude_agent)
     codex_data, _ = parse_frontmatter(codex_agent)
@@ -97,9 +81,7 @@ def test_compiles_basic_agent_template_for_claude_code_and_codex(
     assert codex_data["model"] == "gpt-5-codex"
 
     claude_plugin = json.loads(
-        (project_root / ".claude" / ".claude-plugin" / "plugin.json").read_text(
-            encoding="utf-8"
-        )
+        (project_root / ".claude" / ".claude-plugin" / "plugin.json").read_text(encoding="utf-8")
     )
     assert claude_plugin["name"] == "cheese-flow"
     assert claude_plugin["agents"] == "./agents/"
@@ -108,9 +90,7 @@ def test_compiles_basic_agent_template_for_claude_code_and_codex(
     assert claude_plugin["hooks"] == "./hooks.json"
     assert claude_plugin["mcpServers"] == "./.mcp.json"
 
-    claude_mcp = json.loads(
-        (project_root / ".claude" / ".mcp.json").read_text(encoding="utf-8")
-    )
+    claude_mcp = json.loads((project_root / ".claude" / ".mcp.json").read_text(encoding="utf-8"))
     assert "tilth" in claude_mcp["mcpServers"]
     assert "context7" in claude_mcp["mcpServers"]
     assert "tavily" in claude_mcp["mcpServers"]
@@ -119,15 +99,13 @@ def test_compiles_basic_agent_template_for_claude_code_and_codex(
 
 def test_compiles_a_single_harness_bundle_and_returns_metadata(tmp_path: Path) -> None:
     project_root = _stage_project(tmp_path)
-    compiled = asyncio.run(
-        compile_harness_bundle(project_root=project_root, harness="claude-code")
-    )
+    compiled = asyncio.run(compile_harness_bundle(project_root=project_root, harness="claude-code"))
     assert compiled.harness == "claude-code"
     assert compiled.outputRoot == str(project_root / ".claude")
     assert compiled.pluginMetadata["name"] == "cheese-flow"
-    plugin_text = (
-        project_root / ".claude" / ".claude-plugin" / "plugin.json"
-    ).read_text(encoding="utf-8")
+    plugin_text = (project_root / ".claude" / ".claude-plugin" / "plugin.json").read_text(
+        encoding="utf-8"
+    )
     assert '"name": "cheese-flow"' in plugin_text
 
 
@@ -135,14 +113,8 @@ def test_emits_agent_frontmatter_with_skills_binding_for_claude_code(
     tmp_path: Path,
 ) -> None:
     project_root = _stage_project(tmp_path)
-    asyncio.run(
-        compile_harness_bundles(
-            project_root=project_root, harnesses=["claude-code"]
-        )
-    )
-    cook_agent = (project_root / ".claude" / "agents" / "cook.md").read_text(
-        encoding="utf-8"
-    )
+    asyncio.run(compile_harness_bundles(project_root=project_root, harnesses=["claude-code"]))
+    cook_agent = (project_root / ".claude" / "agents" / "cook.md").read_text(encoding="utf-8")
     data, _ = parse_frontmatter(cook_agent)
     assert data["name"] == "cook"
     assert data["model"] == "sonnet"
@@ -156,12 +128,8 @@ def test_drops_claude_only_fields_and_appends_skills_prompt_contract_for_codex(
     tmp_path: Path,
 ) -> None:
     project_root = _stage_project(tmp_path)
-    asyncio.run(
-        compile_harness_bundles(project_root=project_root, harnesses=["codex"])
-    )
-    cook_agent = (project_root / ".codex" / "agents" / "cook.md").read_text(
-        encoding="utf-8"
-    )
+    asyncio.run(compile_harness_bundles(project_root=project_root, harnesses=["codex"]))
+    cook_agent = (project_root / ".codex" / "agents" / "cook.md").read_text(encoding="utf-8")
     data, _ = parse_frontmatter(cook_agent)
     assert data["name"] == "cook"
     assert data["model"] == "gpt-5-codex"
@@ -189,19 +157,13 @@ def test_applies_models_yaml_pins_and_overrides(tmp_path: Path) -> None:
         ).lstrip(),
         encoding="utf-8",
     )
-    asyncio.run(
-        compile_harness_bundles(
-            project_root=project_root, harnesses=["claude-code"]
-        )
-    )
+    asyncio.run(compile_harness_bundles(project_root=project_root, harnesses=["claude-code"]))
     cook_data, _ = parse_frontmatter(
         (project_root / ".claude" / "agents" / "cook.md").read_text(encoding="utf-8")
     )
     assert cook_data["model"] == "claude-sonnet-4-6"
     basic_data, _ = parse_frontmatter(
-        (project_root / ".claude" / "agents" / "basic-agent.md").read_text(
-            encoding="utf-8"
-        )
+        (project_root / ".claude" / "agents" / "basic-agent.md").read_text(encoding="utf-8")
     )
     assert basic_data["model"] == "claude-opus-4-7"
 
@@ -232,11 +194,7 @@ def test_rejects_skills_whose_folder_name_does_not_match_the_spec_name(
         encoding="utf-8",
     )
     with pytest.raises(ValueError, match="must match frontmatter name"):
-        asyncio.run(
-            compile_harness_bundles(
-                project_root=project_root, harnesses=["claude-code"]
-            )
-        )
+        asyncio.run(compile_harness_bundles(project_root=project_root, harnesses=["claude-code"]))
 
 
 def test_ignores_non_template_agent_files_and_non_directory_skill_entries(
@@ -251,14 +209,8 @@ def test_ignores_non_template_agent_files_and_non_directory_skill_entries(
         encoding="utf-8",
     )
 
-    asyncio.run(
-        compile_harness_bundles(
-            project_root=project_root, harnesses=["claude-code"]
-        )
-    )
-    manifest = json.loads(
-        (project_root / ".claude" / "manifest.json").read_text(encoding="utf-8")
-    )
+    asyncio.run(compile_harness_bundles(project_root=project_root, harnesses=["claude-code"]))
+    manifest = json.loads((project_root / ".claude" / "manifest.json").read_text(encoding="utf-8"))
     assert "basic-agent.md" in manifest["agents"]
     assert "cook.md" in manifest["agents"]
     assert "basic-skill" in manifest["skills"]
@@ -268,14 +220,10 @@ def test_ignores_non_template_agent_files_and_non_directory_skill_entries(
 
 def test_emits_dual_surface_artifacts_and_manifests_for_cursor(tmp_path: Path) -> None:
     project_root = _stage_project(tmp_path)
-    asyncio.run(
-        compile_harness_bundles(project_root=project_root, harnesses=["cursor"])
-    )
+    asyncio.run(compile_harness_bundles(project_root=project_root, harnesses=["cursor"]))
     cursor_root = project_root / ".cursor"
     rule = (cursor_root / "rules" / "basic-skill.mdc").read_text(encoding="utf-8")
-    command = (cursor_root / "commands" / "basic-skill.md").read_text(
-        encoding="utf-8"
-    )
+    command = (cursor_root / "commands" / "basic-skill.md").read_text(encoding="utf-8")
     assert "alwaysApply: false" in rule
     assert "description:" in rule
     assert command  # non-empty
@@ -289,9 +237,7 @@ def test_emits_dual_surface_artifacts_and_manifests_for_cursor(tmp_path: Path) -
     assert plugin_json["commands"] == "./commands/"
     assert plugin_json.get("hooks") is None
     assert plugin_json["mcpServers"] == "./mcp.json"
-    mcp_json = json.loads(
-        (cursor_root / "mcp.json").read_text(encoding="utf-8")
-    )
+    mcp_json = json.loads((cursor_root / "mcp.json").read_text(encoding="utf-8"))
     assert "tilth" in mcp_json["mcpServers"]
     assert "context7" in mcp_json["mcpServers"]
     assert "tavily" in mcp_json["mcpServers"]
@@ -302,15 +248,11 @@ def test_emits_plugin_manifest_mcp_config_and_hooks_for_copilot_cli(
 ) -> None:
     project_root = _stage_project(tmp_path)
     (project_root / "hooks.json").write_text(
-        json.dumps(
-            {"sessionStart": [{"type": "command", "command": "echo start"}]}
-        ),
+        json.dumps({"sessionStart": [{"type": "command", "command": "echo start"}]}),
         encoding="utf-8",
     )
 
-    asyncio.run(
-        compile_harness_bundles(project_root=project_root, harnesses=["copilot-cli"])
-    )
+    asyncio.run(compile_harness_bundles(project_root=project_root, harnesses=["copilot-cli"]))
     copilot_root = project_root / ".copilot"
     plugin_json = json.loads(
         (copilot_root / ".claude-plugin" / "plugin.json").read_text(encoding="utf-8")
@@ -322,14 +264,10 @@ def test_emits_plugin_manifest_mcp_config_and_hooks_for_copilot_cli(
     assert plugin_json["hooks"] == "./hooks.json"
     assert plugin_json["mcpServers"] == "./.mcp.json"
     assert plugin_json.get("commands") is None
-    mcp_json = json.loads(
-        (copilot_root / ".mcp.json").read_text(encoding="utf-8")
-    )
+    mcp_json = json.loads((copilot_root / ".mcp.json").read_text(encoding="utf-8"))
     assert "tilth" in mcp_json["mcpServers"]
     assert "context7" in mcp_json["mcpServers"]
-    hooks_json = json.loads(
-        (copilot_root / "hooks.json").read_text(encoding="utf-8")
-    )
+    hooks_json = json.loads((copilot_root / "hooks.json").read_text(encoding="utf-8"))
     assert hooks_json["version"] == 1
     assert "sessionStart" in hooks_json["hooks"]
 
@@ -349,19 +287,13 @@ def test_emits_hooks_from_hooks_json_source_into_each_non_cursor_harness(
     )
 
     asyncio.run(
-        compile_harness_bundles(
-            project_root=project_root, harnesses=["claude-code", "codex"]
-        )
+        compile_harness_bundles(project_root=project_root, harnesses=["claude-code", "codex"])
     )
-    claude_hooks = json.loads(
-        (project_root / ".claude" / "hooks.json").read_text(encoding="utf-8")
-    )
+    claude_hooks = json.loads((project_root / ".claude" / "hooks.json").read_text(encoding="utf-8"))
     assert "preToolUse" in claude_hooks["hooks"]
     assert "postToolUse" in claude_hooks["hooks"]
 
-    codex_hooks = json.loads(
-        (project_root / ".codex" / "hooks.json").read_text(encoding="utf-8")
-    )
+    codex_hooks = json.loads((project_root / ".codex" / "hooks.json").read_text(encoding="utf-8"))
     assert "PreToolUse" in codex_hooks["hooks"]
     assert "PostToolUse" in codex_hooks["hooks"]
 
@@ -385,13 +317,9 @@ def test_reads_plugin_metadata_from_dot_claude_plugin_when_present(
         json.dumps(custom_meta), encoding="utf-8"
     )
 
-    asyncio.run(
-        compile_harness_bundles(project_root=project_root, harnesses=["claude-code"])
-    )
+    asyncio.run(compile_harness_bundles(project_root=project_root, harnesses=["claude-code"]))
     plugin_json = json.loads(
-        (project_root / ".claude" / ".claude-plugin" / "plugin.json").read_text(
-            encoding="utf-8"
-        )
+        (project_root / ".claude" / ".claude-plugin" / "plugin.json").read_text(encoding="utf-8")
     )
     assert plugin_json["name"] == "my-custom-plugin"
     assert plugin_json["homepage"] == "https://example.com"
@@ -405,22 +333,14 @@ def test_rethrows_non_enoent_errors_when_reading_plugin_metadata(
     plugin_dir = project_root / ".claude-plugin" / "plugin.json"
     plugin_dir.mkdir(parents=True)
     with pytest.raises((OSError, ValueError)):
-        asyncio.run(
-            compile_harness_bundles(
-                project_root=project_root, harnesses=["claude-code"]
-            )
-        )
+        asyncio.run(compile_harness_bundles(project_root=project_root, harnesses=["claude-code"]))
 
 
 def test_rethrows_non_enoent_errors_when_reading_hooks_json(tmp_path: Path) -> None:
     project_root = _stage_project(tmp_path)
     (project_root / "hooks.json").mkdir()
     with pytest.raises((OSError, ValueError)):
-        asyncio.run(
-            compile_harness_bundles(
-                project_root=project_root, harnesses=["claude-code"]
-            )
-        )
+        asyncio.run(compile_harness_bundles(project_root=project_root, harnesses=["claude-code"]))
 
 
 def test_preserves_user_managed_files_at_harness_output_root_across_rebuilds(
@@ -429,46 +349,23 @@ def test_preserves_user_managed_files_at_harness_output_root_across_rebuilds(
     project_root = _stage_project(tmp_path)
     claude_root = project_root / ".claude"
     claude_root.mkdir()
-    (claude_root / "settings.local.json").write_text(
-        '{"theme":"dark"}\n', encoding="utf-8"
-    )
+    (claude_root / "settings.local.json").write_text('{"theme":"dark"}\n', encoding="utf-8")
     (claude_root / "CLAUDE.md").write_text("# user notes\n", encoding="utf-8")
 
-    asyncio.run(
-        compile_harness_bundles(
-            project_root=project_root, harnesses=["claude-code"]
-        )
-    )
-    asyncio.run(
-        compile_harness_bundles(
-            project_root=project_root, harnesses=["claude-code"]
-        )
-    )
+    asyncio.run(compile_harness_bundles(project_root=project_root, harnesses=["claude-code"]))
+    asyncio.run(compile_harness_bundles(project_root=project_root, harnesses=["claude-code"]))
 
-    assert (
-        (claude_root / "settings.local.json").read_text(encoding="utf-8")
-        == '{"theme":"dark"}\n'
-    )
-    assert (
-        (claude_root / "CLAUDE.md").read_text(encoding="utf-8") == "# user notes\n"
-    )
+    assert (claude_root / "settings.local.json").read_text(encoding="utf-8") == '{"theme":"dark"}\n'
+    assert (claude_root / "CLAUDE.md").read_text(encoding="utf-8") == "# user notes\n"
 
 
 def test_removes_stale_generated_agents_on_rebuild(tmp_path: Path) -> None:
     project_root = _stage_project(tmp_path)
-    asyncio.run(
-        compile_harness_bundles(
-            project_root=project_root, harnesses=["claude-code"]
-        )
-    )
+    asyncio.run(compile_harness_bundles(project_root=project_root, harnesses=["claude-code"]))
     stale_agent_path = project_root / ".claude" / "agents" / "renamed-away.md"
     stale_agent_path.write_text("stale\n", encoding="utf-8")
 
-    asyncio.run(
-        compile_harness_bundles(
-            project_root=project_root, harnesses=["claude-code"]
-        )
-    )
+    asyncio.run(compile_harness_bundles(project_root=project_root, harnesses=["claude-code"]))
     assert not stale_agent_path.exists()
 
 
