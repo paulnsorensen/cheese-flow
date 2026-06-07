@@ -5,10 +5,21 @@ the normal `import` machinery, so we load them by path with importlib.
 """
 
 import importlib.util
+import os
 from pathlib import Path
 from types import ModuleType
 
 import pytest
+
+# Force Typer's plain (Click) help formatter for the whole test session. Typer
+# reads ``TYPER_USE_RICH`` exactly once, at ``typer.core`` import time, so it
+# must be set before any test module imports typer — conftest runs first, before
+# collection, which is the only place that guarantees it. With Rich enabled,
+# headless CI runners render help panels with no body text (only borders), so
+# option names like ``--project-root`` never reach ``result.stdout`` and the CLI
+# help assertions in ``test_cli.py`` fail. Plain help renders deterministically
+# regardless of terminal.
+os.environ["TYPER_USE_RICH"] = "0"
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SCRIPTS_DIR = REPO_ROOT / "skills" / "merge-resolve" / "scripts"
