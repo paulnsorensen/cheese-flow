@@ -115,9 +115,7 @@ def test_check_for_update_returns_null_on_timeout() -> None:
         return _MockResponse(ok=True, body={})
 
     result = asyncio.run(
-        check_for_update(
-            CheckForUpdateOptions(currentVersion="0.1.0", timeoutMs=5, fetch=slow)
-        )
+        check_for_update(CheckForUpdateOptions(currentVersion="0.1.0", timeoutMs=5, fetch=slow))
     )
 
     assert result is None
@@ -218,9 +216,7 @@ def test_should_check_update_returns_true_when_checked_at_non_string(
     tmp_path: Path,
 ) -> None:
     home = _make_home(tmp_path)
-    (home / ".update-check").write_text(
-        json.dumps({"checked_at": 12345}), encoding="utf-8"
-    )
+    (home / ".update-check").write_text(json.dumps({"checked_at": 12345}), encoding="utf-8")
 
     assert should_check_update(str(home), datetime.now(UTC)) is True
 
@@ -229,9 +225,7 @@ def test_should_check_update_returns_true_when_checked_at_unparseable(
     tmp_path: Path,
 ) -> None:
     home = _make_home(tmp_path)
-    (home / ".update-check").write_text(
-        json.dumps({"checked_at": "not-a-date"}), encoding="utf-8"
-    )
+    (home / ".update-check").write_text(json.dumps({"checked_at": "not-a-date"}), encoding="utf-8")
 
     assert should_check_update(str(home), datetime.now(UTC)) is True
 
