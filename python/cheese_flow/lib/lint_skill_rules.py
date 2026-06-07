@@ -213,9 +213,7 @@ def _validate_body(
         )
     for finding in check_body_harness_idioms(body):
         finding_line = finding.get("line")
-        absolute_line = (
-            finding_line + line_offset if finding_line is not None else None
-        )
+        absolute_line = finding_line + line_offset if finding_line is not None else None
         issues.append(
             issue(
                 finding["severity"],

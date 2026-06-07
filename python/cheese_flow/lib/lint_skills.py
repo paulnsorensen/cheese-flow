@@ -47,9 +47,7 @@ async def lint_skills_directory(
 
     issues: list[LintIssue] = []
     for directory_name in directories:
-        issues.extend(
-            await _lint_skill_directory(skills_root, directory_name, compile_fn)
-        )
+        issues.extend(await _lint_skill_directory(skills_root, directory_name, compile_fn))
     return {"scanned": len(directories), "issues": issues}
 
 
@@ -86,8 +84,7 @@ async def _lint_skill_directory(
 
     compile_findings = await compile_fn(directory_name, source_or_issue["source"])
     compile_issues = [
-        _finding_to_issue(finding, directory_name, relative_file)
-        for finding in compile_findings
+        _finding_to_issue(finding, directory_name, relative_file) for finding in compile_findings
     ]
 
     return [*source_issues, *compile_issues]
@@ -101,9 +98,7 @@ class _SourceFailed(TypedDict):
     issues: list[LintIssue]
 
 
-async def _read_skill_source(
-    skill_file: Path, issue: IssueFactory
-) -> _SourceOk | _SourceFailed:
+async def _read_skill_source(skill_file: Path, issue: IssueFactory) -> _SourceOk | _SourceFailed:
     try:
         await asyncio.to_thread(skill_file.stat)
     except FileNotFoundError:
@@ -165,9 +160,7 @@ def format_lint_report(report: LintReport) -> str:
     for item in report["issues"]:
         tag = "ERROR" if item["severity"] == "error" else "WARN"
         item_line = item.get("line")
-        anchor = (
-            f"{item['file']}:{item_line}" if item_line is not None else item["file"]
-        )
+        anchor = f"{item['file']}:{item_line}" if item_line is not None else item["file"]
         lines.append(f"[{tag}] {anchor} ({item['rule']}): {item['message']}")
 
     error_count = sum(1 for entry in report["issues"] if entry["severity"] == "error")

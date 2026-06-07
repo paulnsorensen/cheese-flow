@@ -41,9 +41,7 @@ def test_flags_name_directory_mismatch_as_an_error() -> None:
     )
     rules = [entry["rule"] for entry in issues]
     assert "name-matches-directory" in rules
-    finding = next(
-        entry for entry in issues if entry["rule"] == "name-matches-directory"
-    )
+    finding = next(entry for entry in issues if entry["rule"] == "name-matches-directory")
     assert finding["severity"] == "error"
 
 
@@ -76,11 +74,7 @@ def test_flags_missing_description() -> None:
         }
     )
     desc_finding = next(
-        (
-            entry
-            for entry in issues
-            if entry["rule"].startswith("frontmatter:description")
-        ),
+        (entry for entry in issues if entry["rule"].startswith("frontmatter:description")),
         None,
     )
     assert desc_finding is not None
@@ -93,9 +87,7 @@ def test_warns_when_the_description_is_too_short() -> None:
         {
             "directoryName": "short-desc",
             "relativeFile": "short-desc/SKILL.md",
-            "source": (
-                "---\nname: short-desc\ndescription: Too short.\n---\n" + VALID_BODY
-            ),
+            "source": ("---\nname: short-desc\ndescription: Too short.\n---\n" + VALID_BODY),
         }
     )
     warning = next(
@@ -161,11 +153,7 @@ def test_flags_compatibility_strings_exceeding_500_characters() -> None:
         }
     )
     compat_finding = next(
-        (
-            entry
-            for entry in issues
-            if entry["rule"].startswith("frontmatter:compatibility")
-        ),
+        (entry for entry in issues if entry["rule"].startswith("frontmatter:compatibility")),
         None,
     )
     assert compat_finding is not None
@@ -186,11 +174,7 @@ def test_warns_when_allowed_tools_uses_claude_code_permission_glob_syntax() -> N
         }
     )
     finding = next(
-        (
-            entry
-            for entry in issues
-            if entry["rule"] == "allowed-tools-claude-permission-syntax"
-        ),
+        (entry for entry in issues if entry["rule"] == "allowed-tools-claude-permission-syntax"),
         None,
     )
     assert finding is not None
@@ -211,11 +195,7 @@ def test_warns_when_allowed_tools_is_an_array_using_claude_permission_glob() -> 
         }
     )
     finding = next(
-        (
-            entry
-            for entry in issues
-            if entry["rule"] == "allowed-tools-claude-permission-syntax"
-        ),
+        (entry for entry in issues if entry["rule"] == "allowed-tools-claude-permission-syntax"),
         None,
     )
     assert finding is not None
@@ -236,8 +216,7 @@ def test_does_not_warn_on_bare_tool_names_in_allowed_tools() -> None:
         }
     )
     assert not any(
-        entry["rule"].startswith("allowed-tools-claude-permission-syntax")
-        for entry in issues
+        entry["rule"].startswith("allowed-tools-claude-permission-syntax") for entry in issues
     )
 
 
@@ -329,8 +308,7 @@ def test_stringifies_non_error_throws_from_parse_skill_frontmatter() -> None:
                 "relativeFile": "stringy/SKILL.md",
                 "source": (
                     "---\nname: stringy\ndescription: A perfectly fine "
-                    "description that is long enough for discovery.\n---\n"
-                    + VALID_BODY
+                    "description that is long enough for discovery.\n---\n" + VALID_BODY
                 ),
             }
         )
@@ -354,9 +332,7 @@ def test_ignores_allowed_tools_when_it_is_neither_string_nor_array() -> None:
             ),
         }
     )
-    assert not any(
-        entry["rule"] == "allowed-tools-claude-permission-syntax" for entry in issues
-    )
+    assert not any(entry["rule"] == "allowed-tools-claude-permission-syntax" for entry in issues)
 
 
 def test_converts_a_non_zod_error_throw_from_parse_skill_frontmatter() -> None:
@@ -373,8 +349,7 @@ def test_converts_a_non_zod_error_throw_from_parse_skill_frontmatter() -> None:
                 "relativeFile": "weird-throw/SKILL.md",
                 "source": (
                     "---\nname: weird-throw\ndescription: A perfectly fine "
-                    "description that is long enough for discovery.\n---\n"
-                    + VALID_BODY
+                    "description that is long enough for discovery.\n---\n" + VALID_BODY
                 ),
             }
         )
@@ -398,9 +373,7 @@ def test_flags_claude_only_frontmatter_fields_via_adapter_capabilities() -> None
             ),
         }
     )
-    portability = [
-        entry for entry in issues if entry["rule"] == "frontmatter-portability"
-    ]
+    portability = [entry for entry in issues if entry["rule"] == "frontmatter-portability"]
     assert len(portability) == 2
     assert all(entry["severity"] == "warning" for entry in portability)
 
@@ -432,9 +405,7 @@ def test_context_fork_produces_exactly_one_portability_warning() -> None:
             ),
         }
     )
-    portability = [
-        entry for entry in issues if entry["rule"] == "frontmatter-portability"
-    ]
+    portability = [entry for entry in issues if entry["rule"] == "frontmatter-portability"]
     assert len(portability) == 1
 
 
@@ -451,11 +422,7 @@ def test_stop_in_body_emits_body_harness_only_hook_event_not_pascal() -> None:
         }
     )
     stop_finding = next(
-        (
-            entry
-            for entry in issues
-            if entry["rule"] == "body-harness-only-hook-event"
-        ),
+        (entry for entry in issues if entry["rule"] == "body-harness-only-hook-event"),
         None,
     )
     assert stop_finding is not None
@@ -477,8 +444,7 @@ def test_stop_camel_case_in_body_does_not_emit_any_hook_warning() -> None:
         }
     )
     assert not any(
-        entry["rule"]
-        in ("body-harness-only-hook-event", "body-pascal-hook-event")
+        entry["rule"] in ("body-harness-only-hook-event", "body-pascal-hook-event")
         for entry in issues
     )
 
@@ -495,9 +461,7 @@ def test_runs_portability_checks_even_when_frontmatter_validation_fails() -> Non
             ),
         }
     )
-    name_finding = next(
-        (entry for entry in issues if entry["rule"] == "frontmatter:name"), None
-    )
+    name_finding = next((entry for entry in issues if entry["rule"] == "frontmatter:name"), None)
     assert name_finding is not None
     assert name_finding["severity"] == "error"
 

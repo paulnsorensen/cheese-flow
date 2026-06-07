@@ -168,9 +168,7 @@ def test_converts_compile_trip_findings_into_lint_issues_when_source_is_clean(
         ),
     )
 
-    async def fake_compile(
-        _name: str, _source: str
-    ) -> list[HarnessCompatFinding]:
+    async def fake_compile(_name: str, _source: str) -> list[HarnessCompatFinding]:
         return [
             {
                 "rule": "compile-cursor-failed",
