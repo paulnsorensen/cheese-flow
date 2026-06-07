@@ -154,9 +154,7 @@ def test_resolve_cheese_home_skips_git_lookup_when_canonical_repo_provided(
         CheeseHomeOptions(home=str(home), canonicalRepo=canonical_repo),
     )
 
-    assert paths.projectDir == os.path.join(
-        str(home), "projects", path_slug(canonical_repo)
-    )
+    assert paths.projectDir == os.path.join(str(home), "projects", path_slug(canonical_repo))
 
 
 # ---------- resolveCheeseHome ----------
@@ -181,22 +179,16 @@ def test_resolve_cheese_home_derives_all_paths_from_cwd_without_writing(
     assert paths.milknadoDb == os.path.join(
         str(home), "projects", repo_slug, "milknado", "milknado.db"
     )
-    assert paths.worktreeDir == os.path.join(
-        str(home), "projects", repo_slug, "worktrees", wt_slug
-    )
+    assert paths.worktreeDir == os.path.join(str(home), "projects", repo_slug, "worktrees", wt_slug)
     assert paths.manifestsDir == os.path.join(
         str(home), "projects", repo_slug, "worktrees", wt_slug, "manifests"
     )
     assert paths.runsDir == os.path.join(
         str(home), "projects", repo_slug, "worktrees", wt_slug, "runs"
     )
-    assert paths.sharedDir == os.path.join(
-        str(home), "projects", repo_slug, "shared"
-    )
+    assert paths.sharedDir == os.path.join(str(home), "projects", repo_slug, "shared")
 
-    assert not Path(
-        str(home), "projects", repo_slug, "milknado", "milknado.db"
-    ).exists()
+    assert not Path(str(home), "projects", repo_slug, "milknado", "milknado.db").exists()
 
 
 def test_resolve_cheese_home_uses_homedir_when_no_override(tmp_path: Path) -> None:

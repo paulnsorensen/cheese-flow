@@ -115,9 +115,7 @@ def _read_update_check(home: str) -> dict[str, Any] | None:
     return {
         "checked_at": checked_at if isinstance(checked_at, str) else "",
         "latest_version": latest_version if isinstance(latest_version, str) else None,
-        "nudged_for_version": (
-            nudged_for_version if isinstance(nudged_for_version, str) else None
-        ),
+        "nudged_for_version": (nudged_for_version if isinstance(nudged_for_version, str) else None),
     }
 
 
@@ -252,11 +250,7 @@ async def run_session_start(opts: RunSessionStartOptions) -> SessionStartResult:
         update = await check_for_update(update_opts)
         if update is not None:
             prior = _prior_nudged_version(paths.root)
-            if (
-                update.behind
-                and update.latestVersion is not None
-                and update.latestVersion != prior
-            ):
+            if update.behind and update.latestVersion is not None and update.latestVersion != prior:
                 nudge = UpdateNudge(
                     version=update.latestVersion,
                     current=opts.currentVersion,

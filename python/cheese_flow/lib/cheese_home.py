@@ -62,8 +62,7 @@ def parse_worktree_main(out: str, cwd: str) -> str:
     first_line = out.split("\n", 1)[0] if out else ""
     if not first_line.startswith("worktree "):
         raise RuntimeError(
-            f"discoverCanonicalRepo: {cwd} is not inside a git worktree "
-            "(no 'worktree' line)"
+            f"discoverCanonicalRepo: {cwd} is not inside a git worktree (no 'worktree' line)"
         )
     return first_line[len("worktree ") :]
 
@@ -90,15 +89,11 @@ def discover_canonical_repo(cwd: str) -> str:
     return str(Path(parse_worktree_main(out, cwd)).resolve())
 
 
-def resolve_cheese_home(
-    cwd: str, options: CheeseHomeOptions | None = None
-) -> CheeseHomePaths:
+def resolve_cheese_home(cwd: str, options: CheeseHomeOptions | None = None) -> CheeseHomePaths:
     opts = options or CheeseHomeOptions()
     root = opts.home if opts.home is not None else str(Path.home() / ".cheese")
     canonical_repo = (
-        opts.canonicalRepo
-        if opts.canonicalRepo is not None
-        else discover_canonical_repo(cwd)
+        opts.canonicalRepo if opts.canonicalRepo is not None else discover_canonical_repo(cwd)
     )
     repo_slug = path_slug(canonical_repo)
     worktree_path = str(Path(cwd).resolve())
@@ -116,9 +111,7 @@ def resolve_cheese_home(
     )
 
 
-def ensure_cheese_home(
-    cwd: str, options: CheeseHomeOptions | None = None
-) -> CheeseHomePaths:
+def ensure_cheese_home(cwd: str, options: CheeseHomeOptions | None = None) -> CheeseHomePaths:
     paths = resolve_cheese_home(cwd, options)
     os.makedirs(os.path.dirname(paths.milknadoDb), exist_ok=True)
     os.makedirs(paths.manifestsDir, exist_ok=True)
@@ -129,9 +122,7 @@ def ensure_cheese_home(
 
 
 def _write_sidecar(worktree_dir: str, original_path: str) -> None:
-    Path(worktree_dir, ".path").write_text(
-        f"{original_path}\n", encoding="utf-8"
-    )
+    Path(worktree_dir, ".path").write_text(f"{original_path}\n", encoding="utf-8")
 
 
 def read_retention_config(project_dir: str) -> RetentionConfig:
