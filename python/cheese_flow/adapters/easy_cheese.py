@@ -20,6 +20,9 @@ SCOPE = "user"
 
 _LIST_FIELDS = "agentHosts,scope,skillName,sourceURL"
 
+CORE_SKILLS = frozenset({"mold", "cook", "press", "age", "cure", "plate", "cheese"})
+"""The pipeline skills easy-cheese always ships; a full quorum identifies the pack."""
+
 
 def _normalize_source(raw: str) -> str:
     """Reduce a ``gh skill list`` sourceURL to its ``owner/repo`` identity."""
@@ -69,7 +72,13 @@ class EasyCheeseAdapter:
         )
 
     def check_postcondition(self, step: PlanStep, runner: CommandRunner) -> bool:
-        """Confirm source, agent, scope, and installed skills via ``gh skill list``."""
+        """Confirm the pack is installed for the harness at the expected scope.
+
+        ``gh skill list`` reports the originating repository in ``sourceURL``,
+        which is authoritative when populated. Current releases leave it empty
+        for every skill, so an empty field falls back to requiring a full
+        quorum of easy-cheese's own core skill names.
+        """
         if step.harness is None:
             raise ValueError(f"step {step.step_id!r} has no harness")
         outcome = runner.run(
@@ -93,13 +102,20 @@ class EasyCheeseAdapter:
             return False
         if not isinstance(entries, list):
             return False
-        return any(_matches(entry, step.harness) for entry in entries)
+        installed = [entry for entry in entries if _is_skill_for(entry, step.harness)]
+        sources = [_normalize_source(str(entry.get("sourceURL", ""))) for entry in installed]
+        if SOURCE_REPOSITORY in sources:
+            return True
+        if any(sources):
+            # gh knows where these skills came from and none came from us.
+            return False
+        names = {str(entry["skillName"]).strip() for entry in installed}
+        return names >= CORE_SKILLS
 
 
-def _matches(entry: Any, harness: HarnessName) -> bool:
+def _is_skill_for(entry: Any, harness: HarnessName) -> bool:
+    """Whether a listing entry is a named skill installed for this harness and scope."""
     if not isinstance(entry, dict):
-        return False
-    if _normalize_source(str(entry.get("sourceURL", ""))) != SOURCE_REPOSITORY:
         return False
     if entry.get("scope") != SCOPE:
         return False

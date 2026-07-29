@@ -17,11 +17,21 @@ from cheese_flow.models import (
 
 PACKAGE = "tilth"
 
-EXPECTED_COMMAND = "npx"
-"""``tilth install`` writes an ``npx`` entry when it runs from a node_modules shim."""
-
-EXPECTED_ARGS: tuple[str, ...] = ("tilth", "--mcp", "--edit")
+EDIT_FLAG = "--edit"
 """Edit mode is always requested, so ``--edit`` must be present in the entry."""
+
+
+def _launches_tilth(command: str, args: list[str]) -> bool:
+    """Whether an MCP entry launches Tilth itself.
+
+    ``tilth install`` writes ``npx tilth …`` only when it runs from a
+    node_modules shim; a globally installed binary is written as its own
+    absolute path instead.
+    """
+    if command == "npx":
+        return bool(args) and args[0] == PACKAGE
+    return Path(command).stem == PACKAGE
+
 
 # Native user-scope MCP config per harness, relative to the home directory.
 _CONFIG_PATHS: dict[HarnessName, str] = {
@@ -80,6 +90,8 @@ class TilthAdapter:
         if not isinstance(entry, dict):
             return False
         args = entry.get("args")
-        if not isinstance(args, list):
+        command = entry.get("command")
+        if not isinstance(args, list) or not isinstance(command, str):
             return False
-        return entry.get("command") == EXPECTED_COMMAND and tuple(args) == EXPECTED_ARGS
+        args = [str(arg) for arg in args]
+        return _launches_tilth(command, args) and "--mcp" in args and EDIT_FLAG in args

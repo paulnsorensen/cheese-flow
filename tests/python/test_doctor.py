@@ -123,7 +123,10 @@ def _readonly_script(version: str) -> dict[tuple[str, ...], CommandOutcome]:
         ("claude", "plugin", "marketplace", "list"): ok(
             ("claude", "plugin", "marketplace", "list"), "hallouminate"
         ),
-        ("claude", "plugin", "list"): ok(("claude", "plugin", "list"), "hallouminate@hallouminate"),
+        ("claude", "plugin", "list", "--json"): ok(
+            ("claude", "plugin", "list", "--json"),
+            json.dumps([{"id": "hallouminate@hallouminate", "enabled": True}]),
+        ),
         ("hallouminate", "config", "validate"): ok(("hallouminate", "config", "validate"), "ok"),
         ("gh", "skill", "list", "--agent", "claude-code", "--scope", "user", "--json", fields): ok(
             ("gh", "skill", "list", "--agent", "claude-code", "--scope", "user", "--json", fields),
@@ -166,7 +169,7 @@ def test_doctor_with_real_adapters_runs_only_read_only_commands(
         ("npm", "view", "hallouminate@latest", "version"),
         ("hallouminate", "--version"),
         ("claude", "plugin", "marketplace", "list"),
-        ("claude", "plugin", "list"),
+        ("claude", "plugin", "list", "--json"),
         ("hallouminate", "config", "validate"),
         (
             "gh",

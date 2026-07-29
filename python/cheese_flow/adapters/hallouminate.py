@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 from cheese_flow.adapters.native_config import read_mcp_entry
@@ -18,6 +19,7 @@ from cheese_flow.models import (
 
 PACKAGE = "hallouminate"
 MARKETPLACE_SOURCE = "paulnsorensen/hallouminate"
+MARKETPLACE_NAME = MARKETPLACE_SOURCE.split("/")[-1]
 PLUGIN_ID = "hallouminate@hallouminate"
 
 # Harness-native plugin CLIs, keyed by harness: (executable, install verb).
@@ -133,7 +135,9 @@ class HallouminateAdapter:
                     harness=harness,
                     phase=Phase.REGISTER,
                     argv=(executable, "plugin", verb, PLUGIN_ID),
-                    postcondition=f"`{executable} plugin list` lists {PLUGIN_ID}",
+                    postcondition=(
+                        f"`{executable} plugin list --json` reports {PLUGIN_ID} installed"
+                    ),
                     depends_on=(f"hallouminate:marketplace:{harness}",),
                 )
             )
@@ -213,17 +217,21 @@ class HallouminateAdapter:
     def _check_marketplace(self, step: PlanStep, runner: CommandRunner) -> bool:
         executable, _ = PLUGIN_CLIS[_harness_of(step)]
         outcome = runner.run((executable, "plugin", "marketplace", "list"))
-        return outcome.exit_code == 0 and MARKETPLACE_SOURCE.split("/")[-1] in outcome.stdout
+        return outcome.exit_code == 0 and MARKETPLACE_NAME in _marketplace_names(outcome.stdout)
 
     def _check_plugin(self, step: PlanStep, runner: CommandRunner) -> bool:
         executable, _ = PLUGIN_CLIS[_harness_of(step)]
-        outcome = runner.run((executable, "plugin", "list"))
-        return outcome.exit_code == 0 and PLUGIN_ID in outcome.stdout
+        outcome = runner.run((executable, "plugin", "list", "--json"))
+        return outcome.exit_code == 0 and PLUGIN_ID in _installed_plugin_ids(outcome.stdout)
 
     def _check_repo_config(self, step: PlanStep, runner: CommandRunner) -> bool:
         repository = _repository_of(step)
         outcome = runner.run(("hallouminate", "config", "validate"), cwd=repository)
-        return outcome.exit_code == 0 and _corpus_name(repository) in outcome.stdout
+        if outcome.exit_code != 0:
+            return False
+        root = _resolved(str(repository))
+        name = _corpus_name(repository)
+        return any(path.is_relative_to(root) for path in _corpus_paths(outcome.stdout, name))
 
     def _check_corpus_query(self, step: PlanStep, runner: CommandRunner) -> bool:
         repository = _repository_of(step)
@@ -253,6 +261,71 @@ def _check_cursor_mcp(step: PlanStep) -> bool:
     if not isinstance(entry, dict):
         return False
     return entry.get("command") == edit.value["command"] and entry.get("args") == edit.value["args"]
+
+
+_BULLETS = "-*•❯ \t"
+
+
+def _marketplace_names(stdout: str) -> set[str]:
+    """Marketplace names from a ``plugin marketplace list`` listing.
+
+    Codex prints a ``NAME  ROOT`` table and Claude a bulleted name followed by
+    indented ``Field: value`` detail lines; both put the name first on its
+    line, so only the leading token counts — a name must never be matched
+    against another marketplace's filesystem root.
+    """
+    names: set[str] = set()
+    for line in stdout.splitlines():
+        tokens = line.strip().lstrip(_BULLETS).split()
+        if tokens and ":" not in tokens[0]:
+            names.add(tokens[0])
+    return names
+
+
+def _installed_plugin_ids(stdout: str) -> set[str]:
+    """Installed plugin ids from a ``plugin list --json`` document.
+
+    Codex answers ``{"installed": [...], "available": [...]}`` with entries
+    keyed ``pluginId``; Claude answers a flat list keyed ``id``. Codex lists
+    plugins its marketplaces merely offer, so ``installed: false`` entries are
+    excluded — that distinction is the whole point of the check.
+    """
+    try:
+        document = json.loads(stdout)
+    except json.JSONDecodeError:
+        return set()
+    entries = document.get("installed") if isinstance(document, dict) else document
+    if not isinstance(entries, list):
+        return set()
+    ids: set[str] = set()
+    for entry in entries:
+        if not isinstance(entry, dict) or entry.get("installed") is False:
+            continue
+        identifier = entry.get("pluginId") or entry.get("id")
+        if isinstance(identifier, str) and identifier:
+            ids.add(identifier)
+    return ids
+
+
+def _resolved(raw: str) -> Path:
+    """Absolute, symlink-free path for a value printed by ``config validate``."""
+    return Path(raw.strip()).expanduser().resolve()
+
+
+def _corpus_paths(stdout: str, name: str) -> list[Path]:
+    """Directories ``config validate`` reports for the named corpus.
+
+    ``config validate`` prints the merged XDG baseline, so the same corpus
+    name can be contributed by a same-named repository elsewhere on disk;
+    only the arrow target identifies which repository a corpus belongs to.
+    """
+    paths: list[Path] = []
+    for line in stdout.splitlines():
+        label, arrow, target = line.partition("→")
+        if not arrow or label.strip().lstrip(_BULLETS) != name:
+            continue
+        paths.append(_resolved(target))
+    return paths
 
 
 def _harness_of(step: PlanStep) -> HarnessName:
