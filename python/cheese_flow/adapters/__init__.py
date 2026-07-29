@@ -1,31 +1,21 @@
-"""cheese-flow harness adapters.
-
-Houses the ports of `src/adapters/*.ts` (claude-code, codex, cursor,
-copilot-cli, and the shared manifest builders).
-"""
+"""Native install commands and positive postconditions, one adapter per component."""
 
 from __future__ import annotations
 
-from cheese_flow.adapters.claude_code import claude_code_adapter
-from cheese_flow.adapters.codex import codex_adapter
-from cheese_flow.adapters.copilot_cli import copilot_cli_adapter
-from cheese_flow.adapters.cursor import cursor_adapter
-from cheese_flow.lib.harness import HarnessAdapter, HarnessName
-
-HARNESS_ADAPTERS: dict[HarnessName, HarnessAdapter] = {
-    "claude-code": claude_code_adapter,
-    "codex": codex_adapter,
-    "cursor": cursor_adapter,
-    "copilot-cli": copilot_cli_adapter,
-}
-
-HARNESS_NAMES: tuple[HarnessName, ...] = tuple(HARNESS_ADAPTERS.keys())
+from cheese_flow.adapters.easy_cheese import EasyCheeseAdapter
+from cheese_flow.adapters.hallouminate import HallouminateAdapter
+from cheese_flow.adapters.tilth import TilthAdapter
+from cheese_flow.models import CommandRunner, ComponentAdapters
 
 __all__ = [
-    "HARNESS_ADAPTERS",
-    "HARNESS_NAMES",
-    "claude_code_adapter",
-    "codex_adapter",
-    "copilot_cli_adapter",
-    "cursor_adapter",
+    "EasyCheeseAdapter",
+    "HallouminateAdapter",
+    "TilthAdapter",
+    "default_component_adapters",
 ]
+
+
+def default_component_adapters(runner: CommandRunner) -> ComponentAdapters:
+    """Build the adapter for every supported component, keyed by component name."""
+    adapters = (HallouminateAdapter(runner), EasyCheeseAdapter(runner), TilthAdapter(runner))
+    return {adapter.name: adapter for adapter in adapters}

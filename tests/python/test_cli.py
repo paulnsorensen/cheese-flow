@@ -1,9 +1,6 @@
 """Tests for the Typer ``cheese`` CLI surface (``cheese_flow.cli``).
 
-Replaces the TS Commander coverage from the integration ``--help`` smoke
-tests in ``tests/mcp-proxy.test.ts`` and ``tests/milknado.test.ts``. Per
-US-015, the surface is the same seven subcommands plus selected milknado
-top-level aliases.
+The v1 surface is exactly two commands: ``install`` and ``doctor``.
 """
 
 from __future__ import annotations
@@ -17,82 +14,54 @@ from typer.testing import CliRunner
 # enabled, headless CI panels render with no body text and these assertions fail.
 runner = CliRunner()
 
+REMOVED_COMMANDS = (
+    "compile",
+    "lint",
+    "milknado",
+    "session-start",
+    "mcp",
+    "solve-blend",
+)
 
-def test_root_help_lists_all_seven_subcommands() -> None:
+
+def test_root_help_lists_exactly_install_and_doctor() -> None:
     result = runner.invoke(app, ["--help"])
     assert result.exit_code == 0
     output = result.stdout
-    for command in (
-        "compile",
-        "install",
-        "doctor",
-        "lint",
-        "milknado",
-        "session-start",
-        "mcp",
-    ):
-        assert command in output, f"missing subcommand in --help: {command!r}\n{output}"
+    assert "install" in output
+    assert "doctor" in output
 
 
-def test_root_help_lists_milknado_top_level_alias() -> None:
+def test_root_help_omits_the_purged_v0_commands() -> None:
     result = runner.invoke(app, ["--help"])
     assert result.exit_code == 0
-    assert "solve-blend" in result.stdout
+    for command in REMOVED_COMMANDS:
+        assert command not in result.stdout, f"purged command still exposed: {command!r}"
 
 
-def test_mcp_help_mentions_project_root_option() -> None:
-    """Mirrors ``mcp-proxy.test.ts`` "wires up the mcp help" smoke."""
-    result = runner.invoke(app, ["mcp", "--help"])
-    assert result.exit_code == 0
-    assert "mcp" in result.stdout
-    assert "Usage:" in result.stdout
-    assert "project-root" in result.stdout.lower()
+def test_purged_commands_are_rejected() -> None:
+    for command in REMOVED_COMMANDS:
+        result = runner.invoke(app, [command])
+        assert result.exit_code != 0, f"purged command still runs: {command!r}"
 
 
-def test_milknado_help_mentions_project_root() -> None:
-    """Mirrors ``milknado.test.ts`` "wires up milknado help" smoke."""
-    result = runner.invoke(app, ["milknado", "--help"])
-    assert result.exit_code == 0
-    assert "milknado" in result.stdout
-    assert "Usage:" in result.stdout
-    assert "project-root" in result.stdout.lower()
-
-
-def test_doctor_help_describes_purpose() -> None:
-    result = runner.invoke(app, ["doctor", "--help"])
-    assert result.exit_code == 0
-    assert "Verify required" in result.stdout
-
-
-def test_compile_help_documents_harness_flag() -> None:
-    result = runner.invoke(app, ["compile", "--help"])
-    assert result.exit_code == 0
-    assert "-H" in result.stdout
-    assert "--harness" in result.stdout
-
-
-def test_install_help_documents_harness_flag() -> None:
+def test_install_help_documents_its_three_options() -> None:
     result = runner.invoke(app, ["install", "--help"])
     assert result.exit_code == 0
-    assert "-H" in result.stdout
-    assert "--harness" in result.stdout
+    output = result.stdout
+    assert "--config" in output
+    assert "--dry-run" in output
+    assert "--json" in output
 
 
-def test_lint_help_documents_project_root() -> None:
-    result = runner.invoke(app, ["lint", "--help"])
+def test_doctor_help_documents_config_option() -> None:
+    result = runner.invoke(app, ["doctor", "--help"])
     assert result.exit_code == 0
-    assert "project-root" in result.stdout.lower()
+    assert "--config" in result.stdout
 
 
-def test_session_start_help_documents_options() -> None:
-    result = runner.invoke(app, ["session-start", "--help"])
+def test_doctor_help_omits_install_only_options() -> None:
+    result = runner.invoke(app, ["doctor", "--help"])
     assert result.exit_code == 0
-    assert "--root" in result.stdout
-    assert "--quiet" in result.stdout
-    assert "--max-time" in result.stdout
-
-
-def test_solve_blend_help_describes_alias() -> None:
-    result = runner.invoke(app, ["solve-blend", "--help"])
-    assert result.exit_code == 0
-    assert "blend" in result.stdout.lower()
+    assert "--dry-run" not in result.stdout
+    assert "--json" not in result.stdout

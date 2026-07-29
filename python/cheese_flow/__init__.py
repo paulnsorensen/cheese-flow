@@ -1,5 +1,6 @@
 """cheese-flow Python package.
 
-Portable agent and skill bundle compiler. Public surfaces land in subsequent
-stack PRs (US-002 onward); this module is the empty crust placed in US-001.
+A composition installer: it records the user's harness, component, and
+repository choices in a validated TOML manifest, then delegates installation and
+verification to each component's own native CLI.
 """
