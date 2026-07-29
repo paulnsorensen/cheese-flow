@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import signal
+import sys
 import tempfile
 import time
 from collections.abc import Iterator, Sequence
@@ -13,7 +14,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from cheese_flow.adapters import default_component_adapters
 from cheese_flow.models import (
     COMPONENT_NAMES,
     ApplyReport,
@@ -23,13 +23,14 @@ from cheese_flow.models import (
     ComponentAdapter,
     ComponentAdapters,
     ConfigEdit,
+    ConfigEditSummary,
     DesiredState,
     InstallPlan,
     PlanStep,
     ReportStatus,
-    RepositoryCandidate,
     StepResult,
     StepStatus,
+    canonicalize,
 )
 from cheese_flow.repositories import discover_repositories
 from cheese_flow.runner import SignalForwardingRunner
@@ -60,7 +61,7 @@ def build_install_plan(state: DesiredState, adapters: ComponentAdapters) -> Inst
 
 
 def apply_install_plan(
-    plan: InstallPlan, runner: CommandRunner, *, adapters: ComponentAdapters | None = None
+    plan: InstallPlan, runner: CommandRunner, *, adapters: ComponentAdapters
 ) -> ApplyReport:
     """Run the plan, skipping steps whose postcondition already holds.
 
@@ -68,10 +69,10 @@ def apply_install_plan(
     repositories continue. There is no rollback.
 
     ``adapters`` must be the adapter instances the plan was built from, so
-    postconditions verify the versions this run planned. It defaults to freshly
-    built adapters only for callers that never planned separately.
+    postconditions verify the exact versions this run planned (acceptance:150).
+    It is required: rebuilding adapters here would re-resolve every version and
+    reject what the plan just installed.
     """
-    resolved = adapters if adapters is not None else default_component_adapters(runner)
     results: list[StepResult] = []
     unmet: set[str] = set()
     repositories = _RepositoryRevalidation(plan)
@@ -86,7 +87,7 @@ def apply_install_plan(
                 unmet.add(step.step_id)
                 results.append(_result(step, StepStatus.BLOCKED, remediation=blocked))
                 continue
-            result = _perform(step, resolved, runner, interruption)
+            result = _perform(step, adapters, runner, interruption)
             if result.status not in (StepStatus.SUCCEEDED, StepStatus.SKIPPED):
                 unmet.add(step.step_id)
             results.append(result)
@@ -162,11 +163,19 @@ def _signal_scope(runner: CommandRunner) -> Iterator[_Interruption]:
 
     previous: dict[int, Any] = {}
     try:
+        unavailable: list[str] = []
         for number in (signal.SIGINT, signal.SIGTERM):
             try:
                 previous[number] = signal.signal(number, handle)
             except ValueError:
-                continue
+                unavailable.append(number.name)
+        if unavailable:
+            print(
+                f"warning: no interrupt handling for {', '.join(unavailable)} "
+                "(apply is not running on the main thread); an interrupted run "
+                "will not be reported as interrupted",
+                file=sys.stderr,
+            )
         yield state
     finally:
         for number, handler in previous.items():
@@ -211,15 +220,18 @@ def _perform(
         status = StepStatus.INTERRUPTED
     else:
         status = StepStatus.FAILED
-    remediation = None
-    if status is StepStatus.FAILED:
-        remediation = failure or f"postcondition still unsatisfied: {step.postcondition}"
+    # A discarded write is a diagnostic even when the postcondition ends up
+    # satisfied by something else (a concurrent editor, a pre-existing entry).
+    remediation = failure
+    if remediation is None and status is StepStatus.FAILED:
+        remediation = f"postcondition still unsatisfied: {step.postcondition}"
     return _result(
         step,
         status,
         outcome=outcome,
         elapsed_ms=_elapsed_ms(started),
         remediation=remediation,
+        failure=failure,
     )
 
 
@@ -234,8 +246,12 @@ def _result(
     outcome: CommandOutcome | None = None,
     elapsed_ms: int = 0,
     remediation: str | None = None,
+    failure: str | None = None,
 ) -> StepResult:
     argv, secrets = _scan_argv(step.argv)
+    stderr = None if outcome is None else outcome.stderr
+    if failure is not None:
+        stderr = f"{stderr}\n{failure}" if stderr else failure
     return StepResult(
         step_id=step.step_id,
         component=step.component,
@@ -243,33 +259,48 @@ def _result(
         repository=step.repository,
         phase=step.phase,
         argv=argv,
+        config_edit=_config_edit_summary(step),
         postcondition=step.postcondition,
         status=status,
         exit_code=None if outcome is None else outcome.exit_code,
         stdout_tail=None if outcome is None else _tail(outcome.stdout, secrets),
-        stderr_tail=None if outcome is None else _tail(outcome.stderr, secrets),
+        stderr_tail=None if stderr is None else _tail(stderr, secrets),
         elapsed_ms=elapsed_ms,
         remediation=remediation,
     )
 
 
+def _config_edit_summary(step: PlanStep) -> ConfigEditSummary | None:
+    """Identify the file a config-edit step writes; its argv is empty by design."""
+    if step.config_edit is None:
+        return None
+    return ConfigEditSummary(target=step.config_edit.target, pointer=step.config_edit.pointer)
+
+
 class _RepositoryRevalidation:
-    """Recanonicalizes the plan's repositories once, before the first mutation."""
+    """Recanonicalizes each repository before it is first mutated (spec:109)."""
 
     def __init__(self, plan: InstallPlan) -> None:
         self._repositories = tuple(
             dict.fromkeys(step.repository for step in plan.steps if step.repository is not None)
         )
-        self._candidates: dict[Path, RepositoryCandidate] | None = None
+        self._verdicts: dict[Path, str | None] = {}
 
     def drift(self, repository: Path) -> str | None:
         """Return why ``repository`` must not be mutated, or ``None`` if it is sound."""
-        if self._candidates is None:
-            self._candidates = {
-                candidate.canonical_path: candidate
-                for candidate in discover_repositories(self._repositories, 0)
-            }
-        candidate = self._candidates.get(repository)
+        canonical = canonicalize(repository)
+        if canonical not in self._verdicts:
+            self._verdicts[canonical] = self._probe(canonical, repository)
+        return self._verdicts[canonical]
+
+    def _probe(self, canonical: Path, repository: Path) -> str | None:
+        # Name and worktree collisions are properties of the whole selected set,
+        # so every probe rediscovers all of it and reads one verdict out.
+        candidates = {
+            candidate.canonical_path: candidate
+            for candidate in discover_repositories(self._repositories, 0)
+        }
+        candidate = candidates.get(canonical)
         if candidate is None:
             return f"{repository} is no longer a repository at its planned path"
         if not candidate.writable:

@@ -7,7 +7,7 @@ import threading
 import time
 from pathlib import Path
 
-from cheese_flow.runner import SubprocessRunner
+from cheese_flow.runner import TIMEOUT_EXIT_CODE, SubprocessRunner
 
 
 def test_zero_exit_command_reports_exact_outcome() -> None:
@@ -69,6 +69,35 @@ def test_forward_signal_without_an_active_child_is_a_no_op() -> None:
     runner.forward_signal(signal.SIGTERM)
 
     assert runner.run(("true",)).exit_code == 0
+
+
+def test_a_hanging_child_is_killed_and_reported_rather_than_stalling_the_run() -> None:
+    runner = SubprocessRunner(timeout=0.2)
+    started = time.monotonic()
+
+    outcome = runner.run(("sh", "-c", "sleep 30"))
+
+    assert time.monotonic() - started < 10.0
+    assert outcome.exit_code == TIMEOUT_EXIT_CODE
+    assert "0.2" in outcome.stderr
+    assert "timed out" in outcome.stderr
+
+
+def test_output_produced_before_the_timeout_is_still_captured() -> None:
+    runner = SubprocessRunner(timeout=0.3)
+
+    outcome = runner.run(("sh", "-c", "printf brie; printf stink >&2; sleep 30"))
+
+    assert outcome.exit_code == TIMEOUT_EXIT_CODE
+    assert outcome.stdout == "brie"
+    assert "stink" in outcome.stderr
+
+
+def test_a_child_finishing_inside_the_timeout_reports_its_own_outcome() -> None:
+    outcome = SubprocessRunner(timeout=30.0).run(("sh", "-c", "printf brie; exit 3"))
+
+    assert outcome.exit_code == 3
+    assert outcome.stdout == "brie"
 
 
 def test_forward_signal_terminates_the_active_child() -> None:

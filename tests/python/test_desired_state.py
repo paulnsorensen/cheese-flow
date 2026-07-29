@@ -398,3 +398,49 @@ def test_default_config_path_falls_back_when_xdg_is_empty(
     monkeypatch.setenv("XDG_CONFIG_HOME", "")
     monkeypatch.setenv("HOME", str(tmp_path))
     assert default_config_path() == tmp_path / ".config" / "cheese" / "config.toml"
+
+
+# --- symlinked search roots ------------------------------------------------
+
+
+def _manifest(search_roots: list[Path], selected: list[Path]) -> str:
+    return (
+        'harnesses = ["claude-code"]\n'
+        'components = ["hallouminate", "easy-cheese"]\n'
+        "\n[repositories]\n"
+        f"search_roots = {[str(p) for p in search_roots]}\n"
+        "max_depth = 1\n"
+        f"selected = {[str(p) for p in selected]}\n"
+    ).replace("'", '"')
+
+
+def test_symlinked_search_root_is_canonicalized_so_selections_stay_consistent(
+    tmp_path: Path,
+) -> None:
+    real = (tmp_path / "data" / "Dev").resolve()
+    real.mkdir(parents=True)
+    link = tmp_path / "Dev"
+    link.symlink_to(real)
+
+    state = load_desired_state(write(tmp_path, _manifest([link], [real / "project"])))
+
+    assert state.repositories.search_roots == (real,)
+    assert state.repositories.selected == (real / "project",)
+
+
+def test_nonexistent_search_root_is_kept_rather_than_dropped(tmp_path: Path) -> None:
+    missing = tmp_path / "not-there"
+
+    state = load_desired_state(write(tmp_path, _manifest([missing], [missing / "project"])))
+
+    assert state.repositories.search_roots == (missing,)
+    assert state.repositories.selected == (missing / "project",)
+
+
+def test_selection_outside_every_search_root_is_still_rejected(tmp_path: Path) -> None:
+    real = (tmp_path / "Dev").resolve()
+    real.mkdir()
+
+    error = load_error(tmp_path, _manifest([real], [tmp_path / "elsewhere"]))
+
+    assert "not under any search root" in error.reason

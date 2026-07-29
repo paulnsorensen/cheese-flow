@@ -60,7 +60,7 @@ def wizard(monkeypatch: pytest.MonkeyPatch):
     discovery = Discovery()
     detected: list[str] = ["claude-code", "codex"]
     monkeypatch.setattr(tui, "discover_repositories", discovery)
-    monkeypatch.setattr(tui, "detect_available_harnesses", lambda _root: tuple(detected))
+    monkeypatch.setattr(tui, "detect_available_harnesses", lambda: tuple(detected))
 
     def run(script: list[str], initial: DesiredState | None = None) -> DesiredState | None:
         monkeypatch.setattr("sys.stdin", io.StringIO("".join(f"{line}\n" for line in script)))

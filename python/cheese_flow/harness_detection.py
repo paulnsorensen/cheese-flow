@@ -20,13 +20,13 @@ _CONFIG_DIRS: dict[HarnessName, str] = {
 }
 
 
-def detect_available_harnesses(project_root: Path) -> tuple[HarnessName, ...]:
-    """Return the supported harnesses detected for ``project_root``.
+def detect_available_harnesses() -> tuple[HarnessName, ...]:
+    """Return the supported harnesses detected on this machine.
 
     A harness counts as available when its CLI is on ``PATH`` or its user
     configuration directory exists. No supported harness has a project-local
-    installation signal, so ``project_root`` does not affect the result. The
-    probe only reads, and detected harnesses start selected in the wizard.
+    installation signal, so detection takes no project root. The probe only
+    reads, and detected harnesses start selected in the wizard.
     """
     home = Path.home()
     return tuple(name for name in HARNESS_NAMES if _is_available(name, home))

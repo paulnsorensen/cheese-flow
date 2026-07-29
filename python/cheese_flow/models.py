@@ -100,6 +100,21 @@ def _require_absolute(paths: Sequence[Path], label: str) -> None:
         raise ValueError(f"{label} must be absolute paths: {', '.join(relative)}")
 
 
+def canonicalize(path: Path) -> Path:
+    """Resolve ``path`` without requiring it to exist.
+
+    Repository discovery canonicalizes what it finds, so anything compared
+    against a discovered path has to be canonicalized the same way — otherwise
+    ``~/Dev`` and its symlink target describe the same directory but never
+    compare equal. Unlike discovery's own strict resolution this keeps paths
+    that do not exist yet, so a user's typed search root is never discarded.
+    """
+    try:
+        return path.resolve()
+    except OSError:
+        return path
+
+
 def _require_unique(values: Sequence[object], label: str) -> None:
     seen: set[object] = set()
     duplicates: list[str] = []
@@ -112,7 +127,12 @@ def _require_unique(values: Sequence[object], label: str) -> None:
 
 
 class RepositorySelection(_Frozen):
-    """Where to look for repositories, how deep, and which ones were chosen."""
+    """Where to look for repositories, how deep, and which ones were chosen.
+
+    Roots and selections are canonicalized here, at the one seam both pass
+    through, so a selection can always be compared against its search root and
+    a persisted manifest reloads to exactly the state that wrote it.
+    """
 
     search_roots: tuple[Path, ...] = ()
     max_depth: int = DEFAULT_MAX_DEPTH
@@ -120,10 +140,11 @@ class RepositorySelection(_Frozen):
 
     @field_validator("search_roots", "selected")
     @classmethod
-    def _absolute_and_unique(cls, value: tuple[Path, ...], info) -> tuple[Path, ...]:
+    def _absolute_canonical_and_unique(cls, value: tuple[Path, ...], info) -> tuple[Path, ...]:
         _require_absolute(value, info.field_name)
-        _require_unique(value, info.field_name)
-        return value
+        canonical = tuple(canonicalize(path) for path in value)
+        _require_unique(canonical, info.field_name)
+        return canonical
 
     @field_validator("max_depth")
     @classmethod
@@ -213,6 +234,13 @@ class ConfigEdit(_Frozen):
         return value
 
 
+class ConfigEditSummary(_Frozen):
+    """Which config entry a step wrote, for a result that has no argv to show."""
+
+    target: Path
+    pointer: str
+
+
 class PlanStep(_Frozen):
     """One deterministic unit of work an adapter contributes to the plan.
 
@@ -292,6 +320,9 @@ class StepResult(_Frozen):
     repository: Path | None = None
     phase: Phase
     argv: tuple[str, ...]
+    config_edit: ConfigEditSummary | None = None
+    """Set instead of ``argv`` when the step's only action was a config write."""
+
     postcondition: str
     status: StepStatus
     exit_code: int | None = None

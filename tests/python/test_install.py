@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import json
 import signal
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from pathlib import Path
 
 import pytest
+from cheese_flow import install
 from cheese_flow.install import (
     TAIL_LIMIT,
     apply_install_plan,
@@ -17,6 +18,7 @@ from cheese_flow.models import (
     CommandOutcome,
     ComponentName,
     ConfigEdit,
+    ConfigEditSummary,
     DesiredState,
     InstallPlan,
     Phase,
@@ -57,6 +59,36 @@ class FakeRunner:
 
     def argvs(self) -> list[tuple[str, ...]]:
         return [argv for argv, _ in self.calls]
+
+
+class MutatingRunner(FakeRunner):
+    """Runs ``action`` right after one step's command, modelling concurrent drift."""
+
+    def __init__(self, after: tuple[str, ...], action: Callable[[], None]) -> None:
+        super().__init__()
+        self._after = after
+        self._action = action
+
+    def run(self, argv: Sequence[str], *, cwd: Path | None = None) -> CommandOutcome:
+        outcome = super().run(argv, cwd=cwd)
+        if tuple(argv) == self._after:
+            self._action()
+        return outcome
+
+
+class _SignalStub:
+    """Stands in for the ``signal`` module and refuses to install some handlers."""
+
+    SIGINT = signal.SIGINT
+    SIGTERM = signal.SIGTERM
+
+    def __init__(self, *, refuse: tuple[int, ...]) -> None:
+        self._refuse = refuse
+
+    def signal(self, signum: int, handler: object) -> object:
+        if signum in self._refuse:
+            raise ValueError("signal only works in main thread")
+        return signal.signal(signum, handler)  # type: ignore[arg-type]
 
 
 class ScriptedAdapter:
@@ -389,3 +421,139 @@ def test_repository_steps_run_in_the_repository_working_directory(tmp_path: Path
     apply_install_plan(plan_of(only, state=state), runner, adapters={"hallouminate": adapter})
 
     assert runner.calls == [(("run", "init"), repository)]
+
+
+def test_revalidation_resolves_a_non_canonical_planned_repository_path(tmp_path: Path) -> None:
+    """A planned path that is a symlink still matches its canonical candidate.
+
+    Revalidation keys candidates by canonical path but looked them up by the
+    step's planned path, so any non-canonical path blocked every step for that
+    repository with a false "no longer a repository" claim.
+    """
+    real = make_repository(tmp_path / "real")
+    link = tmp_path / "link"
+    link.symlink_to(real)
+    only = step("init", repository=link, phase=Phase.INITIALIZE)
+    adapter = ScriptedAdapter("hallouminate", (only,), {"init": [False, True]})
+    runner = FakeRunner()
+
+    report = apply_install_plan(plan_of(only), runner, adapters={"hallouminate": adapter})
+
+    assert statuses(report) == [("init", StepStatus.SUCCEEDED)]
+    assert runner.argvs() == [("run", "init")]
+
+
+def test_repository_is_revalidated_at_its_own_first_use_not_once_per_run(tmp_path: Path) -> None:
+    """spec:109 — revalidate before mutating a repository, not before the first one.
+
+    ``later`` stops being a repository while ``early``'s step is running. A
+    single cached probe taken at the first repository step never sees that.
+    """
+    early = make_repository(tmp_path / "early")
+    later = make_repository(tmp_path / "later")
+    steps = (
+        step("init-early", repository=early, phase=Phase.INITIALIZE),
+        step("init-later", repository=later, phase=Phase.INITIALIZE),
+    )
+    adapter = ScriptedAdapter("hallouminate", steps)
+    runner = MutatingRunner(("run", "init-early"), lambda: (later / ".git").rmdir())
+
+    report = apply_install_plan(plan_of(*steps), runner, adapters={"hallouminate": adapter})
+
+    assert statuses(report) == [
+        ("init-early", StepStatus.SUCCEEDED),
+        ("init-later", StepStatus.BLOCKED),
+    ]
+    assert str(later) in (report.results[1].remediation or "")
+
+
+def test_per_repository_revalidation_still_sees_cross_repository_name_collisions(
+    tmp_path: Path,
+) -> None:
+    """Collisions are derived across the whole selected set, one repository at a time."""
+    first = make_repository(tmp_path / "one" / "alpha")
+    second = make_repository(tmp_path / "two" / "alpha")
+    steps = (
+        step("init-first", repository=first, phase=Phase.INITIALIZE),
+        step("init-second", repository=second, phase=Phase.INITIALIZE),
+    )
+    adapter = ScriptedAdapter("hallouminate", steps)
+
+    report = apply_install_plan(plan_of(*steps), FakeRunner(), adapters={"hallouminate": adapter})
+
+    assert statuses(report) == [
+        ("init-first", StepStatus.BLOCKED),
+        ("init-second", StepStatus.BLOCKED),
+    ]
+    assert "collides (name)" in (report.results[0].remediation or "")
+
+
+def test_config_edit_failure_is_reported_even_when_the_postcondition_holds(
+    tmp_path: Path,
+) -> None:
+    """A discarded write is a diagnostic, not a silent success.
+
+    The postcondition can hold for a reason the step had nothing to do with —
+    a concurrent editor or a pre-existing entry — so the failed write must
+    still reach the report.
+    """
+    target = tmp_path / "mcp.json"
+    target.write_bytes(b"{ this is not json")
+    edit = ConfigEdit(target=target, pointer="mcpServers.tilth", value={"command": "npx"})
+    edited = step("cursor", config_edit=edit, phase=Phase.REGISTER)
+    adapter = ScriptedAdapter("hallouminate", (edited,), {"cursor": [False, True]})
+
+    report = apply_install_plan(plan_of(edited), FakeRunner(), adapters={"hallouminate": adapter})
+
+    result = report.results[0]
+    assert result.status is StepStatus.SUCCEEDED
+    assert "not valid JSON" in (result.remediation or "")
+    assert "not valid JSON" in (result.stderr_tail or "")
+    assert target.read_bytes() == b"{ this is not json"
+
+
+def test_config_edit_step_result_identifies_the_file_it_wrote(tmp_path: Path) -> None:
+    """A config-edit step reports empty argv, so the target must be identified."""
+    target = tmp_path / "mcp.json"
+    edit = ConfigEdit(target=target, pointer="mcpServers.tilth", value={"command": "npx"})
+    edited = step("cursor", config_edit=edit, phase=Phase.REGISTER)
+    adapter = ScriptedAdapter("hallouminate", (edited,), {"cursor": [False, True]})
+
+    report = apply_install_plan(plan_of(edited), FakeRunner(), adapters={"hallouminate": adapter})
+
+    result = report.results[0]
+    assert result.argv == ()
+    assert result.config_edit == ConfigEditSummary(target=target, pointer="mcpServers.tilth")
+    document = json.loads(json.dumps(result.model_dump(mode="json")))
+    assert document["config_edit"] == {"target": str(target), "pointer": "mcpServers.tilth"}
+
+
+def test_argv_step_result_carries_no_config_edit_summary() -> None:
+    adapter = ScriptedAdapter("hallouminate", (step("a"),), {"a": [False, True]})
+
+    report = apply_install_plan(
+        plan_of(step("a")), FakeRunner(), adapters={"hallouminate": adapter}
+    )
+
+    assert report.results[0].config_edit is None
+
+
+def test_unavailable_signal_handling_is_reported_once(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Running off the main thread degrades interrupt handling — say so, once."""
+    monkeypatch.setattr(
+        install,
+        "signal",
+        _SignalStub(refuse=(signal.SIGINT, signal.SIGTERM)),
+    )
+    adapter = ScriptedAdapter("hallouminate", (step("a"),), {"a": [True]})
+
+    report = apply_install_plan(
+        plan_of(step("a")), FakeRunner(), adapters={"hallouminate": adapter}
+    )
+
+    assert statuses(report) == [("a", StepStatus.SKIPPED)]
+    warnings = [line for line in capsys.readouterr().err.splitlines() if "interrupt" in line]
+    assert len(warnings) == 1
+    assert "SIGINT" in warnings[0] and "SIGTERM" in warnings[0]

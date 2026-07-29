@@ -24,6 +24,7 @@ from cheese_flow.models import (
     HarnessName,
     RepositoryCandidate,
     RepositorySelection,
+    canonicalize,
 )
 from cheese_flow.repositories import discover_repositories
 
@@ -68,7 +69,7 @@ def run_wizard(initial: DesiredState | None) -> DesiredState | None:
 
 
 def _draft_from(initial: DesiredState | None) -> _Draft:
-    detected = detect_available_harnesses(Path.cwd())
+    detected = detect_available_harnesses()
     if initial is None:
         return _Draft(
             detected=detected,
@@ -274,8 +275,11 @@ def _parse_roots(console: Console, answer: str) -> list[Path] | None:
         if not path.is_absolute():
             console.print(f"  Search roots must be absolute paths: {text}")
             return None
-        if path not in roots:
-            roots.append(path)
+        # Discovery canonicalizes what it finds, so the root has to be
+        # canonicalized too or a symlinked root never contains its own results.
+        canonical = canonicalize(path)
+        if canonical not in roots:
+            roots.append(canonical)
     return roots
 
 
@@ -285,7 +289,11 @@ def _candidate_paths(draft: _Draft) -> list[Path]:
         tuple(draft.search_roots), draft.max_depth
     )
     paths = [candidate.canonical_path for candidate in discovered]
-    paths.extend(path for path in draft.selected if path not in paths)
+    paths.extend(
+        canonical
+        for canonical in (canonicalize(path) for path in draft.selected)
+        if canonical not in paths
+    )
     return paths
 
 

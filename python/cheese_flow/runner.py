@@ -9,6 +9,7 @@ is currently waiting on so the apply scheduler can forward SIGINT/SIGTERM to it.
 from __future__ import annotations
 
 import os
+import signal
 import subprocess
 import threading
 import time
@@ -20,6 +21,12 @@ from cheese_flow.models import CommandOutcome
 
 MISSING_EXECUTABLE_EXIT_CODE = 127
 """Exit code reported when the child could not be started at all."""
+
+TIMEOUT_EXIT_CODE = 124
+"""Exit code reported when the child outlived its timeout and was killed."""
+
+DEFAULT_TIMEOUT_SECONDS = 900.0
+"""Wall clock a single child gets before it is killed, so a run cannot hang."""
 
 
 @runtime_checkable
@@ -39,8 +46,14 @@ class SubprocessRunner:
     parent process.
     """
 
-    def __init__(self, *, env: Mapping[str, str] | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        env: Mapping[str, str] | None = None,
+        timeout: float = DEFAULT_TIMEOUT_SECONDS,
+    ) -> None:
         self._env = dict(env) if env else None
+        self._timeout = timeout
         self._lock = threading.Lock()
         self._active: subprocess.Popen[str] | None = None
 
@@ -56,6 +69,9 @@ class SubprocessRunner:
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
+                # Its own process group, so a timeout can kill the whole tree.
+                # Killing only the child leaves grandchildren holding the pipes.
+                start_new_session=True,
             )
         except OSError as error:
             return CommandOutcome(
@@ -68,13 +84,25 @@ class SubprocessRunner:
         with self._lock:
             self._active = process
         try:
-            stdout, stderr = process.communicate()
+            stdout, stderr = process.communicate(timeout=self._timeout)
+            exit_code = process.returncode
+        except subprocess.TimeoutExpired:
+            # A wedged `npm install -g` or `hallouminate index` must not stall
+            # the whole run: kill it and report the timeout as its outcome.
+            _kill_group(process)
+            try:
+                stdout, stderr = process.communicate(timeout=_KILL_GRACE_SECONDS)
+            except subprocess.TimeoutExpired:
+                stdout, stderr = "", ""
+            exit_code = TIMEOUT_EXIT_CODE
+            note = f"{command[0]} timed out after {self._timeout}s and was killed"
+            stderr = f"{stderr}\n{note}" if stderr else note
         finally:
             with self._lock:
                 self._active = None
         return CommandOutcome(
             argv=command,
-            exit_code=process.returncode,
+            exit_code=exit_code,
             stdout=stdout,
             stderr=stderr,
             elapsed_ms=_elapsed_ms(started),
@@ -93,6 +121,17 @@ class SubprocessRunner:
 
     def _environment(self) -> dict[str, str] | None:
         return {**os.environ, **self._env} if self._env else None
+
+
+_KILL_GRACE_SECONDS = 5.0
+"""How long the killed process tree gets to close its pipes before we give up."""
+
+
+def _kill_group(process: subprocess.Popen[str]) -> None:
+    try:
+        os.killpg(os.getpgid(process.pid), signal.SIGKILL)
+    except (ProcessLookupError, PermissionError, OSError):
+        process.kill()
 
 
 def _elapsed_ms(started: float) -> int:

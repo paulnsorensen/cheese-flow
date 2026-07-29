@@ -40,8 +40,19 @@ cli_runner = CliRunner()
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 MARKETPLACE_SOURCE = "paulnsorensen/hallouminate"
+MARKETPLACE_NAME = "hallouminate"
 PLUGIN_ID = "hallouminate@hallouminate"
-EASY_CHEESE_SOURCE_URL = "https://github.com/paulnsorensen/easy-cheese.git"
+
+# An unrelated marketplace every harness already has, whose root happens to
+# contain "hallouminate". Spelled out on purpose: a listing check that matches
+# a bare substring instead of the leading name token passes on this line alone,
+# so it must stay in the fake's output even when nothing has been added.
+DECOY_MARKETPLACE = "ap"
+DECOY_MARKETPLACE_ROOT = "/home/paul/.cache/ap/plugins/hallouminate/marketplace"
+
+# What `gh skill install <repo> --all` puts on disk. Spelled out rather than
+# imported: dropping one of these must fail the postcondition, not follow it.
+EASY_CHEESE_SKILLS = ("mold", "cook", "press", "age", "cure", "plate", "cheese")
 
 # The harness-native MCP config files the adapters read. Spelled out here on
 # purpose: if production moves one of these, the fake writes the old path and
@@ -116,7 +127,7 @@ class FakeWorld:
         self.plugins.add(PLUGIN_ID)
         self.config_initialized = True
         for harness in harnesses:
-            self.skills[harness] = ["age"]
+            self.skills[harness] = list(EASY_CHEESE_SKILLS)
             self.write_tilth_entry(harness)
 
     def write_tilth_entry(self, harness: str) -> None:
@@ -154,12 +165,12 @@ class FakeWorld:
             self.marketplaces.add(MARKETPLACE_SOURCE)
             return _ok(key)
         if key[1:] == ("plugin", "marketplace", "list"):
-            return _ok(key, "\n".join(sorted(self.marketplaces)))
+            return _ok(key, self._marketplace_listing(key[0]))
         if len(key) == 4 and key[1] == "plugin" and key[2] in ("install", "add"):
             self.plugins.add(key[3])
             return _ok(key)
-        if key[1:] == ("plugin", "list"):
-            return _ok(key, "\n".join(sorted(self.plugins)))
+        if key[1:] == ("plugin", "list", "--json"):
+            return _ok(key, self._plugin_listing(key[0]))
         if key == ("hallouminate", "config", "init"):
             if "hallouminate-config" in self._refuse:
                 return _fail(key, "config init refused")
@@ -179,7 +190,7 @@ class FakeWorld:
                 return _ok(key, '[{"path": ".hallouminate/wiki/index.md"}]')
             return _fail(key, "no corpus")
         if key[:3] == ("gh", "skill", "install"):
-            self.skills.setdefault(_agent_of(key), []).append("age")
+            self.skills[_agent_of(key)] = list(EASY_CHEESE_SKILLS)
             return _ok(key)
         if key[:3] == ("gh", "skill", "list"):
             return _ok(key, json.dumps(self._skill_entries(_agent_of(key))))
@@ -188,23 +199,60 @@ class FakeWorld:
             return _ok(key)
         raise AssertionError(f"the fake world was asked to run an unmodelled command: {key}")
 
+    def _marketplace_listing(self, executable: str) -> str:
+        """What `<exe> plugin marketplace list` prints.
+
+        Codex prints a ``NAME  ROOT`` table; Claude prints a bulleted name with
+        indented ``Field: value`` detail lines. Both always carry the decoy
+        marketplace whose root mentions hallouminate.
+        """
+        added = sorted(self.marketplaces)
+        if executable == "codex":
+            root = f"{self.home}/.codex/marketplaces/{MARKETPLACE_NAME}"
+            rows = [f"{DECOY_MARKETPLACE:<16}{DECOY_MARKETPLACE_ROOT}"]
+            rows += [f"{MARKETPLACE_NAME:<16}{root}" for _ in added]
+            return "\n".join(["NAME            ROOT", *rows])
+        blocks = [f"- {DECOY_MARKETPLACE}\n  Source: {DECOY_MARKETPLACE_ROOT}\n  Plugins: 3"]
+        blocks += [
+            f"- {MARKETPLACE_NAME}\n  Source: github:{source}\n  Plugins: 1" for source in added
+        ]
+        return "\n".join(blocks)
+
+    def _plugin_listing(self, executable: str) -> str:
+        """What `<exe> plugin list --json` prints.
+
+        An added marketplace offers its plugin whether or not it was installed,
+        so an offered-but-uninstalled plugin appears with ``installed`` false —
+        the exact row that must not satisfy the postcondition.
+        """
+        offered = sorted({PLUGIN_ID} - self.plugins) if self.marketplaces else []
+        if executable == "codex":
+            document = {
+                "installed": [
+                    {"pluginId": plugin, "installed": True} for plugin in sorted(self.plugins)
+                ],
+                "available": [{"pluginId": plugin, "installed": False} for plugin in offered],
+            }
+            return json.dumps(document)
+        entries = [{"id": plugin, "installed": True} for plugin in sorted(self.plugins)]
+        entries += [{"id": plugin, "installed": False} for plugin in offered]
+        return json.dumps(entries)
+
     def _validate(self, key: tuple[str, ...], cwd: Path | None) -> CommandOutcome:
         if cwd is None:
             if self.config_initialized:
                 return _ok(key)
             return _fail(key, "no hallouminate config")
         if cwd in self.initialized_repos:
-            return _ok(key, f"repo:{cwd.name}:wiki")
+            return _ok(key, f"  - repo:{cwd.name}:wiki  → {cwd}/./.hallouminate/wiki")
         return _fail(key, f"{cwd} has no corpus")
 
     def _skill_entries(self, harness: str) -> list[dict[str, object]]:
+        """Rows a real `gh skill list --json` returns: released gh leaves
+        ``sourceURL`` empty for every installed skill, so identity rests on the
+        installed skill names alone."""
         return [
-            {
-                "skillName": name,
-                "scope": "user",
-                "agentHosts": [harness],
-                "sourceURL": EASY_CHEESE_SOURCE_URL,
-            }
+            {"skillName": name, "scope": "user", "agentHosts": [harness], "sourceURL": ""}
             for name in self.skills.get(harness, [])
         ]
 
@@ -492,9 +540,9 @@ READ_ONLY_PROBES = [
     ("npm", "view", "tilth@latest", "version"),
     ("hallouminate", "--version"),
     ("claude", "plugin", "marketplace", "list"),
-    ("claude", "plugin", "list"),
+    ("claude", "plugin", "list", "--json"),
     ("codex", "plugin", "marketplace", "list"),
-    ("codex", "plugin", "list"),
+    ("codex", "plugin", "list", "--json"),
     ("hallouminate", "config", "validate"),
     (
         "gh",
@@ -601,22 +649,23 @@ def test_apply_installs_exactly_the_version_planning_resolved(
     ]
 
 
-def test_apply_without_the_planning_adapters_re_resolves_the_version(home: Path) -> None:
-    """Why ``adapters=`` is mandatory: the default rebuilds and re-resolves.
+def test_apply_cannot_be_called_without_the_planning_adapters(home: Path) -> None:
+    """The unsafe call is not expressible: ``adapters`` is a required argument.
 
-    This pins the documented default of ``apply_install_plan`` so the guarantee
-    the test above depends on cannot quietly become the CLI's behaviour.
+    Omitting it used to rebuild the adapters, re-run ``npm view``, and install a
+    version the plan never showed. Now it cannot compile a call at all, so no
+    caller can silently reintroduce a second resolution.
     """
     world = FakeWorld(home, versions={"hallouminate": ["1.0.0", "9.9.9"]})
     state = DesiredState(harnesses=("claude-code",), components=("hallouminate", "easy-cheese"))
     plan = build_install_plan(state, default_component_adapters(world))
+    resolutions = world.count(("npm", "view", "hallouminate@latest", "version"))
 
-    report = apply_install_plan(plan, world)
+    with pytest.raises(TypeError, match="adapters"):
+        apply_install_plan(plan, world)  # type: ignore[call-arg]
 
-    assert world.count(("npm", "view", "hallouminate@latest", "version")) == 2
-    assert report.results[0].step_id == "hallouminate:npm-install"
-    assert report.results[0].status is StepStatus.FAILED
-    assert world.installed == {"hallouminate": "1.0.0"}
+    assert world.count(("npm", "view", "hallouminate@latest", "version")) == resolutions
+    assert world.installed == {}
 
 
 # ─── acceptance:151 — a failed step blocks its real dependents ───────────────
@@ -944,3 +993,39 @@ def test_wizard_state_round_trips_through_disk_to_an_identical_plan(
         from_disk.steps
     )
     assert apply_world.initialized_repos == {repository}
+
+
+def test_wizard_state_round_trips_through_a_symlinked_search_root(
+    tmp_path: Path, home: Path, config_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A symlinked search root must not produce a manifest the tool cannot read.
+
+    The wizard canonicalizes candidates but takes the root as typed, so an
+    unresolved root plus a resolved selection used to fail the loader's own
+    consistency check and brick both ``install`` and ``doctor``.
+    """
+    real = (tmp_path / "data" / "code").resolve()
+    real.mkdir(parents=True)
+    link = tmp_path / "code"
+    link.symlink_to(real)
+    repository = make_repository(real / "alpha")
+    monkeypatch.setattr(sys, "stdin", _stdin(["", "1", "", "", str(link), "1", "1", "", ""]))
+
+    accepted = run_wizard(None)
+
+    assert accepted is not None
+    assert accepted.repositories.search_roots == (real,)
+    assert accepted.repositories.selected == (repository,)
+
+    save_desired_state(accepted, config_path)
+    loaded = load_desired_state(config_path)
+    assert loaded == accepted
+
+    world = FakeWorld(home)
+    adapters = default_component_adapters(world)
+    plan = build_install_plan(loaded, adapters)
+
+    report = apply_install_plan(plan, world, adapters=adapters)
+
+    assert [result.status for result in report.results] == [StepStatus.SUCCEEDED] * len(plan.steps)
+    assert world.initialized_repos == {repository}
