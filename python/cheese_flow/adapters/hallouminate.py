@@ -19,7 +19,6 @@ from cheese_flow.models import (
 
 PACKAGE = "hallouminate"
 MARKETPLACE_SOURCE = "paulnsorensen/hallouminate"
-MARKETPLACE_NAME = MARKETPLACE_SOURCE.split("/")[-1]
 PLUGIN_ID = "hallouminate@hallouminate"
 
 # Harness-native plugin CLIs, keyed by harness: (executable, install verb).
@@ -123,7 +122,8 @@ class HallouminateAdapter:
                     phase=Phase.REGISTER,
                     argv=(executable, "plugin", "marketplace", "add", MARKETPLACE_SOURCE),
                     postcondition=(
-                        f"`{executable} plugin marketplace list` lists {MARKETPLACE_SOURCE}"
+                        f"`{executable} plugin marketplace list --json` reports "
+                        f"{MARKETPLACE_SOURCE}"
                     ),
                     depends_on=(_INSTALL_STEP,),
                 )
@@ -216,8 +216,8 @@ class HallouminateAdapter:
 
     def _check_marketplace(self, step: PlanStep, runner: CommandRunner) -> bool:
         executable, _ = PLUGIN_CLIS[_harness_of(step)]
-        outcome = runner.run((executable, "plugin", "marketplace", "list"))
-        return outcome.exit_code == 0 and MARKETPLACE_NAME in _marketplace_names(outcome.stdout)
+        outcome = runner.run((executable, "plugin", "marketplace", "list", "--json"))
+        return outcome.exit_code == 0 and MARKETPLACE_SOURCE in _marketplace_sources(outcome.stdout)
 
     def _check_plugin(self, step: PlanStep, runner: CommandRunner) -> bool:
         executable, _ = PLUGIN_CLIS[_harness_of(step)]
@@ -263,23 +263,44 @@ def _check_cursor_mcp(step: PlanStep) -> bool:
     return entry.get("command") == edit.value["command"] and entry.get("args") == edit.value["args"]
 
 
-_BULLETS = "-*•❯ \t"
+_BULLETS = "-*•❯> \t"
 
 
-def _marketplace_names(stdout: str) -> set[str]:
-    """Marketplace names from a ``plugin marketplace list`` listing.
+def _owner_repo(raw: str) -> str:
+    """Reduce a marketplace's remote source to its ``owner/repo`` identity."""
+    trimmed = raw.strip().removesuffix(".git").rstrip("/")
+    parts = [part for part in trimmed.split("/") if part]
+    return "/".join(parts[-2:]) if len(parts) >= 2 else ""
 
-    Codex prints a ``NAME  ROOT`` table and Claude a bulleted name followed by
-    indented ``Field: value`` detail lines; both put the name first on its
-    line, so only the leading token counts — a name must never be matched
-    against another marketplace's filesystem root.
+
+def _marketplace_sources(stdout: str) -> set[str]:
+    """Remote ``owner/repo`` identities from ``plugin marketplace list --json``.
+
+    Marketplace names collide: a directory-sourced ``hallouminate`` marketplace
+    is already registered on developer machines, and it does not satisfy a step
+    that added ``paulnsorensen/hallouminate``. Only entries the CLI reports as
+    remotely sourced contribute, so a local root can never normalize into a
+    false match. Codex answers ``{"marketplaces": [...]}`` with a nested
+    ``marketplaceSource``; Claude answers a flat list keyed ``source``/``repo``.
     """
-    names: set[str] = set()
-    for line in stdout.splitlines():
-        tokens = line.strip().lstrip(_BULLETS).split()
-        if tokens and ":" not in tokens[0]:
-            names.add(tokens[0])
-    return names
+    try:
+        document = json.loads(stdout)
+    except json.JSONDecodeError:
+        return set()
+    entries = document.get("marketplaces") if isinstance(document, dict) else document
+    if not isinstance(entries, list):
+        return set()
+    sources: set[str] = set()
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        nested = entry.get("marketplaceSource")
+        if isinstance(nested, dict):
+            if nested.get("sourceType") == "git":
+                sources.add(_owner_repo(str(nested.get("source", ""))))
+        elif entry.get("source") == "github":
+            sources.add(_owner_repo(str(entry.get("repo", ""))))
+    return sources - {""}
 
 
 def _installed_plugin_ids(stdout: str) -> set[str]:
@@ -289,19 +310,42 @@ def _installed_plugin_ids(stdout: str) -> set[str]:
     keyed ``pluginId``; Claude answers a flat list keyed ``id``. Codex lists
     plugins its marketplaces merely offer, so ``installed: false`` entries are
     excluded — that distinction is the whole point of the check.
+
+    Claude reports OTHER projects' project-scoped plugins in this global
+    listing, so a flat entry must additionally be ``scope: "user"``. Its
+    ``enabled`` flag is deliberately ignored: claude reports ``enabled: false``
+    for active plugins too, so reading it would reject correct installs.
     """
     try:
         document = json.loads(stdout)
     except json.JSONDecodeError:
         return set()
-    entries = document.get("installed") if isinstance(document, dict) else document
+    if isinstance(document, dict):
+        return _codex_plugin_ids(document.get("installed"))
+    return _claude_plugin_ids(document)
+
+
+def _codex_plugin_ids(entries: object) -> set[str]:
     if not isinstance(entries, list):
         return set()
     ids: set[str] = set()
     for entry in entries:
         if not isinstance(entry, dict) or entry.get("installed") is False:
             continue
-        identifier = entry.get("pluginId") or entry.get("id")
+        identifier = entry.get("pluginId")
+        if isinstance(identifier, str) and identifier:
+            ids.add(identifier)
+    return ids
+
+
+def _claude_plugin_ids(entries: object) -> set[str]:
+    if not isinstance(entries, list):
+        return set()
+    ids: set[str] = set()
+    for entry in entries:
+        if not isinstance(entry, dict) or entry.get("scope") != "user":
+            continue
+        identifier = entry.get("id")
         if isinstance(identifier, str) and identifier:
             ids.add(identifier)
     return ids
@@ -318,10 +362,16 @@ def _corpus_paths(stdout: str, name: str) -> list[Path]:
     ``config validate`` prints the merged XDG baseline, so the same corpus
     name can be contributed by a same-named repository elsewhere on disk;
     only the arrow target identifies which repository a corpus belongs to.
+
+    The CLI renders ``→`` today, but a non-UTF-8 locale or a plain renderer
+    emits ``->``. Missing it is silent and total — ``config validate`` still
+    exits 0 — so both spellings are accepted.
     """
     paths: list[Path] = []
     for line in stdout.splitlines():
         label, arrow, target = line.partition("→")
+        if not arrow:
+            label, arrow, target = line.partition("->")
         if not arrow or label.strip().lstrip(_BULLETS) != name:
             continue
         paths.append(_resolved(target))

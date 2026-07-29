@@ -74,10 +74,12 @@ class EasyCheeseAdapter:
     def check_postcondition(self, step: PlanStep, runner: CommandRunner) -> bool:
         """Confirm the pack is installed for the harness at the expected scope.
 
-        ``gh skill list`` reports the originating repository in ``sourceURL``,
-        which is authoritative when populated. Current releases leave it empty
-        for every skill, so an empty field falls back to requiring a full
-        quorum of easy-cheese's own core skill names.
+        ``gh skill install`` records provenance in the installed ``SKILL.md``'s
+        ``metadata.github-repo`` frontmatter, which ``gh skill list`` surfaces
+        as ``sourceURL``. The field is empty exactly when gh did not install the
+        skill, so it is authoritative identity: locally authored skills that
+        merely share easy-cheese's names never count. The step installs
+        ``--all``, so convergence needs the whole core quorum from our source.
         """
         if step.harness is None:
             raise ValueError(f"step {step.step_id!r} has no harness")
@@ -102,15 +104,13 @@ class EasyCheeseAdapter:
             return False
         if not isinstance(entries, list):
             return False
-        installed = [entry for entry in entries if _is_skill_for(entry, step.harness)]
-        sources = [_normalize_source(str(entry.get("sourceURL", ""))) for entry in installed]
-        if SOURCE_REPOSITORY in sources:
-            return True
-        if any(sources):
-            # gh knows where these skills came from and none came from us.
-            return False
-        names = {str(entry["skillName"]).strip() for entry in installed}
-        return names >= CORE_SKILLS
+        ours = {
+            str(entry["skillName"]).strip()
+            for entry in entries
+            if _is_skill_for(entry, step.harness)
+            and _normalize_source(str(entry.get("sourceURL", ""))) == SOURCE_REPOSITORY
+        }
+        return ours >= CORE_SKILLS
 
 
 def _is_skill_for(entry: Any, harness: HarnessName) -> bool:

@@ -263,18 +263,69 @@ def test_hallouminate_install_postcondition_requires_the_resolved_version() -> N
     assert adapter.check_postcondition(step, stale) is False
 
 
-# Verbatim shapes from the real CLIs.
-CODEX_MARKETPLACE_LIST = (
-    "MARKETPLACE          ROOT\n"
-    "hallouminate         /home/paul/.cache/ap/plugins/hallouminate\n"
-    "claude-code-plugins  /home/paul/.codex/.tmp/marketplaces/claude-code-plugins\n"
+# Verbatim shapes from the real CLIs (`plugin marketplace list --json`).
+CODEX_MARKETPLACE_JSON = json.dumps(
+    {
+        "marketplaces": [
+            {
+                "name": "hallouminate",
+                "root": "/home/paul/.cache/ap/plugins/hallouminate",
+                "marketplaceSource": {
+                    "sourceType": "git",
+                    "source": "https://github.com/paulnsorensen/hallouminate.git",
+                },
+            }
+        ]
+    }
 )
-CLAUDE_MARKETPLACE_LIST = (
-    "  ❯ hallouminate\n    Source: Directory (/home/paul/.cache/ap/plugins/hallouminate)\n"
+# The live state on a developer machine: the name matches, the source does not.
+CODEX_MARKETPLACE_JSON_LOCAL = json.dumps(
+    {
+        "marketplaces": [
+            {
+                "name": "hallouminate",
+                "root": "/home/paul/.cache/ap/plugins/hallouminate",
+                "marketplaceSource": {
+                    "sourceType": "local",
+                    "source": "/home/paul/.cache/ap/plugins/hallouminate",
+                },
+            },
+            {
+                "name": "claude-code-plugins",
+                "root": "/home/paul/.codex/.tmp/marketplaces/claude-code-plugins",
+                "marketplaceSource": {
+                    "sourceType": "git",
+                    "source": "https://github.com/anthropics/claude-code.git",
+                },
+            },
+        ]
+    }
 )
-FOREIGN_MARKETPLACE_LIST = (
-    "MARKETPLACE          ROOT\n"
-    "claude-code-plugins  /home/paul/.cache/ap/plugins/hallouminate/vendored\n"
+CLAUDE_MARKETPLACE_JSON = json.dumps(
+    [
+        {
+            "name": "hallouminate",
+            "source": "github",
+            "repo": "paulnsorensen/hallouminate",
+            "installLocation": "/home/paul/.claude/plugins/marketplaces/hallouminate",
+        }
+    ]
+)
+CLAUDE_MARKETPLACE_JSON_DIRECTORY = json.dumps(
+    [
+        {
+            "name": "hallouminate",
+            "source": "directory",
+            "path": "/home/paul/.cache/ap/plugins/hallouminate",
+            "installLocation": "/home/paul/.cache/ap/plugins/hallouminate",
+        },
+        {
+            "name": "claude-plugins-official",
+            "source": "github",
+            "repo": "anthropics/claude-plugins-official",
+            "installLocation": "/home/paul/.claude/plugins/marketplaces/official",
+        },
+    ]
 )
 
 
@@ -282,42 +333,77 @@ def test_hallouminate_marketplace_postcondition_reads_the_native_listing() -> No
     adapter = HallouminateAdapter(FakeRunner(npm_script()))
     step = hallouminate_steps(FakeRunner(npm_script()))["hallouminate:marketplace:codex"]
 
-    list_argv = ("codex", "plugin", "marketplace", "list")
-    ok = FakeRunner({list_argv: outcome(list_argv, stdout=CODEX_MARKETPLACE_LIST)})
+    list_argv = ("codex", "plugin", "marketplace", "list", "--json")
+    ok = FakeRunner({list_argv: outcome(list_argv, stdout=CODEX_MARKETPLACE_JSON)})
     assert adapter.check_postcondition(step, ok) is True
     assert ok.argvs() == [list_argv]
 
-    empty = FakeRunner({list_argv: outcome(list_argv, stdout="No marketplaces configured\n")})
+    empty = FakeRunner({list_argv: outcome(list_argv, stdout='{"marketplaces": []}')})
     assert adapter.check_postcondition(step, empty) is False
 
+    garbage = FakeRunner({list_argv: outcome(list_argv, stdout="not json")})
+    assert adapter.check_postcondition(step, garbage) is False
 
-def test_hallouminate_marketplace_postcondition_reads_the_claude_bullet_listing() -> None:
+
+def test_hallouminate_marketplace_postcondition_reads_the_claude_listing() -> None:
     adapter = HallouminateAdapter(FakeRunner(npm_script()))
     step = hallouminate_steps(FakeRunner(npm_script()))["hallouminate:marketplace:claude-code"]
 
-    list_argv = ("claude", "plugin", "marketplace", "list")
-    ok = FakeRunner({list_argv: outcome(list_argv, stdout=CLAUDE_MARKETPLACE_LIST)})
+    list_argv = ("claude", "plugin", "marketplace", "list", "--json")
+    ok = FakeRunner({list_argv: outcome(list_argv, stdout=CLAUDE_MARKETPLACE_JSON)})
     assert adapter.check_postcondition(step, ok) is True
+    assert ok.argvs() == [list_argv]
 
 
-def test_hallouminate_marketplace_postcondition_ignores_a_hallouminate_root_path() -> None:
-    # M3: the marketplace name lives in the first column; `hallouminate` also
-    # appears inside other marketplaces' filesystem ROOTs and must not count.
+def test_hallouminate_marketplace_postcondition_rejects_a_same_named_local_marketplace() -> None:
+    # H-A2: `hallouminate` is already registered on developer machines from a
+    # local directory. The name matches; `paulnsorensen/hallouminate` was never
+    # added, so the step must still run rather than resolve against a stranger.
     adapter = HallouminateAdapter(FakeRunner(npm_script()))
-    step = hallouminate_steps(FakeRunner(npm_script()))["hallouminate:marketplace:codex"]
+    steps = hallouminate_steps(FakeRunner(npm_script()))
 
-    list_argv = ("codex", "plugin", "marketplace", "list")
-    foreign = FakeRunner({list_argv: outcome(list_argv, stdout=FOREIGN_MARKETPLACE_LIST)})
-    assert adapter.check_postcondition(step, foreign) is False
+    codex_argv = ("codex", "plugin", "marketplace", "list", "--json")
+    codex = FakeRunner({codex_argv: outcome(codex_argv, stdout=CODEX_MARKETPLACE_JSON_LOCAL)})
+    assert adapter.check_postcondition(steps["hallouminate:marketplace:codex"], codex) is False
+
+    claude_argv = ("claude", "plugin", "marketplace", "list", "--json")
+    claude = FakeRunner(
+        {claude_argv: outcome(claude_argv, stdout=CLAUDE_MARKETPLACE_JSON_DIRECTORY)}
+    )
+    step = steps["hallouminate:marketplace:claude-code"]
+    assert adapter.check_postcondition(step, claude) is False
 
 
+def test_hallouminate_marketplace_postcondition_names_the_json_listing() -> None:
+    steps = hallouminate_steps(FakeRunner(npm_script()))
+    assert steps["hallouminate:marketplace:codex"].postcondition == (
+        "`codex plugin marketplace list --json` reports paulnsorensen/hallouminate"
+    )
+
+
+# Verbatim `claude plugin list --json` rows. Every plugin on a real machine
+# reports `enabled: false`, so the check reads `scope` and never `enabled`.
 CLAUDE_PLUGIN_LIST_JSON = json.dumps(
     [
         {
             "id": "hallouminate@hallouminate",
             "version": "0.3.2",
             "scope": "user",
-            "enabled": True,
+            "enabled": False,
+            "installPath": "/home/paul/.claude/plugins/cache/hallouminate/hallouminate/0.3.2",
+        }
+    ]
+)
+# `claude plugin list` reports OTHER projects' project-scoped plugins globally.
+CLAUDE_PLUGIN_LIST_JSON_FOREIGN_PROJECT = json.dumps(
+    [
+        {
+            "id": "hallouminate@hallouminate",
+            "version": "ad8a4253ce7d",
+            "scope": "project",
+            "enabled": False,
+            "installPath": "/home/paul/.claude/plugins/cache/hallouminate/hallouminate/ad8a",
+            "projectPath": "/home/paul/Dev/easy-cheese/.worktrees/dogfood",
         }
     ]
 )
@@ -372,6 +458,31 @@ def test_hallouminate_plugin_postcondition_requires_the_plugin_id() -> None:
 
     garbage = FakeRunner({list_argv: outcome(list_argv, stdout="not json")})
     assert adapter.check_postcondition(step, garbage) is False
+
+
+def test_hallouminate_plugin_postcondition_rejects_another_projects_plugin() -> None:
+    # H-A1: `claude plugin list` reports project-scoped plugins belonging to
+    # unrelated checkouts. A user-scope registration is not satisfied by one.
+    adapter = HallouminateAdapter(FakeRunner(npm_script()))
+    step = hallouminate_steps(FakeRunner(npm_script()))["hallouminate:plugin:claude-code"]
+
+    list_argv = ("claude", "plugin", "list", "--json")
+    foreign = FakeRunner(
+        {list_argv: outcome(list_argv, stdout=CLAUDE_PLUGIN_LIST_JSON_FOREIGN_PROJECT)}
+    )
+    assert adapter.check_postcondition(step, foreign) is False
+
+
+def test_hallouminate_plugin_postcondition_ignores_the_enabled_flag() -> None:
+    # Every plugin claude reports carries `enabled: false`, including active
+    # ones, so the flag must never veto an otherwise user-scoped registration.
+    adapter = HallouminateAdapter(FakeRunner(npm_script()))
+    step = hallouminate_steps(FakeRunner(npm_script()))["hallouminate:plugin:claude-code"]
+
+    list_argv = ("claude", "plugin", "list", "--json")
+    document = json.dumps([{"id": "hallouminate@hallouminate", "scope": "user", "enabled": False}])
+    runner = FakeRunner({list_argv: outcome(list_argv, stdout=document)})
+    assert adapter.check_postcondition(step, runner) is True
 
 
 def test_hallouminate_plugin_postcondition_reads_the_codex_installed_section() -> None:
@@ -551,6 +662,27 @@ def test_hallouminate_repo_postconditions_run_in_the_repository() -> None:
     )
 
 
+def test_hallouminate_repo_postcondition_reads_an_ascii_rendered_listing() -> None:
+    # M-A3: `→` is what the CLI emits today, but a non-UTF-8 locale or a plain
+    # renderer prints `->`. Missing it makes every init-repo step FAILED
+    # forever, because `config validate` still exits 0.
+    adapter = HallouminateAdapter(FakeRunner(npm_script()))
+    repo = Path("/repos/alpha")
+    step = hallouminate_steps(FakeRunner(npm_script()), (repo,))[
+        "hallouminate:init-repo:/repos/alpha"
+    ]
+
+    validate = ("hallouminate", "config", "validate")
+    ascii_listing = (
+        "Effective corpora (2):\n"
+        "  > cheez-wiki       -> ~/Dev/cheez-wiki/.hallouminate/wiki\n"
+        "  > repo:alpha:wiki  -> /repos/alpha/./.hallouminate/wiki\n"
+        "ok\n"
+    )
+    runner = FakeRunner({validate: outcome(validate, stdout=ascii_listing)})
+    assert adapter.check_postcondition(step, runner) is True
+
+
 def test_hallouminate_repo_postcondition_rejects_another_repositorys_corpus(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -627,68 +759,54 @@ def easy_cheese_step() -> PlanStep:
     ]
 
 
+def sourced_entry(
+    name: str, *, harness: str = "claude-code", source: str = "paulnsorensen/easy-cheese"
+) -> dict[str, object]:
+    """A `gh skill list --json` row for a skill gh installed from a repository."""
+    return {
+        "agentHosts": [harness],
+        "scope": "user",
+        "skillName": name,
+        "sourceURL": f"https://github.com/{source}",
+    }
+
+
 def test_easy_cheese_postcondition_confirms_source_agent_scope_and_skills() -> None:
     adapter = EasyCheeseAdapter(FakeRunner())
-    runner = gh_list(
-        [
-            {
-                "agentHosts": ["claude-code"],
-                "scope": "user",
-                "skillName": "cook",
-                "sourceURL": "https://github.com/paulnsorensen/easy-cheese",
-            }
-        ]
-    )
+    runner = gh_list([sourced_entry(name) for name in CORE_SKILLS])
     assert adapter.check_postcondition(easy_cheese_step(), runner) is True
     assert runner.argvs() == [LIST_ARGV]
 
 
+def test_easy_cheese_postcondition_requires_the_full_core_quorum_from_our_source() -> None:
+    # `--all` installs the whole pack; a partial install is not convergence.
+    partial = gh_list([sourced_entry(name) for name in sorted(CORE_SKILLS)[:-1]])
+    assert EasyCheeseAdapter(FakeRunner()).check_postcondition(easy_cheese_step(), partial) is False
+
+
+def test_easy_cheese_postcondition_ignores_a_foreign_pack_carrying_a_source() -> None:
+    # M-A1: an unrelated pack reporting its own sourceURL must not veto ours.
+    entries = [sourced_entry(name) for name in CORE_SKILLS]
+    entries.append(sourced_entry("terraform", source="hashicorp/skills"))
+    runner = gh_list(entries)
+    assert EasyCheeseAdapter(FakeRunner()).check_postcondition(easy_cheese_step(), runner) is True
+
+
 @pytest.mark.parametrize(
-    "entry",
+    "override",
     [
-        pytest.param(
-            {
-                "agentHosts": ["claude-code"],
-                "scope": "project",
-                "skillName": "cook",
-                "sourceURL": "https://github.com/paulnsorensen/easy-cheese",
-            },
-            id="wrong-scope",
-        ),
-        pytest.param(
-            {
-                "agentHosts": ["codex"],
-                "scope": "user",
-                "skillName": "cook",
-                "sourceURL": "https://github.com/paulnsorensen/easy-cheese",
-            },
-            id="wrong-agent",
-        ),
-        pytest.param(
-            {
-                "agentHosts": ["claude-code"],
-                "scope": "user",
-                "skillName": "cook",
-                "sourceURL": "https://github.com/someone/other-skills",
-            },
-            id="wrong-source",
-        ),
-        pytest.param(
-            {
-                "agentHosts": ["claude-code"],
-                "scope": "user",
-                "skillName": "",
-                "sourceURL": "https://github.com/paulnsorensen/easy-cheese",
-            },
-            id="no-skill-installed",
-        ),
+        pytest.param({"scope": "project"}, id="wrong-scope"),
+        pytest.param({"agentHosts": ["codex"]}, id="wrong-agent"),
+        pytest.param({"sourceURL": "https://github.com/someone/other-skills"}, id="wrong-source"),
+        pytest.param({"skillName": ""}, id="no-skill-installed"),
     ],
 )
-def test_easy_cheese_postcondition_rejects_wrong_end_state(entry: dict[str, object]) -> None:
-    # `gh skill list` exits 0 in every one of these cases: only the parsed
-    # end state distinguishes them.
+def test_easy_cheese_postcondition_rejects_wrong_end_state(override: dict[str, object]) -> None:
+    # A full core quorum is present in every case; `gh skill list` exits 0 in
+    # every case. Only the parsed end state distinguishes them.
+    entries = [sourced_entry(name) | override for name in CORE_SKILLS]
     assert (
-        EasyCheeseAdapter(FakeRunner()).check_postcondition(easy_cheese_step(), gh_list([entry]))
+        EasyCheeseAdapter(FakeRunner()).check_postcondition(easy_cheese_step(), gh_list(entries))
         is False
     )
 
@@ -705,61 +823,49 @@ def test_easy_cheese_postcondition_false_on_empty_listing_and_bad_json() -> None
 
 
 def blank_source_entry(name: str, *, harness: str = "claude-code") -> dict[str, object]:
-    """A real `gh skill list --json` row: every installed skill reports no source."""
+    """A locally authored skill: gh wrote no install metadata, so no source."""
     return {"agentHosts": [harness], "scope": "user", "skillName": name, "sourceURL": ""}
 
 
-def test_easy_cheese_postcondition_accepts_installed_skills_with_no_source_url() -> None:
-    # H1: `gh skill list` reports `sourceURL: ""` for every installed skill, so
-    # a source-only check reports FAILED forever on a correct fresh install.
+def test_easy_cheese_postcondition_rejects_locally_authored_core_skills() -> None:
+    # M-A2: `gh skill list --scope user` reports every hand-written skill in the
+    # harness directory with `sourceURL: ""`. A machine whose author happens to
+    # keep skills named `mold`/`cook`/... must not read as an installed pack.
     runner = gh_list([blank_source_entry(name) for name in CORE_SKILLS])
-    assert EasyCheeseAdapter(FakeRunner()).check_postcondition(easy_cheese_step(), runner) is True
+    assert EasyCheeseAdapter(FakeRunner()).check_postcondition(easy_cheese_step(), runner) is False
 
 
 def test_easy_cheese_postcondition_rejects_a_harness_missing_core_skills() -> None:
-    # The name fallback must still discriminate: a harness carrying unrelated
-    # skills (real codex/cursor state) is not an easy-cheese install.
     runner = gh_list([blank_source_entry(name) for name in ("chezmoi", "prek", "explain")])
     assert EasyCheeseAdapter(FakeRunner()).check_postcondition(easy_cheese_step(), runner) is False
 
-    partial = gh_list([blank_source_entry(name) for name in sorted(CORE_SKILLS)[:-1]])
-    assert EasyCheeseAdapter(FakeRunner()).check_postcondition(easy_cheese_step(), partial) is False
-
 
 def test_easy_cheese_postcondition_keeps_source_matching_authoritative() -> None:
-    # When gh does populate sourceURL, a full core quorum from a foreign pack
-    # must not satisfy the step.
-    foreign = [
-        {
-            "agentHosts": ["claude-code"],
-            "scope": "user",
-            "skillName": name,
-            "sourceURL": "https://github.com/someone/other-skills",
-        }
-        for name in CORE_SKILLS
-    ]
-    runner = gh_list(foreign)
+    # A full core quorum from a foreign pack must not satisfy the step.
+    runner = gh_list([sourced_entry(name, source="someone/other-skills") for name in CORE_SKILLS])
     assert EasyCheeseAdapter(FakeRunner()).check_postcondition(easy_cheese_step(), runner) is False
 
 
 def test_easy_cheese_postcondition_ignores_core_skills_owned_by_another_harness() -> None:
-    entries = [blank_source_entry(name, harness="codex") for name in CORE_SKILLS]
+    entries = [sourced_entry(name, harness="codex") for name in CORE_SKILLS]
     runner = gh_list(entries)
     assert EasyCheeseAdapter(FakeRunner()).check_postcondition(easy_cheese_step(), runner) is False
 
 
 def test_easy_cheese_accepts_bare_owner_repo_source() -> None:
-    runner = gh_list(
-        [
-            {
-                "agentHosts": ["claude-code", "cursor"],
-                "scope": "user",
-                "skillName": "age",
-                "sourceURL": "paulnsorensen/easy-cheese.git",
-            }
-        ]
+    entries = [
+        {
+            "agentHosts": ["claude-code", "cursor"],
+            "scope": "user",
+            "skillName": name,
+            "sourceURL": "paulnsorensen/easy-cheese.git",
+        }
+        for name in CORE_SKILLS
+    ]
+    assert (
+        EasyCheeseAdapter(FakeRunner()).check_postcondition(easy_cheese_step(), gh_list(entries))
+        is True
     )
-    assert EasyCheeseAdapter(FakeRunner()).check_postcondition(easy_cheese_step(), runner) is True
 
 
 # --------------------------------------------------------------------------
