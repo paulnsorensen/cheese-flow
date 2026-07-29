@@ -71,11 +71,12 @@ def state(
     harnesses: tuple[str, ...] = ALL_HARNESSES,
     components: tuple[str, ...] = ("hallouminate", "easy-cheese", "tilth"),
     selected: tuple[Path, ...] = (),
+    search_roots: tuple[Path, ...] = (Path("/repos"),),
 ) -> DesiredState:
     return DesiredState(
         harnesses=harnesses,
         components=components,
-        repositories=RepositorySelection(search_roots=(Path("/repos"),), selected=selected),
+        repositories=RepositorySelection(search_roots=search_roots, selected=selected),
     )
 
 
@@ -242,8 +243,14 @@ def test_hallouminate_raises_when_npm_view_fails() -> None:
 # --------------------------------------------------------------------------
 
 
-def hallouminate_steps(runner: FakeRunner, repos: tuple[Path, ...] = ()) -> dict[str, PlanStep]:
-    return steps_by_id(HallouminateAdapter(runner).plan_steps(state(selected=repos)))
+def hallouminate_steps(
+    runner: FakeRunner,
+    repos: tuple[Path, ...] = (),
+    search_roots: tuple[Path, ...] = (Path("/repos"),),
+) -> dict[str, PlanStep]:
+    return steps_by_id(
+        HallouminateAdapter(runner).plan_steps(state(selected=repos, search_roots=search_roots))
+    )
 
 
 def test_hallouminate_install_postcondition_requires_the_resolved_version() -> None:
@@ -691,7 +698,7 @@ def test_hallouminate_repo_postcondition_rejects_another_repositorys_corpus(
     monkeypatch.setenv("HOME", str(tmp_path))
     adapter = HallouminateAdapter(FakeRunner(npm_script()))
     selected = tmp_path / "work" / "foo"
-    steps = hallouminate_steps(FakeRunner(npm_script()), (selected,))
+    steps = hallouminate_steps(FakeRunner(npm_script()), (selected,), (tmp_path / "work",))
     step = steps[f"hallouminate:init-repo:{selected.as_posix()}"]
 
     validate = ("hallouminate", "config", "validate")

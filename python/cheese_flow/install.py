@@ -28,6 +28,7 @@ from cheese_flow.models import (
     InstallPlan,
     PlanStep,
     ReportStatus,
+    RepositoryCandidate,
     StepResult,
     StepStatus,
     canonicalize,
@@ -88,6 +89,8 @@ def apply_install_plan(
                 results.append(_result(step, StepStatus.BLOCKED, remediation=blocked))
                 continue
             result = _perform(step, adapters, runner, interruption)
+            if result.status is not StepStatus.SKIPPED:
+                repositories.note_mutation()
             if result.status not in (StepStatus.SUCCEEDED, StepStatus.SKIPPED):
                 unmet.add(step.step_id)
             results.append(result)
@@ -223,8 +226,9 @@ def _perform(
     # A discarded write is a diagnostic even when the postcondition ends up
     # satisfied by something else (a concurrent editor, a pre-existing entry).
     remediation = failure
-    if remediation is None and status is StepStatus.FAILED:
-        remediation = f"postcondition still unsatisfied: {step.postcondition}"
+    if status is StepStatus.FAILED:
+        unsatisfied = f"postcondition still unsatisfied: {step.postcondition}"
+        remediation = f"{failure}; {unsatisfied}" if failure else unsatisfied
     return _result(
         step,
         status,
@@ -259,7 +263,7 @@ def _result(
         repository=step.repository,
         phase=step.phase,
         argv=argv,
-        config_edit=_config_edit_summary(step),
+        config_edit=config_edit_summary(step),
         postcondition=step.postcondition,
         status=status,
         exit_code=None if outcome is None else outcome.exit_code,
@@ -270,7 +274,7 @@ def _result(
     )
 
 
-def _config_edit_summary(step: PlanStep) -> ConfigEditSummary | None:
+def config_edit_summary(step: PlanStep) -> ConfigEditSummary | None:
     """Identify the file a config-edit step writes; its argv is empty by design."""
     if step.config_edit is None:
         return None
@@ -278,39 +282,61 @@ def _config_edit_summary(step: PlanStep) -> ConfigEditSummary | None:
 
 
 class _RepositoryRevalidation:
-    """Recanonicalizes each repository before it is first mutated (spec:109)."""
+    """Recanonicalizes each repository before it is first mutated (spec:109).
+
+    Collisions are properties of the whole selected set, so one pass discovers
+    every planned repository at once and keeps all of its verdicts. Nothing on
+    disk can have moved until a step mutates something, so the pass is repeated
+    only after a mutation — not once per repository.
+    """
 
     def __init__(self, plan: InstallPlan) -> None:
         self._repositories = tuple(
             dict.fromkeys(step.repository for step in plan.steps if step.repository is not None)
         )
-        self._verdicts: dict[Path, str | None] = {}
+        self._generation = 0
+        self._verdicts: dict[Path, tuple[int, str | None]] = {}
+
+    def note_mutation(self) -> None:
+        """Record that a step changed the system, retiring every cached verdict."""
+        self._generation += 1
 
     def drift(self, repository: Path) -> str | None:
         """Return why ``repository`` must not be mutated, or ``None`` if it is sound."""
         canonical = canonicalize(repository)
-        if canonical not in self._verdicts:
-            self._verdicts[canonical] = self._probe(canonical, repository)
-        return self._verdicts[canonical]
+        cached = self._verdicts.get(canonical)
+        if cached is None or cached[0] != self._generation:
+            self._rediscover()
+            cached = self._verdicts.get(canonical)
+        if cached is None:
+            return f"{repository} is no longer a repository at its planned path"
+        return cached[1]
 
-    def _probe(self, canonical: Path, repository: Path) -> str | None:
-        # Name and worktree collisions are properties of the whole selected set,
-        # so every probe rediscovers all of it and reads one verdict out.
+    def _rediscover(self) -> None:
         candidates = {
             candidate.canonical_path: candidate
             for candidate in discover_repositories(self._repositories, 0)
         }
-        candidate = candidates.get(canonical)
-        if candidate is None:
-            return f"{repository} is no longer a repository at its planned path"
-        if not candidate.writable:
-            return f"{repository} is not writable"
-        if candidate.collision is not CollisionClass.NONE:
-            return (
-                f"{repository} now collides ({candidate.collision.value}) with another "
-                "selected repository"
+        self._verdicts = {
+            canonicalize(planned): (
+                self._generation,
+                _drift_reason(candidates.get(canonicalize(planned)), planned),
             )
-        return None
+            for planned in self._repositories
+        }
+
+
+def _drift_reason(candidate: RepositoryCandidate | None, repository: Path) -> str | None:
+    if candidate is None:
+        return f"{repository} is no longer a repository at its planned path"
+    if not candidate.writable:
+        return f"{repository} is not writable"
+    if candidate.collision is not CollisionClass.NONE:
+        return (
+            f"{repository} now collides ({candidate.collision.value}) with another "
+            "selected repository"
+        )
+    return None
 
 
 def _scan_argv(argv: Sequence[str]) -> tuple[tuple[str, ...], tuple[str, ...]]:

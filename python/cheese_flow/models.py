@@ -109,18 +109,35 @@ def canonicalize(path: Path) -> Path:
     compare equal. Unlike discovery's own strict resolution this keeps paths
     that do not exist yet, so a user's typed search root is never discarded.
     """
-    try:
-        return path.resolve()
-    except OSError:
-        return path
+    return path.resolve()
 
 
-def _require_unique(values: Sequence[object], label: str) -> None:
+def is_under_any_root(path: Path, search_roots: Sequence[Path]) -> bool:
+    """Return whether ``path`` sits under one of ``search_roots``.
+
+    The single implementation of the selection-under-root rule: the manifest
+    model enforces it and the wizard prunes against it, so a selection can never
+    be offered — or persisted — once its search root goes away.
+    """
+    canonical = canonicalize(path)
+    return any(canonical.is_relative_to(canonicalize(root)) for root in search_roots)
+
+
+def _require_unique(
+    values: Sequence[object], label: str, *, display: Sequence[object] | None = None
+) -> None:
+    """Detect duplicates in ``values``, naming them with ``display`` if given.
+
+    Comparison happens on the canonical values; the message quotes what the user
+    actually wrote, so two spellings of one directory are not reported as a path
+    typed twice.
+    """
+    rendered = [str(value) for value in (values if display is None else display)]
     seen: set[object] = set()
     duplicates: list[str] = []
-    for value in values:
+    for value, text in zip(values, rendered, strict=True):
         if value in seen:
-            duplicates.append(str(value))
+            duplicates.append(text)
         seen.add(value)
     if duplicates:
         raise ValueError(f"{label} must not contain duplicates: {', '.join(duplicates)}")
@@ -131,7 +148,9 @@ class RepositorySelection(_Frozen):
 
     Roots and selections are canonicalized here, at the one seam both pass
     through, so a selection can always be compared against its search root and
-    a persisted manifest reloads to exactly the state that wrote it.
+    a persisted manifest reloads to exactly the state that wrote it. The same
+    seam rejects a selection that sits under no search root, so no producer —
+    wizard or manifest — can build a state the loader would refuse.
     """
 
     search_roots: tuple[Path, ...] = ()
@@ -143,7 +162,7 @@ class RepositorySelection(_Frozen):
     def _absolute_canonical_and_unique(cls, value: tuple[Path, ...], info) -> tuple[Path, ...]:
         _require_absolute(value, info.field_name)
         canonical = tuple(canonicalize(path) for path in value)
-        _require_unique(canonical, info.field_name)
+        _require_unique(canonical, info.field_name, display=value)
         return canonical
 
     @field_validator("max_depth")
@@ -152,6 +171,19 @@ class RepositorySelection(_Frozen):
         if value < 0:
             raise ValueError("max_depth must be >= 0")
         return value
+
+    @model_validator(mode="after")
+    def _selection_under_a_search_root(self) -> RepositorySelection:
+        orphans = [
+            str(selected)
+            for selected in self.selected
+            if not is_under_any_root(selected, self.search_roots)
+        ]
+        if orphans:
+            raise ValueError(
+                f"selected repositories are not under any search root: {', '.join(orphans)}"
+            )
+        return self
 
 
 class DesiredState(_Frozen):

@@ -4,7 +4,13 @@ from __future__ import annotations
 
 import time
 
-from cheese_flow.install import adapter_for, build_install_plan, redact_argv, report_status
+from cheese_flow.install import (
+    adapter_for,
+    build_install_plan,
+    config_edit_summary,
+    redact_argv,
+    report_status,
+)
 from cheese_flow.models import (
     CommandRunner,
     ComponentAdapters,
@@ -41,6 +47,7 @@ def _verify(step: PlanStep, adapters: ComponentAdapters, runner: CommandRunner) 
         repository=step.repository,
         phase=step.phase,
         argv=redact_argv(step.argv),
+        config_edit=config_edit_summary(step),
         postcondition=step.postcondition,
         status=status,
         elapsed_ms=max(0, int((time.monotonic() - started) * 1000)),

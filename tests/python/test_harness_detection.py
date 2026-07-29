@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import inspect
 from pathlib import Path
 
 import pytest
@@ -125,9 +124,22 @@ def test_project_local_config_directories_are_not_a_detection_signal(
     assert detect_available_harnesses() == ()
 
 
-def test_detection_takes_no_arguments(probe: Path) -> None:
-    """No supported harness has a project-local signal, so there is nothing to pass."""
-    assert list(inspect.signature(detect_available_harnesses).parameters) == []
+def test_detection_reports_the_same_harnesses_from_any_working_directory(
+    probe: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Detection reads the user's home, not the cwd, so location cannot change it."""
+    (probe / ".codex").mkdir()
+    install_binary("claude", tmp_path)
+    elsewhere = tmp_path / "elsewhere"
+    (elsewhere / ".cursor").mkdir(parents=True)
+
+    monkeypatch.chdir(tmp_path)
+    from_root = detect_available_harnesses()
+    monkeypatch.chdir(elsewhere)
+    from_elsewhere = detect_available_harnesses()
+
+    assert from_root == ("claude-code", "codex")
+    assert from_elsewhere == from_root
 
 
 def test_detection_leaves_the_probed_locations_untouched(probe: Path, tmp_path: Path) -> None:

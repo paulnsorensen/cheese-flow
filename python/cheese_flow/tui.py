@@ -25,6 +25,7 @@ from cheese_flow.models import (
     RepositoryCandidate,
     RepositorySelection,
     canonicalize,
+    is_under_any_root,
 )
 from cheese_flow.repositories import discover_repositories
 
@@ -159,6 +160,7 @@ def _search_roots(console: Console, draft: _Draft) -> str:
 
 
 def _repositories(console: Console, draft: _Draft) -> str:
+    _drop_orphaned_selections(draft)
     draft.candidates = _candidate_paths(draft)
     console.print("[5/6] Repository candidates")
     if not draft.candidates:
@@ -281,6 +283,18 @@ def _parse_roots(console: Console, answer: str) -> list[Path] | None:
         if canonical not in roots:
             roots.append(canonical)
     return roots
+
+
+def _drop_orphaned_selections(draft: _Draft) -> None:
+    """Forget selections the current search roots no longer contain.
+
+    Narrowing the roots on screen 4 must retire the selections they used to
+    cover. Re-listing them would draw them checked and carry them into a
+    manifest ``RepositorySelection`` rejects.
+    """
+    draft.selected = [
+        path for path in draft.selected if is_under_any_root(path, draft.search_roots)
+    ]
 
 
 def _candidate_paths(draft: _Draft) -> list[Path]:

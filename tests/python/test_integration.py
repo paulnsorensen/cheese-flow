@@ -43,15 +43,26 @@ MARKETPLACE_SOURCE = "paulnsorensen/hallouminate"
 MARKETPLACE_NAME = "hallouminate"
 PLUGIN_ID = "hallouminate@hallouminate"
 
-# An unrelated marketplace every harness already has, whose root happens to
-# contain "hallouminate". Spelled out on purpose: a listing check that matches
-# a bare substring instead of the leading name token passes on this line alone,
+# A directory-sourced marketplace of the same NAME that developer machines
+# already carry: a local checkout whose path even normalizes to the very
+# owner/repo the step adds. Only the CLI's remote/local distinction rejects it,
 # so it must stay in the fake's output even when nothing has been added.
-DECOY_MARKETPLACE = "ap"
-DECOY_MARKETPLACE_ROOT = "/home/paul/.cache/ap/plugins/hallouminate/marketplace"
+DECOY_MARKETPLACE = MARKETPLACE_NAME
+DECOY_MARKETPLACE_ROOT = "/home/paul/Dev/paulnsorensen/hallouminate"
 
-# What `gh skill install <repo> --all` puts on disk. Spelled out rather than
-# imported: dropping one of these must fail the postcondition, not follow it.
+# A plugin another project installed at project scope. Claude reports foreign
+# project-scoped plugins in its global listing, so the same id is present
+# without this user ever having installed it.
+FOREIGN_PROJECT_PLUGIN = PLUGIN_ID
+
+# A skill the user wrote by hand that shares an easy-cheese name. `gh skill
+# install` never touched it, so gh reports no sourceURL for it.
+LOCAL_LOOKALIKE_SKILL = "cook"
+
+# What `gh skill install <repo> --all` puts on disk, and the repo gh records as
+# each skill's provenance. Spelled out rather than imported: dropping one of
+# these must fail the postcondition, not follow it.
+EASY_CHEESE_SOURCE = "paulnsorensen/easy-cheese"
 EASY_CHEESE_SKILLS = ("mold", "cook", "press", "age", "cure", "plate", "cheese")
 
 # The harness-native MCP config files the adapters read. Spelled out here on
@@ -164,7 +175,7 @@ class FakeWorld:
         if key[1:] == ("plugin", "marketplace", "add", MARKETPLACE_SOURCE):
             self.marketplaces.add(MARKETPLACE_SOURCE)
             return _ok(key)
-        if key[1:] == ("plugin", "marketplace", "list"):
+        if key[1:] == ("plugin", "marketplace", "list", "--json"):
             return _ok(key, self._marketplace_listing(key[0]))
         if len(key) == 4 and key[1] == "plugin" and key[2] in ("install", "add"):
             self.plugins.add(key[3])
@@ -200,33 +211,55 @@ class FakeWorld:
         raise AssertionError(f"the fake world was asked to run an unmodelled command: {key}")
 
     def _marketplace_listing(self, executable: str) -> str:
-        """What `<exe> plugin marketplace list` prints.
+        """What `<exe> plugin marketplace list --json` prints.
 
-        Codex prints a ``NAME  ROOT`` table; Claude prints a bulleted name with
-        indented ``Field: value`` detail lines. Both always carry the decoy
-        marketplace whose root mentions hallouminate.
+        Codex answers ``{"marketplaces": [...]}`` with a nested
+        ``marketplaceSource``; Claude answers a flat list keyed
+        ``source``/``repo``. Both always carry the same-named local decoy, which
+        only the remote/local distinction keeps from satisfying the step.
         """
         added = sorted(self.marketplaces)
         if executable == "codex":
-            root = f"{self.home}/.codex/marketplaces/{MARKETPLACE_NAME}"
-            rows = [f"{DECOY_MARKETPLACE:<16}{DECOY_MARKETPLACE_ROOT}"]
-            rows += [f"{MARKETPLACE_NAME:<16}{root}" for _ in added]
-            return "\n".join(["NAME            ROOT", *rows])
-        blocks = [f"- {DECOY_MARKETPLACE}\n  Source: {DECOY_MARKETPLACE_ROOT}\n  Plugins: 3"]
-        blocks += [
-            f"- {MARKETPLACE_NAME}\n  Source: github:{source}\n  Plugins: 1" for source in added
+            entries: list[dict[str, object]] = [
+                {
+                    "name": DECOY_MARKETPLACE,
+                    "marketplaceSource": {
+                        "sourceType": "local",
+                        "source": DECOY_MARKETPLACE_ROOT,
+                    },
+                }
+            ]
+            entries += [
+                {
+                    "name": MARKETPLACE_NAME,
+                    "marketplaceSource": {
+                        "sourceType": "git",
+                        "source": f"https://github.com/{source}.git",
+                    },
+                }
+                for source in added
+            ]
+            return json.dumps({"marketplaces": entries})
+        flat: list[dict[str, object]] = [
+            {"name": DECOY_MARKETPLACE, "source": "directory", "path": DECOY_MARKETPLACE_ROOT}
         ]
-        return "\n".join(blocks)
+        flat += [{"name": MARKETPLACE_NAME, "source": "github", "repo": source} for source in added]
+        return json.dumps(flat)
 
     def _plugin_listing(self, executable: str) -> str:
         """What `<exe> plugin list --json` prints.
 
-        An added marketplace offers its plugin whether or not it was installed,
-        so an offered-but-uninstalled plugin appears with ``installed`` false —
-        the exact row that must not satisfy the postcondition.
+        Codex lists what its marketplaces merely offer alongside what is
+        installed, so an offered-but-uninstalled plugin appears with
+        ``installed`` false — the exact row that must not satisfy the
+        postcondition. Claude lists only installed plugins, but reports OTHER
+        projects' project-scoped ones in the same global listing, so the same
+        id is always present at ``scope: "project"``. Claude also reports
+        ``enabled: false`` for plugins that are in fact active, so the fake
+        never ties that flag to installation.
         """
-        offered = sorted({PLUGIN_ID} - self.plugins) if self.marketplaces else []
         if executable == "codex":
+            offered = sorted({PLUGIN_ID} - self.plugins) if self.marketplaces else []
             document = {
                 "installed": [
                     {"pluginId": plugin, "installed": True} for plugin in sorted(self.plugins)
@@ -234,8 +267,12 @@ class FakeWorld:
                 "available": [{"pluginId": plugin, "installed": False} for plugin in offered],
             }
             return json.dumps(document)
-        entries = [{"id": plugin, "installed": True} for plugin in sorted(self.plugins)]
-        entries += [{"id": plugin, "installed": False} for plugin in offered]
+        entries: list[dict[str, object]] = [
+            {"id": FOREIGN_PROJECT_PLUGIN, "scope": "project", "enabled": True}
+        ]
+        entries += [
+            {"id": plugin, "scope": "user", "enabled": False} for plugin in sorted(self.plugins)
+        ]
         return json.dumps(entries)
 
     def _validate(self, key: tuple[str, ...], cwd: Path | None) -> CommandOutcome:
@@ -248,13 +285,32 @@ class FakeWorld:
         return _fail(key, f"{cwd} has no corpus")
 
     def _skill_entries(self, harness: str) -> list[dict[str, object]]:
-        """Rows a real `gh skill list --json` returns: released gh leaves
-        ``sourceURL`` empty for every installed skill, so identity rests on the
-        installed skill names alone."""
-        return [
-            {"skillName": name, "scope": "user", "agentHosts": [harness], "sourceURL": ""}
+        """Rows a real `gh skill list --json` returns.
+
+        ``gh skill install`` records provenance in the installed SKILL.md's
+        ``metadata.github-repo`` frontmatter, which gh surfaces as ``sourceURL``
+        — so only skills gh installed carry one. A hand-written skill sharing an
+        easy-cheese name is always present with an empty ``sourceURL``, and it
+        must never contribute to the quorum.
+        """
+        entries: list[dict[str, object]] = [
+            {
+                "skillName": LOCAL_LOOKALIKE_SKILL,
+                "scope": "user",
+                "agentHosts": [harness],
+                "sourceURL": "",
+            }
+        ]
+        entries += [
+            {
+                "skillName": name,
+                "scope": "user",
+                "agentHosts": [harness],
+                "sourceURL": f"https://github.com/{EASY_CHEESE_SOURCE}",
+            }
             for name in self.skills.get(harness, [])
         ]
+        return entries
 
     def _next_version(self, package: str) -> str:
         answers = self._versions.setdefault(package, ["1.0.0"])
@@ -303,7 +359,7 @@ def config_path(home: Path) -> Path:
 
 def wire(monkeypatch: pytest.MonkeyPatch, world: FakeWorld) -> FakeWorld:
     """Fake only the CLI's child-process boundary; every module stays real."""
-    monkeypatch.setattr(cli, "_default_runner", lambda env=None: world)
+    monkeypatch.setattr(cli, "_default_runner", lambda env=None, *, timeout=None: world)
     return world
 
 
@@ -539,9 +595,9 @@ READ_ONLY_PROBES = [
     ("npm", "view", "hallouminate@latest", "version"),
     ("npm", "view", "tilth@latest", "version"),
     ("hallouminate", "--version"),
-    ("claude", "plugin", "marketplace", "list"),
+    ("claude", "plugin", "marketplace", "list", "--json"),
     ("claude", "plugin", "list", "--json"),
-    ("codex", "plugin", "marketplace", "list"),
+    ("codex", "plugin", "marketplace", "list", "--json"),
     ("codex", "plugin", "list", "--json"),
     ("hallouminate", "config", "validate"),
     (

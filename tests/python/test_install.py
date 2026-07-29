@@ -24,6 +24,7 @@ from cheese_flow.models import (
     Phase,
     PlanStep,
     ReportStatus,
+    RepositoryCandidate,
     RepositorySelection,
     StepStatus,
 )
@@ -557,3 +558,90 @@ def test_unavailable_signal_handling_is_reported_once(
     warnings = [line for line in capsys.readouterr().err.splitlines() if "interrupt" in line]
     assert len(warnings) == 1
     assert "SIGINT" in warnings[0] and "SIGTERM" in warnings[0]
+
+
+def _counting_discovery(monkeypatch: pytest.MonkeyPatch) -> list[int]:
+    """Count how many times the scheduler rediscovers the whole selected set."""
+    passes: list[int] = []
+    real = install.discover_repositories
+
+    def counted(roots: Sequence[Path], depth: int) -> tuple[RepositoryCandidate, ...]:
+        candidates = real(roots, depth)
+        passes.append(len(candidates))
+        return candidates
+
+    monkeypatch.setattr(install, "discover_repositories", counted)
+    return passes
+
+
+def test_the_selected_set_is_rediscovered_once_per_mutation_not_once_per_repository(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Nothing on disk can move while every step is skipped, so one pass suffices."""
+    repositories = [make_repository(tmp_path / name) for name in ("a", "b", "c", "d")]
+    steps = tuple(
+        step(f"init-{path.name}", repository=path, phase=Phase.INITIALIZE) for path in repositories
+    )
+    adapter = ScriptedAdapter("hallouminate", steps, {s.step_id: [True] for s in steps})
+    passes = _counting_discovery(monkeypatch)
+
+    report = apply_install_plan(plan_of(*steps), FakeRunner(), adapters={"hallouminate": adapter})
+
+    assert statuses(report) == [(s.step_id, StepStatus.SKIPPED) for s in steps]
+    assert passes == [4], "one discovery pass must cover the whole selected set"
+
+
+def test_a_mutating_step_retires_the_cached_verdicts(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A step that changed the system invalidates every verdict taken before it."""
+    early = make_repository(tmp_path / "early")
+    later = make_repository(tmp_path / "later")
+    steps = (
+        step("init-early", repository=early, phase=Phase.INITIALIZE),
+        step("init-later", repository=later, phase=Phase.INITIALIZE),
+    )
+    adapter = ScriptedAdapter("hallouminate", steps)
+    runner = MutatingRunner(("run", "init-early"), lambda: (later / ".git").rmdir())
+    passes = _counting_discovery(monkeypatch)
+
+    report = apply_install_plan(plan_of(*steps), runner, adapters={"hallouminate": adapter})
+
+    assert statuses(report) == [
+        ("init-early", StepStatus.SUCCEEDED),
+        ("init-later", StepStatus.BLOCKED),
+    ]
+    assert len(passes) == 2, "the mutation must retire the cached verdicts"
+    assert str(later) in (report.results[1].remediation or "")
+
+
+def test_a_failed_config_edit_reports_both_the_error_and_the_unmet_postcondition(
+    tmp_path: Path,
+) -> None:
+    """The discarded write and the still-unmet postcondition are separate facts.
+
+    ``stderr_tail`` carries what went wrong while writing; ``remediation`` must
+    additionally say the step never converged, or a reader sees a parse error
+    and assumes the entry landed anyway.
+    """
+    target = tmp_path / "mcp.json"
+    target.write_text("{ not json at all", encoding="utf-8")
+    edited = step(
+        "cursor",
+        config_edit=ConfigEdit(
+            target=target, pointer="mcpServers.hallouminate", value={"command": "hallouminate"}
+        ),
+        phase=Phase.REGISTER,
+    )
+    adapter = ScriptedAdapter("hallouminate", (edited,), {"cursor": [False, False]})
+
+    report = apply_install_plan(plan_of(edited), FakeRunner(), adapters={"hallouminate": adapter})
+
+    result = report.results[0]
+    assert result.status is StepStatus.FAILED
+    remediation = result.remediation or ""
+    assert "not valid JSON" in remediation
+    assert "postcondition still unsatisfied: cursor holds" in remediation
+    stderr_tail = result.stderr_tail or ""
+    assert "not valid JSON" in stderr_tail
+    assert "postcondition still unsatisfied" not in stderr_tail

@@ -249,3 +249,56 @@ def test_wizard_writes_nothing_to_stdout(wizard, capsys) -> None:
     captured = capsys.readouterr()
     assert captured.out == ""
     assert "[6/6] Preview" in captured.err
+
+
+# ─── Selection consistency (B-B1) ────────────────────────────────────────────
+
+
+def _prefilled_two_roots() -> DesiredState:
+    return DesiredState(
+        harnesses=("claude-code",),
+        components=("hallouminate", "easy-cheese"),
+        repositories=RepositorySelection(
+            search_roots=(Path("/srv/a"), Path("/srv/b")),
+            max_depth=1,
+            selected=(Path("/srv/b/foo"),),
+        ),
+    )
+
+
+def test_narrowing_the_search_roots_drops_selections_they_no_longer_cover(wizard) -> None:
+    """A selection outside every root must not be re-listed, checked, and saved.
+
+    The wizard used to re-add a prefilled selection as a candidate even after
+    its search root was removed, drawing it checked; accepting the screen wrote
+    a manifest ``load_desired_state`` then refused, bricking install and doctor.
+    """
+    state = wizard(["", "", "", "/srv/a", "", "", ""], _prefilled_two_roots())
+
+    assert state is not None
+    assert state.repositories.search_roots == (Path("/srv/a"),)
+    assert state.repositories.selected == ()
+
+
+def test_a_dropped_selection_is_not_offered_as_a_checked_candidate(wizard, capsys) -> None:
+    wizard(["", "", "", "/srv/a", "", "", ""], _prefilled_two_roots())
+
+    assert "/srv/b/foo" not in capsys.readouterr().err
+
+
+def test_a_symlinked_root_and_its_target_are_one_search_root(wizard, tmp_path: Path) -> None:
+    """Two spellings of one directory must not reach the model as duplicates.
+
+    ``_parse_roots`` canonicalizes so ``RepositorySelection`` never sees the
+    same directory twice; without it the wizard dies on an unhandled
+    ``ValidationError`` at Apply.
+    """
+    real = (tmp_path / "data" / "code").resolve()
+    real.mkdir(parents=True)
+    link = tmp_path / "code"
+    link.symlink_to(real)
+
+    state = wizard(["", "", "", f"{link}, {real}", "", "", ""])
+
+    assert state is not None
+    assert state.repositories.search_roots == (real,)

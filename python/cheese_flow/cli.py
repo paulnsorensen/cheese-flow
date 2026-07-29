@@ -35,6 +35,7 @@ from cheese_flow.models import (
     InstallPlan,
     ReportStatus,
 )
+from cheese_flow.runner import DEFAULT_TIMEOUT_SECONDS, SubprocessRunner
 from cheese_flow.tui import run_wizard
 
 _MANIFEST_EXIT_CODE = 2
@@ -65,6 +66,13 @@ def install(
         bool,
         typer.Option("--json", help="Write one JSON document to stdout."),
     ] = False,
+    timeout: Annotated[
+        float,
+        typer.Option(
+            "--timeout",
+            help="Seconds a single command may run before it is killed.",
+        ),
+    ] = DEFAULT_TIMEOUT_SECONDS,
 ) -> None:
     """Install the selected components for the selected harnesses and repositories."""
     console = _console()
@@ -78,13 +86,13 @@ def install(
     if dry_run:
         # spec:105 — resolve metadata against a throwaway npm cache, removed on exit.
         with tempfile.TemporaryDirectory(prefix="cheese-npm-cache-") as cache:
-            runner = _default_runner({"npm_config_cache": cache})
+            runner = _default_runner({"npm_config_cache": cache}, timeout=timeout)
             plan = build_install_plan(state, default_component_adapters(runner))
         console.print("Dry run: emitting the plan without executing it.")
         _announce(console, plan)
         report = ApplyReport(status=ReportStatus.SUCCEEDED, manifest=state, plan=plan)
     else:
-        runner = _default_runner()
+        runner = _default_runner(timeout=timeout)
         # One adapter set for planning and apply: apply must reuse the versions
         # planning resolved (acceptance:150).
         adapters = default_component_adapters(runner)
@@ -104,11 +112,18 @@ def doctor(
         Path | None,
         typer.Option("--config", help="Manifest to verify. Defaults to the standard path."),
     ] = None,
+    timeout: Annotated[
+        float,
+        typer.Option(
+            "--timeout",
+            help="Seconds a single command may run before it is killed.",
+        ),
+    ] = DEFAULT_TIMEOUT_SECONDS,
 ) -> None:
     """Verify declared managed state without changing it."""
     console = _console()
     state = _headless_state(console, config)
-    runner = _default_runner()
+    runner = _default_runner(timeout=timeout)
     adapters = default_component_adapters(runner)
     console.print("Verifying declared managed state.")
     report = verify_desired_state(state, adapters, runner)
@@ -120,10 +135,12 @@ def _console() -> Console:
     return Console(stderr=True, markup=False, highlight=False, soft_wrap=True)
 
 
-def _default_runner(env: Mapping[str, str] | None = None) -> CommandRunner:
-    from cheese_flow.runner import SubprocessRunner
-
-    return SubprocessRunner(env=env) if env is not None else SubprocessRunner()
+def _default_runner(
+    env: Mapping[str, str] | None = None,
+    *,
+    timeout: float = DEFAULT_TIMEOUT_SECONDS,
+) -> CommandRunner:
+    return SubprocessRunner(env=env, timeout=timeout)
 
 
 def _headless_state(console: Console, config: Path | None) -> DesiredState:

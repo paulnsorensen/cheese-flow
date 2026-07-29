@@ -7,9 +7,12 @@ from pathlib import Path
 
 import pytest
 from cheese_flow.adapters import default_component_adapters
+from cheese_flow.adapters.easy_cheese import CORE_SKILLS
 from cheese_flow.doctor import verify_desired_state
 from cheese_flow.models import (
     CommandOutcome,
+    ConfigEdit,
+    ConfigEditSummary,
     DesiredState,
     Phase,
     PlanStep,
@@ -104,15 +107,22 @@ def _readonly_script(version: str) -> dict[tuple[str, ...], CommandOutcome]:
     def ok(argv: tuple[str, ...], stdout: str) -> CommandOutcome:
         return CommandOutcome(argv=argv, exit_code=0, stdout=stdout, stderr="", elapsed_ms=1)
 
+    # `gh skill list` reports the whole pack; the postcondition needs the full
+    # core quorum, and each entry carries the sourceURL gh derives from the
+    # installed SKILL.md frontmatter.
     skills = json.dumps(
         [
             {
                 "agentHosts": ["claude-code", "cursor"],
                 "scope": "user",
-                "skillName": "cheese",
+                "skillName": name,
                 "sourceURL": "https://github.com/paulnsorensen/easy-cheese",
             }
+            for name in sorted(CORE_SKILLS)
         ]
+    )
+    marketplaces = json.dumps(
+        [{"name": "hallouminate", "source": "github", "repo": "paulnsorensen/hallouminate"}]
     )
     fields = "agentHosts,scope,skillName,sourceURL"
     return {
@@ -120,12 +130,12 @@ def _readonly_script(version: str) -> dict[tuple[str, ...], CommandOutcome]:
             ("npm", "view", "hallouminate@latest", "version"), version
         ),
         ("hallouminate", "--version"): ok(("hallouminate", "--version"), f"hallouminate {version}"),
-        ("claude", "plugin", "marketplace", "list"): ok(
-            ("claude", "plugin", "marketplace", "list"), "hallouminate"
+        ("claude", "plugin", "marketplace", "list", "--json"): ok(
+            ("claude", "plugin", "marketplace", "list", "--json"), marketplaces
         ),
         ("claude", "plugin", "list", "--json"): ok(
             ("claude", "plugin", "list", "--json"),
-            json.dumps([{"id": "hallouminate@hallouminate", "enabled": True}]),
+            json.dumps([{"id": "hallouminate@hallouminate", "scope": "user", "enabled": True}]),
         ),
         ("hallouminate", "config", "validate"): ok(("hallouminate", "config", "validate"), "ok"),
         ("gh", "skill", "list", "--agent", "claude-code", "--scope", "user", "--json", fields): ok(
@@ -168,7 +178,7 @@ def test_doctor_with_real_adapters_runs_only_read_only_commands(
     assert runner.argvs() == [
         ("npm", "view", "hallouminate@latest", "version"),
         ("hallouminate", "--version"),
-        ("claude", "plugin", "marketplace", "list"),
+        ("claude", "plugin", "marketplace", "list", "--json"),
         ("claude", "plugin", "list", "--json"),
         ("hallouminate", "config", "validate"),
         (
@@ -204,3 +214,28 @@ def test_doctor_with_real_adapters_runs_only_read_only_commands(
         "easy-cheese:install:claude-code",
         "easy-cheese:install:cursor",
     ]
+
+
+def test_doctor_identifies_the_file_a_config_edit_step_targets(tmp_path: Path) -> None:
+    """A config-edit step reports empty argv, so doctor must name its target too.
+
+    Apply already carried the summary; doctor did not, so ``cheese doctor --json``
+    showed ``argv: []`` with ``config_edit: null`` and no way to tell which file
+    the step is about.
+    """
+    target = tmp_path / "mcp.json"
+    edited = step(
+        "hallouminate:mcp:cursor",
+        config_edit=ConfigEdit(target=target, pointer="mcpServers.hallouminate", value={"a": 1}),
+        phase=Phase.REGISTER,
+    )
+    adapters = {
+        "hallouminate": ScriptedAdapter("hallouminate", (edited,), {edited.step_id: [True]}),
+        "easy-cheese": ScriptedAdapter("easy-cheese", ()),
+    }
+
+    report = verify_desired_state(STATE, adapters, FakeRunner())
+
+    result = report.results[0]
+    assert result.argv == ()
+    assert result.config_edit == ConfigEditSummary(target=target, pointer="mcpServers.hallouminate")

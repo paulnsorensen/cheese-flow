@@ -50,9 +50,7 @@ def load_desired_state(path: Path) -> DesiredState:
     _reject_unknown_names(path, harnesses, HARNESS_NAMES, "harness names")
     _reject_unknown_names(path, components, COMPONENT_NAMES, "component names")
 
-    state = _build_state(path, harnesses, components, _repositories(path, document))
-    _reject_inconsistent_selection(path, state.repositories)
-    return state
+    return _build_state(path, harnesses, components, _repositories(path, document))
 
 
 def save_desired_state(state: DesiredState, path: Path) -> None:
@@ -153,18 +151,6 @@ def _build_state(
 
 def _describe(error: ValidationError) -> str:
     return "; ".join(detail["msg"].removeprefix("Value error, ") for detail in error.errors())
-
-
-def _reject_inconsistent_selection(path: Path, repositories: RepositorySelection) -> None:
-    orphans = [
-        str(selected)
-        for selected in repositories.selected
-        if not any(selected.is_relative_to(root) for root in repositories.search_roots)
-    ]
-    if orphans:
-        raise ManifestError(
-            path, f"selected repositories are not under any search root: {', '.join(orphans)}"
-        )
 
 
 def _render_toml(state: DesiredState) -> str:

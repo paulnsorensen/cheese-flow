@@ -28,6 +28,7 @@ from cheese_flow.models import (
     StepResult,
     StepStatus,
 )
+from cheese_flow.runner import DEFAULT_TIMEOUT_SECONDS
 from typer.testing import CliRunner
 
 # Help-text assertions below rely on Typer's plain (Click) help formatter, which
@@ -119,7 +120,7 @@ def config_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 @pytest.fixture
 def command_runner(monkeypatch: pytest.MonkeyPatch) -> RecordingRunner:
     recorder = RecordingRunner()
-    monkeypatch.setattr(cli, "_default_runner", lambda env=None: recorder)
+    monkeypatch.setattr(cli, "_default_runner", lambda env=None, *, timeout=None: recorder)
     monkeypatch.setattr(cli, "default_component_adapters", lambda _runner: {})
     return recorder
 
@@ -550,3 +551,48 @@ def test_doctor_reports_failure_with_a_nonzero_exit_code(
 
     assert result.exit_code != 0
     assert json.loads(result.stdout)["status"] == "failed"
+
+
+# ─── Timeout plumbing ────────────────────────────────────────────────────────
+
+
+@pytest.fixture
+def built_timeouts(monkeypatch: pytest.MonkeyPatch) -> list[float | None]:
+    """Record the ``timeout`` every ``SubprocessRunner`` the CLI builds receives."""
+    recorded: list[float | None] = []
+
+    class TimeoutRecordingRunner(RecordingRunner):
+        def __init__(self, *, env: object = None, timeout: float | None = None) -> None:
+            super().__init__()
+            recorded.append(timeout)
+
+    monkeypatch.setattr(cli, "SubprocessRunner", TimeoutRecordingRunner)
+    monkeypatch.setattr(cli, "default_component_adapters", lambda _runner: {})
+    return recorded
+
+
+@pytest.mark.parametrize("command", ["install", "doctor"])
+def test_the_timeout_option_reaches_the_subprocess_runner(
+    tmp_path: Path,
+    config_home: Path,
+    calls: dict,
+    built_timeouts: list[float | None],
+    command: str,
+) -> None:
+    manifest = write_manifest(tmp_path)
+
+    result = runner.invoke(app, [command, "--config", str(manifest), "--timeout", "12.5"])
+
+    assert result.exit_code == 0, result.stderr
+    assert built_timeouts == [12.5]
+
+
+def test_without_the_timeout_option_the_runner_gets_the_package_default(
+    tmp_path: Path, config_home: Path, calls: dict, built_timeouts: list[float | None]
+) -> None:
+    manifest = write_manifest(tmp_path)
+
+    result = runner.invoke(app, ["install", "--config", str(manifest)])
+
+    assert result.exit_code == 0, result.stderr
+    assert built_timeouts == [DEFAULT_TIMEOUT_SECONDS]

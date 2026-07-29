@@ -13,6 +13,7 @@ from cheese_flow.desired_state import (
     save_desired_state,
 )
 from cheese_flow.models import DEFAULT_MAX_DEPTH, DesiredState, RepositorySelection
+from pydantic import ValidationError
 
 VALID = """\
 harnesses = ["claude-code", "codex", "cursor"]
@@ -444,3 +445,39 @@ def test_selection_outside_every_search_root_is_still_rejected(tmp_path: Path) -
     error = load_error(tmp_path, _manifest([real], [tmp_path / "elsewhere"]))
 
     assert "not under any search root" in error.reason
+
+
+# --- duplicate reporting (L-B5) --------------------------------------------
+
+
+def test_duplicate_search_roots_are_named_as_the_user_wrote_them(tmp_path: Path) -> None:
+    """Two spellings of one directory must not read as one path typed twice."""
+    real = (tmp_path / "data" / "Dev").resolve()
+    real.mkdir(parents=True)
+    link = tmp_path / "Dev"
+    link.symlink_to(real)
+
+    error = load_error(tmp_path, _manifest([link, real], []))
+
+    assert error.reason == f"search_roots must not contain duplicates: {real}"
+
+
+def test_selection_rule_still_surfaces_as_a_manifest_error(tmp_path: Path) -> None:
+    """The rule moved into the model; the CLI must still see ``ManifestError``."""
+    real = (tmp_path / "Dev").resolve()
+    real.mkdir()
+
+    error = load_error(tmp_path, _manifest([real], [tmp_path / "elsewhere"]))
+
+    assert isinstance(error, ManifestError)
+    assert error.path == tmp_path / "config.toml"
+
+
+def test_the_wizard_cannot_build_a_state_the_loader_would_reject() -> None:
+    """``RepositorySelection`` owns the rule, so no producer can bypass it."""
+    with pytest.raises(ValidationError) as caught:
+        RepositorySelection(
+            search_roots=(Path("/srv/a"),), selected=(Path("/srv/b/foo"),), max_depth=1
+        )
+
+    assert "selected repositories are not under any search root: /srv/b/foo" in str(caught.value)
