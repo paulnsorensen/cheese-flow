@@ -16,11 +16,15 @@ from cheese_flow.adapters import (
 )
 from cheese_flow.models import (
     CommandOutcome,
+    ConfigEdit,
     DesiredState,
     Phase,
     PlanStep,
     RepositorySelection,
+    StepResult,
+    StepStatus,
 )
+from pydantic import ValidationError
 
 ALL_HARNESSES = ("claude-code", "codex", "cursor")
 
@@ -129,9 +133,34 @@ def test_hallouminate_gives_cursor_no_plugin_steps() -> None:
     runner = FakeRunner(npm_script())
     steps = HallouminateAdapter(runner).plan_steps(state())
 
-    assert [s.step_id for s in steps if s.harness == "cursor"] == []
     assert "hallouminate:plugin:cursor" not in steps_by_id(steps)
     assert "hallouminate:marketplace:cursor" not in steps_by_id(steps)
+    assert [s.step_id for s in steps if s.harness == "cursor"] == ["hallouminate:mcp:cursor"]
+
+
+def test_hallouminate_registers_cursor_mcp_entry_declaratively(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path))
+    runner = FakeRunner(npm_script())
+    step = steps_by_id(HallouminateAdapter(runner).plan_steps(state()))["hallouminate:mcp:cursor"]
+
+    assert step.harness == "cursor"
+    assert step.phase is Phase.REGISTER
+    assert step.argv == ()
+    assert step.depends_on == ("hallouminate:npm-install",)
+    assert step.config_edit == ConfigEdit(
+        target=tmp_path / ".cursor/mcp.json",
+        pointer="mcpServers.hallouminate",
+        value={"command": "hallouminate", "args": ["serve"]},
+    )
+
+
+def test_hallouminate_omits_the_cursor_mcp_step_when_cursor_is_not_selected() -> None:
+    runner = FakeRunner(npm_script())
+    steps = HallouminateAdapter(runner).plan_steps(state(harnesses=("claude-code", "codex")))
+
+    assert "hallouminate:mcp:cursor" not in steps_by_id(steps)
 
 
 def test_hallouminate_config_init_never_forces_and_depends_on_install() -> None:
@@ -257,6 +286,66 @@ def test_hallouminate_plugin_postcondition_requires_the_plugin_id() -> None:
     # `claude plugin list` exits 0 with nothing installed.
     empty = FakeRunner({list_argv: outcome(list_argv, stdout="No plugins installed\n")})
     assert adapter.check_postcondition(step, empty) is False
+
+
+CURSOR_HALLOUMINATE_ENTRY = {"command": "hallouminate", "args": ["serve"]}
+
+
+def cursor_mcp_step() -> PlanStep:
+    return hallouminate_steps(FakeRunner(npm_script()))["hallouminate:mcp:cursor"]
+
+
+def write_cursor_config(home: Path, document: object) -> None:
+    (home / ".cursor").mkdir(exist_ok=True)
+    (home / ".cursor/mcp.json").write_text(json.dumps(document))
+
+
+def test_hallouminate_cursor_mcp_postcondition_reads_the_config_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path))
+    adapter = HallouminateAdapter(FakeRunner(npm_script()))
+    step = cursor_mcp_step()
+
+    write_cursor_config(tmp_path, {"mcpServers": {"hallouminate": CURSOR_HALLOUMINATE_ENTRY}})
+    runner = FakeRunner()
+    assert adapter.check_postcondition(step, runner) is True
+    assert runner.argvs() == []
+
+
+def test_hallouminate_cursor_mcp_postcondition_false_when_entry_absent(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path))
+    adapter = HallouminateAdapter(FakeRunner(npm_script()))
+    step = cursor_mcp_step()
+
+    assert adapter.check_postcondition(step, FakeRunner()) is False
+
+    write_cursor_config(tmp_path, {"mcpServers": {"tilth": CURSOR_HALLOUMINATE_ENTRY}})
+    assert adapter.check_postcondition(step, FakeRunner()) is False
+
+    (tmp_path / ".cursor/mcp.json").write_text("{not json")
+    assert adapter.check_postcondition(step, FakeRunner()) is False
+
+
+@pytest.mark.parametrize(
+    "entry",
+    [
+        pytest.param({"command": "npx", "args": ["serve"]}, id="wrong-command"),
+        pytest.param({"command": "hallouminate", "args": ["mcp"]}, id="wrong-args"),
+        pytest.param({"command": "hallouminate"}, id="missing-args"),
+        pytest.param({"command": "hallouminate", "args": "serve"}, id="args-not-a-list"),
+    ],
+)
+def test_hallouminate_cursor_mcp_postcondition_false_when_entry_is_wrong(
+    entry: dict[str, object], tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path))
+    write_cursor_config(tmp_path, {"mcpServers": {"hallouminate": entry}})
+
+    adapter = HallouminateAdapter(FakeRunner(npm_script()))
+    assert adapter.check_postcondition(cursor_mcp_step(), FakeRunner()) is False
 
 
 def test_hallouminate_config_postcondition_uses_config_validate() -> None:
@@ -568,6 +657,68 @@ def test_tilth_postcondition_false_when_config_absent_or_unrelated(
 
     (tmp_path / ".claude.json").write_text("{not json")
     assert adapter.check_postcondition(tilth_step("claude-code"), FakeRunner()) is False
+
+
+# --------------------------------------------------------------------------
+# PlanStep action contract
+# --------------------------------------------------------------------------
+
+
+SAMPLE_EDIT = ConfigEdit(
+    target=Path("/home/me/.cursor/mcp.json"),
+    pointer="mcpServers.hallouminate",
+    value={"command": "hallouminate", "args": ["serve"]},
+)
+
+
+def test_plan_step_rejects_a_step_with_neither_argv_nor_config_edit() -> None:
+    with pytest.raises(ValidationError, match="exactly one of argv or config_edit"):
+        PlanStep(
+            step_id="hallouminate:noop",
+            component="hallouminate",
+            phase=Phase.REGISTER,
+            postcondition="x",
+        )
+
+
+def test_plan_step_rejects_a_step_with_both_argv_and_config_edit() -> None:
+    with pytest.raises(ValidationError, match="exactly one of argv or config_edit"):
+        PlanStep(
+            step_id="hallouminate:both",
+            component="hallouminate",
+            phase=Phase.REGISTER,
+            argv=("hallouminate", "serve"),
+            config_edit=SAMPLE_EDIT,
+            postcondition="x",
+        )
+
+
+def test_config_edit_requires_an_absolute_target() -> None:
+    with pytest.raises(ValidationError, match="absolute"):
+        ConfigEdit(target=Path(".cursor/mcp.json"), pointer="mcpServers.hallouminate", value={})
+
+
+def test_step_result_reports_a_config_edit_step_with_an_empty_argv() -> None:
+    step = PlanStep(
+        step_id="hallouminate:mcp:cursor",
+        component="hallouminate",
+        harness="cursor",
+        phase=Phase.REGISTER,
+        config_edit=SAMPLE_EDIT,
+        postcondition="the cursor MCP entry is present",
+    )
+    result = StepResult(
+        step_id=step.step_id,
+        component=step.component,
+        harness=step.harness,
+        phase=step.phase,
+        argv=step.argv,
+        postcondition=step.postcondition,
+        status=StepStatus.SUCCEEDED,
+        elapsed_ms=0,
+    )
+
+    assert result.model_dump()["argv"] == ()
 
 
 # --------------------------------------------------------------------------

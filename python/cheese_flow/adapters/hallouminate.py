@@ -4,10 +4,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from cheese_flow.adapters.native_config import read_mcp_entry
 from cheese_flow.models import (
     HARNESS_NAMES,
     CommandRunner,
     ComponentName,
+    ConfigEdit,
     DesiredState,
     HarnessName,
     Phase,
@@ -26,8 +28,17 @@ PLUGIN_CLIS: dict[HarnessName, tuple[str, str]] = {
     "codex": ("codex", "add"),
 }
 
+CURSOR_MCP_CONFIG = ".cursor/mcp.json"
+"""Cursor's user MCP surface, relative to the home directory."""
+
+CURSOR_MCP_POINTER = f"mcpServers.{PACKAGE}"
+
+CURSOR_MCP_ENTRY: dict[str, object] = {"command": PACKAGE, "args": ["serve"]}
+"""The entry Hallouminate's own plugin ``.mcp.json`` declares for its server."""
+
 _INSTALL_STEP = "hallouminate:npm-install"
 _CONFIG_STEP = "hallouminate:config-init"
+_CURSOR_MCP_STEP = "hallouminate:mcp:cursor"
 
 
 def _corpus_name(repository: Path) -> str:
@@ -77,6 +88,28 @@ class HallouminateAdapter:
         ]
 
         for harness in harnesses:
+            if harness == "cursor":
+                # Cursor has no plugin or MCP-registration CLI: its user MCP
+                # surface is the config file itself, so declare the edit.
+                steps.append(
+                    PlanStep(
+                        step_id=_CURSOR_MCP_STEP,
+                        component=self.name,
+                        harness=harness,
+                        phase=Phase.REGISTER,
+                        config_edit=ConfigEdit(
+                            target=Path.home() / CURSOR_MCP_CONFIG,
+                            pointer=CURSOR_MCP_POINTER,
+                            value=CURSOR_MCP_ENTRY,
+                        ),
+                        postcondition=(
+                            f"~/{CURSOR_MCP_CONFIG} holds {CURSOR_MCP_POINTER} running "
+                            f"`{PACKAGE} serve`"
+                        ),
+                        depends_on=(_INSTALL_STEP,),
+                    )
+                )
+                continue
             if harness not in PLUGIN_CLIS:
                 continue
             executable, verb = PLUGIN_CLIS[harness]
@@ -161,6 +194,8 @@ class HallouminateAdapter:
             return self._check_marketplace(step, runner)
         if step.step_id.startswith("hallouminate:plugin:"):
             return self._check_plugin(step, runner)
+        if step.step_id == _CURSOR_MCP_STEP:
+            return _check_cursor_mcp(step)
         if step.step_id == _CONFIG_STEP:
             return runner.run(("hallouminate", "config", "validate")).exit_code == 0
         if step.step_id.startswith("hallouminate:init-repo:"):
@@ -207,6 +242,17 @@ class HallouminateAdapter:
             cwd=repository,
         )
         return outcome.exit_code == 0 and '"path"' in outcome.stdout
+
+
+def _check_cursor_mcp(step: PlanStep) -> bool:
+    """Confirm Cursor's MCP config declares the entry the step's edit specifies."""
+    edit = step.config_edit
+    if edit is None:
+        raise ValueError(f"step {step.step_id!r} has no config edit")
+    entry = read_mcp_entry(edit.target, "cursor", PACKAGE)
+    if not isinstance(entry, dict):
+        return False
+    return entry.get("command") == edit.value["command"] and entry.get("args") == edit.value["args"]
 
 
 def _harness_of(step: PlanStep) -> HarnessName:

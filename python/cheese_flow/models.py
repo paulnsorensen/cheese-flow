@@ -13,7 +13,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from enum import StrEnum
 from pathlib import Path
-from typing import Literal, Protocol
+from typing import Any, Literal, Protocol
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -183,15 +183,49 @@ class RepositoryCandidate(_Frozen):
         return value
 
 
+class ConfigEdit(_Frozen):
+    """A declarative write of ``value`` at ``pointer`` in a config file.
+
+    Some registrations have no native command to run: the harness's only user
+    surface is a config file. Such a step declares the edit instead of argv.
+    """
+
+    target: Path
+    """Absolute path of the config file to edit."""
+
+    pointer: str
+    """Dotted path to the entry inside the document, e.g. ``mcpServers.tilth``."""
+
+    value: dict[str, Any]
+    """The object that must sit at ``pointer``."""
+
+    @field_validator("target")
+    @classmethod
+    def _absolute_target(cls, value: Path) -> Path:
+        _require_absolute((value,), "target")
+        return value
+
+    @field_validator("pointer")
+    @classmethod
+    def _non_empty_pointer(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("pointer must not be empty")
+        return value
+
+
 class PlanStep(_Frozen):
-    """One deterministic unit of work an adapter contributes to the plan."""
+    """One deterministic unit of work an adapter contributes to the plan.
+
+    A step either runs ``argv`` or applies ``config_edit`` — exactly one.
+    """
 
     step_id: str
     component: ComponentName
     harness: HarnessName | None = None
     repository: Path | None = None
     phase: Phase
-    argv: tuple[str, ...]
+    argv: tuple[str, ...] = ()
+    config_edit: ConfigEdit | None = None
     postcondition: str
     depends_on: tuple[str, ...] = ()
 
@@ -200,13 +234,6 @@ class PlanStep(_Frozen):
     def _non_empty(cls, value: str, info) -> str:
         if not value.strip():
             raise ValueError(f"{info.field_name} must not be empty")
-        return value
-
-    @field_validator("argv")
-    @classmethod
-    def _non_empty_argv(cls, value: tuple[str, ...]) -> tuple[str, ...]:
-        if not value:
-            raise ValueError("argv must not be empty")
         return value
 
     @field_validator("repository")
@@ -221,6 +248,12 @@ class PlanStep(_Frozen):
     def _unique_dependencies(cls, value: tuple[str, ...]) -> tuple[str, ...]:
         _require_unique(value, "depends_on")
         return value
+
+    @model_validator(mode="after")
+    def _exactly_one_action(self) -> PlanStep:
+        if bool(self.argv) == (self.config_edit is not None):
+            raise ValueError(f"step {self.step_id!r} must set exactly one of argv or config_edit")
+        return self
 
     @model_validator(mode="after")
     def _no_self_dependency(self) -> PlanStep:

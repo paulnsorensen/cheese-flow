@@ -2,11 +2,9 @@
 
 from __future__ import annotations
 
-import json
-import tomllib
 from pathlib import Path
-from typing import Any
 
+from cheese_flow.adapters.native_config import read_mcp_entry
 from cheese_flow.models import (
     HARNESS_NAMES,
     CommandRunner,
@@ -78,27 +76,10 @@ class TilthAdapter:
         """Confirm the harness config holds the expected Tilth MCP command and edit mode."""
         if step.harness is None:
             raise ValueError(f"step {step.step_id!r} has no harness")
-        entry = _read_entry(Path.home() / _CONFIG_PATHS[step.harness], step.harness)
+        entry = read_mcp_entry(Path.home() / _CONFIG_PATHS[step.harness], step.harness, PACKAGE)
         if not isinstance(entry, dict):
             return False
         args = entry.get("args")
         if not isinstance(args, list):
             return False
         return entry.get("command") == EXPECTED_COMMAND and tuple(args) == EXPECTED_ARGS
-
-
-def _read_entry(path: Path, harness: HarnessName) -> Any:
-    try:
-        raw = path.read_bytes()
-    except OSError:
-        return None
-    try:
-        if harness == "codex":
-            return tomllib.loads(raw.decode()).get("mcp_servers", {}).get(PACKAGE)
-        document = json.loads(raw)
-    except (UnicodeDecodeError, tomllib.TOMLDecodeError, json.JSONDecodeError):
-        return None
-    if not isinstance(document, dict):
-        return None
-    servers = document.get("mcpServers")
-    return servers.get(PACKAGE) if isinstance(servers, dict) else None
