@@ -1,0 +1,611 @@
+"""Adapter contract tests: exact argv, once-per-run version resolution, and
+positive postconditions driven entirely through a scripted fake ``CommandRunner``."""
+
+from __future__ import annotations
+
+import json
+from collections.abc import Sequence
+from pathlib import Path
+
+import pytest
+from cheese_flow.adapters import (
+    EasyCheeseAdapter,
+    HallouminateAdapter,
+    TilthAdapter,
+    default_component_adapters,
+)
+from cheese_flow.models import (
+    CommandOutcome,
+    DesiredState,
+    Phase,
+    PlanStep,
+    RepositorySelection,
+)
+
+ALL_HARNESSES = ("claude-code", "codex", "cursor")
+
+
+class FakeRunner:
+    """Records every argv and replays scripted outcomes keyed by exact argv."""
+
+    def __init__(self, script: dict[tuple[str, ...], CommandOutcome] | None = None) -> None:
+        self.script = dict(script or {})
+        self.calls: list[tuple[tuple[str, ...], Path | None]] = []
+
+    def run(self, argv: Sequence[str], *, cwd: Path | None = None) -> CommandOutcome:
+        key = tuple(argv)
+        self.calls.append((key, cwd))
+        if key in self.script:
+            return self.script[key]
+        return CommandOutcome(argv=key, exit_code=127, stdout="", stderr="unscripted", elapsed_ms=0)
+
+    def argvs(self) -> list[tuple[str, ...]]:
+        return [argv for argv, _ in self.calls]
+
+
+def outcome(argv: tuple[str, ...], *, exit_code: int = 0, stdout: str = "") -> CommandOutcome:
+    return CommandOutcome(argv=argv, exit_code=exit_code, stdout=stdout, stderr="", elapsed_ms=1)
+
+
+NPM_VIEW_HALLOUMINATE = ("npm", "view", "hallouminate@latest", "version")
+NPM_VIEW_TILTH = ("npm", "view", "tilth@latest", "version")
+
+HALLOUMINATE_VERSION = "0.42.1"
+TILTH_VERSION = "1.7.0"
+
+
+def npm_script() -> dict[tuple[str, ...], CommandOutcome]:
+    return {
+        NPM_VIEW_HALLOUMINATE: outcome(NPM_VIEW_HALLOUMINATE, stdout=f"{HALLOUMINATE_VERSION}\n"),
+        NPM_VIEW_TILTH: outcome(NPM_VIEW_TILTH, stdout=f"{TILTH_VERSION}\n"),
+    }
+
+
+def state(
+    *,
+    harnesses: tuple[str, ...] = ALL_HARNESSES,
+    components: tuple[str, ...] = ("hallouminate", "easy-cheese", "tilth"),
+    selected: tuple[Path, ...] = (),
+) -> DesiredState:
+    return DesiredState(
+        harnesses=harnesses,
+        components=components,
+        repositories=RepositorySelection(search_roots=(Path("/repos"),), selected=selected),
+    )
+
+
+def steps_by_id(steps: Sequence[PlanStep]) -> dict[str, PlanStep]:
+    return {step.step_id: step for step in steps}
+
+
+# --------------------------------------------------------------------------
+# Hallouminate — planning
+# --------------------------------------------------------------------------
+
+
+def test_hallouminate_plans_versioned_global_npm_install() -> None:
+    runner = FakeRunner(npm_script())
+    steps = steps_by_id(HallouminateAdapter(runner).plan_steps(state()))
+
+    install = steps["hallouminate:npm-install"]
+    assert install.argv == ("npm", "install", "-g", f"hallouminate@{HALLOUMINATE_VERSION}")
+    assert install.phase is Phase.INSTALL
+    assert install.depends_on == ()
+
+
+def test_hallouminate_plugin_argv_per_native_harness() -> None:
+    runner = FakeRunner(npm_script())
+    steps = steps_by_id(HallouminateAdapter(runner).plan_steps(state()))
+
+    assert steps["hallouminate:marketplace:claude-code"].argv == (
+        "claude",
+        "plugin",
+        "marketplace",
+        "add",
+        "paulnsorensen/hallouminate",
+    )
+    assert steps["hallouminate:plugin:claude-code"].argv == (
+        "claude",
+        "plugin",
+        "install",
+        "hallouminate@hallouminate",
+    )
+    assert steps["hallouminate:marketplace:codex"].argv == (
+        "codex",
+        "plugin",
+        "marketplace",
+        "add",
+        "paulnsorensen/hallouminate",
+    )
+    assert steps["hallouminate:plugin:codex"].argv == (
+        "codex",
+        "plugin",
+        "add",
+        "hallouminate@hallouminate",
+    )
+
+
+def test_hallouminate_gives_cursor_no_plugin_steps() -> None:
+    runner = FakeRunner(npm_script())
+    steps = HallouminateAdapter(runner).plan_steps(state())
+
+    assert [s.step_id for s in steps if s.harness == "cursor"] == []
+    assert "hallouminate:plugin:cursor" not in steps_by_id(steps)
+    assert "hallouminate:marketplace:cursor" not in steps_by_id(steps)
+
+
+def test_hallouminate_config_init_never_forces_and_depends_on_install() -> None:
+    runner = FakeRunner(npm_script())
+    config = steps_by_id(HallouminateAdapter(runner).plan_steps(state()))[
+        "hallouminate:config-init"
+    ]
+
+    assert config.argv == ("hallouminate", "config", "init")
+    assert config.phase is Phase.CONFIGURE
+    assert config.depends_on == ("hallouminate:npm-install",)
+
+
+def test_hallouminate_registration_depends_on_install_and_plugin_on_marketplace() -> None:
+    runner = FakeRunner(npm_script())
+    steps = steps_by_id(HallouminateAdapter(runner).plan_steps(state()))
+
+    assert steps["hallouminate:marketplace:codex"].depends_on == ("hallouminate:npm-install",)
+    assert steps["hallouminate:plugin:codex"].depends_on == ("hallouminate:marketplace:codex",)
+
+
+def test_hallouminate_emits_independent_steps_per_selected_repository() -> None:
+    runner = FakeRunner(npm_script())
+    repos = (Path("/repos/alpha"), Path("/repos/beta"))
+    steps = steps_by_id(HallouminateAdapter(runner).plan_steps(state(selected=repos)))
+
+    init = steps["hallouminate:init-repo:/repos/alpha"]
+    assert init.argv == ("hallouminate", "init-repo", "alpha", "--path", "/repos/alpha")
+    assert init.phase is Phase.INITIALIZE
+    assert init.repository == Path("/repos/alpha")
+    assert init.depends_on == ("hallouminate:config-init",)
+
+    index = steps["hallouminate:index:/repos/beta"]
+    assert index.argv == (
+        "hallouminate",
+        "index",
+        "--corpus",
+        "repo:beta:wiki",
+        "--strict",
+    )
+    assert index.depends_on == ("hallouminate:init-repo:/repos/beta",)
+
+
+def test_hallouminate_emits_no_repository_steps_when_selection_is_empty() -> None:
+    runner = FakeRunner(npm_script())
+    steps = HallouminateAdapter(runner).plan_steps(state(selected=()))
+
+    assert [s.step_id for s in steps if s.phase is Phase.INITIALIZE] == []
+
+
+def test_hallouminate_resolves_npm_view_once_per_run() -> None:
+    runner = FakeRunner(npm_script())
+    adapter = HallouminateAdapter(runner)
+    adapter.plan_steps(state(selected=(Path("/repos/alpha"), Path("/repos/beta"))))
+    adapter.plan_steps(state())
+    adapter.check_postcondition(
+        PlanStep(
+            step_id="hallouminate:npm-install",
+            component="hallouminate",
+            phase=Phase.INSTALL,
+            argv=("npm", "install", "-g", "hallouminate@0.42.1"),
+            postcondition="x",
+        ),
+        runner,
+    )
+
+    assert runner.argvs().count(NPM_VIEW_HALLOUMINATE) == 1
+
+
+def test_hallouminate_raises_when_npm_view_fails() -> None:
+    runner = FakeRunner({NPM_VIEW_HALLOUMINATE: outcome(NPM_VIEW_HALLOUMINATE, exit_code=1)})
+    with pytest.raises(RuntimeError, match="hallouminate@latest"):
+        HallouminateAdapter(runner).plan_steps(state())
+
+
+# --------------------------------------------------------------------------
+# Hallouminate — postconditions
+# --------------------------------------------------------------------------
+
+
+def hallouminate_steps(runner: FakeRunner, repos: tuple[Path, ...] = ()) -> dict[str, PlanStep]:
+    return steps_by_id(HallouminateAdapter(runner).plan_steps(state(selected=repos)))
+
+
+def test_hallouminate_install_postcondition_requires_the_resolved_version() -> None:
+    planner = FakeRunner(npm_script())
+    adapter = HallouminateAdapter(planner)
+    step = steps_by_id(adapter.plan_steps(state()))["hallouminate:npm-install"]
+
+    version_argv = ("hallouminate", "--version")
+    satisfied = FakeRunner(
+        {version_argv: outcome(version_argv, stdout=f"hallouminate {HALLOUMINATE_VERSION}\n")}
+    )
+    assert adapter.check_postcondition(step, satisfied) is True
+    assert satisfied.argvs() == [version_argv]
+
+    # Exit 0 but the installed executable is an older release: not converged.
+    stale = FakeRunner({version_argv: outcome(version_argv, stdout="hallouminate 0.1.0\n")})
+    assert adapter.check_postcondition(step, stale) is False
+
+
+def test_hallouminate_marketplace_postcondition_reads_the_native_listing() -> None:
+    adapter = HallouminateAdapter(FakeRunner(npm_script()))
+    step = hallouminate_steps(FakeRunner(npm_script()))["hallouminate:marketplace:codex"]
+
+    list_argv = ("codex", "plugin", "marketplace", "list")
+    ok = FakeRunner({list_argv: outcome(list_argv, stdout="hallouminate  /home/me/.codex/mk\n")})
+    assert adapter.check_postcondition(step, ok) is True
+    assert ok.argvs() == [list_argv]
+
+    empty = FakeRunner({list_argv: outcome(list_argv, stdout="No marketplaces configured\n")})
+    assert adapter.check_postcondition(step, empty) is False
+
+
+def test_hallouminate_plugin_postcondition_requires_the_plugin_id() -> None:
+    adapter = HallouminateAdapter(FakeRunner(npm_script()))
+    step = hallouminate_steps(FakeRunner(npm_script()))["hallouminate:plugin:claude-code"]
+
+    list_argv = ("claude", "plugin", "list")
+    ok = FakeRunner({list_argv: outcome(list_argv, stdout="hallouminate@hallouminate  enabled\n")})
+    assert adapter.check_postcondition(step, ok) is True
+
+    # `claude plugin list` exits 0 with nothing installed.
+    empty = FakeRunner({list_argv: outcome(list_argv, stdout="No plugins installed\n")})
+    assert adapter.check_postcondition(step, empty) is False
+
+
+def test_hallouminate_config_postcondition_uses_config_validate() -> None:
+    adapter = HallouminateAdapter(FakeRunner(npm_script()))
+    step = hallouminate_steps(FakeRunner(npm_script()))["hallouminate:config-init"]
+
+    validate = ("hallouminate", "config", "validate")
+    assert adapter.check_postcondition(step, FakeRunner({validate: outcome(validate)})) is True
+    assert (
+        adapter.check_postcondition(step, FakeRunner({validate: outcome(validate, exit_code=1)}))
+        is False
+    )
+
+
+def test_hallouminate_repo_postconditions_run_in_the_repository() -> None:
+    adapter = HallouminateAdapter(FakeRunner(npm_script()))
+    repo = Path("/repos/alpha")
+    steps = hallouminate_steps(FakeRunner(npm_script()), (repo,))
+
+    validate = ("hallouminate", "config", "validate")
+    init_ok = FakeRunner({validate: outcome(validate, stdout="corpora: repo:alpha:wiki\n")})
+    assert (
+        adapter.check_postcondition(steps["hallouminate:init-repo:/repos/alpha"], init_ok) is True
+    )
+    assert init_ok.calls == [(validate, repo)]
+
+    # Validate succeeds, but the repository corpus was never declared.
+    init_bad = FakeRunner({validate: outcome(validate, stdout="corpora: repo:other:wiki\n")})
+    assert (
+        adapter.check_postcondition(steps["hallouminate:init-repo:/repos/alpha"], init_bad) is False
+    )
+
+    ground = (
+        "hallouminate",
+        "ground",
+        "repo:alpha:wiki",
+        "--corpus",
+        "repo:alpha:wiki",
+        "--format",
+        "json",
+        "--limit",
+        "1",
+    )
+    index_ok = FakeRunner({ground: outcome(ground, stdout='{"chunks":[{"path":"a.md"}]}')})
+    assert adapter.check_postcondition(steps["hallouminate:index:/repos/alpha"], index_ok) is True
+    assert index_ok.calls == [(ground, repo)]
+
+    # The query exits 0 but the corpus is empty: indexing has not converged.
+    index_empty = FakeRunner({ground: outcome(ground, stdout='{"chunks":[]}')})
+    assert (
+        adapter.check_postcondition(steps["hallouminate:index:/repos/alpha"], index_empty) is False
+    )
+
+
+# --------------------------------------------------------------------------
+# easy-cheese
+# --------------------------------------------------------------------------
+
+
+def test_easy_cheese_plans_one_gh_skill_install_per_harness() -> None:
+    runner = FakeRunner()
+    steps = EasyCheeseAdapter(runner).plan_steps(state())
+
+    assert [s.step_id for s in steps] == [
+        "easy-cheese:install:claude-code",
+        "easy-cheese:install:codex",
+        "easy-cheese:install:cursor",
+    ]
+    assert steps[2].argv == (
+        "gh",
+        "skill",
+        "install",
+        "paulnsorensen/easy-cheese",
+        "--all",
+        "--agent",
+        "cursor",
+        "--scope",
+        "user",
+    )
+    assert steps[2].phase is Phase.REGISTER
+    assert steps[2].depends_on == ()
+    assert runner.argvs() == []
+
+
+LIST_ARGV = (
+    "gh",
+    "skill",
+    "list",
+    "--agent",
+    "claude-code",
+    "--scope",
+    "user",
+    "--json",
+    "agentHosts,scope,skillName,sourceURL",
+)
+
+
+def gh_list(entries: list[dict[str, object]], *, exit_code: int = 0) -> FakeRunner:
+    return FakeRunner(
+        {LIST_ARGV: outcome(LIST_ARGV, exit_code=exit_code, stdout=json.dumps(entries))}
+    )
+
+
+def easy_cheese_step() -> PlanStep:
+    return steps_by_id(EasyCheeseAdapter(FakeRunner()).plan_steps(state()))[
+        "easy-cheese:install:claude-code"
+    ]
+
+
+def test_easy_cheese_postcondition_confirms_source_agent_scope_and_skills() -> None:
+    adapter = EasyCheeseAdapter(FakeRunner())
+    runner = gh_list(
+        [
+            {
+                "agentHosts": ["claude-code"],
+                "scope": "user",
+                "skillName": "cook",
+                "sourceURL": "https://github.com/paulnsorensen/easy-cheese",
+            }
+        ]
+    )
+    assert adapter.check_postcondition(easy_cheese_step(), runner) is True
+    assert runner.argvs() == [LIST_ARGV]
+
+
+@pytest.mark.parametrize(
+    "entry",
+    [
+        pytest.param(
+            {
+                "agentHosts": ["claude-code"],
+                "scope": "project",
+                "skillName": "cook",
+                "sourceURL": "https://github.com/paulnsorensen/easy-cheese",
+            },
+            id="wrong-scope",
+        ),
+        pytest.param(
+            {
+                "agentHosts": ["codex"],
+                "scope": "user",
+                "skillName": "cook",
+                "sourceURL": "https://github.com/paulnsorensen/easy-cheese",
+            },
+            id="wrong-agent",
+        ),
+        pytest.param(
+            {
+                "agentHosts": ["claude-code"],
+                "scope": "user",
+                "skillName": "cook",
+                "sourceURL": "https://github.com/someone/other-skills",
+            },
+            id="wrong-source",
+        ),
+        pytest.param(
+            {
+                "agentHosts": ["claude-code"],
+                "scope": "user",
+                "skillName": "",
+                "sourceURL": "https://github.com/paulnsorensen/easy-cheese",
+            },
+            id="no-skill-installed",
+        ),
+    ],
+)
+def test_easy_cheese_postcondition_rejects_wrong_end_state(entry: dict[str, object]) -> None:
+    # `gh skill list` exits 0 in every one of these cases: only the parsed
+    # end state distinguishes them.
+    assert (
+        EasyCheeseAdapter(FakeRunner()).check_postcondition(easy_cheese_step(), gh_list([entry]))
+        is False
+    )
+
+
+def test_easy_cheese_postcondition_false_on_empty_listing_and_bad_json() -> None:
+    adapter = EasyCheeseAdapter(FakeRunner())
+    assert adapter.check_postcondition(easy_cheese_step(), gh_list([])) is False
+
+    garbage = FakeRunner({LIST_ARGV: outcome(LIST_ARGV, stdout="not json")})
+    assert adapter.check_postcondition(easy_cheese_step(), garbage) is False
+
+    failed = gh_list([], exit_code=1)
+    assert adapter.check_postcondition(easy_cheese_step(), failed) is False
+
+
+def test_easy_cheese_accepts_bare_owner_repo_source() -> None:
+    runner = gh_list(
+        [
+            {
+                "agentHosts": ["claude-code", "cursor"],
+                "scope": "user",
+                "skillName": "age",
+                "sourceURL": "paulnsorensen/easy-cheese.git",
+            }
+        ]
+    )
+    assert EasyCheeseAdapter(FakeRunner()).check_postcondition(easy_cheese_step(), runner) is True
+
+
+# --------------------------------------------------------------------------
+# Tilth
+# --------------------------------------------------------------------------
+
+
+def test_tilth_plans_versioned_npx_install_per_harness() -> None:
+    runner = FakeRunner(npm_script())
+    steps = TilthAdapter(runner).plan_steps(state())
+
+    assert [s.step_id for s in steps] == [
+        "tilth:register:claude-code",
+        "tilth:register:codex",
+        "tilth:register:cursor",
+    ]
+    assert steps[0].argv == (
+        "npx",
+        "--yes",
+        f"tilth@{TILTH_VERSION}",
+        "install",
+        "claude-code",
+        "--edit",
+    )
+    assert steps[2].argv == (
+        "npx",
+        "--yes",
+        f"tilth@{TILTH_VERSION}",
+        "install",
+        "cursor",
+        "--edit",
+    )
+    assert steps[2].phase is Phase.REGISTER
+
+
+def test_tilth_resolves_npm_view_once_per_run() -> None:
+    runner = FakeRunner(npm_script())
+    adapter = TilthAdapter(runner)
+    adapter.plan_steps(state())
+    adapter.plan_steps(state())
+
+    assert runner.argvs().count(NPM_VIEW_TILTH) == 1
+
+
+def test_tilth_plans_nothing_when_component_not_selected() -> None:
+    runner = FakeRunner(npm_script())
+    assert TilthAdapter(runner).plan_steps(state(components=("hallouminate", "easy-cheese"))) == ()
+    assert runner.argvs() == []
+
+
+def tilth_step(harness: str) -> PlanStep:
+    return steps_by_id(TilthAdapter(FakeRunner(npm_script())).plan_steps(state()))[
+        f"tilth:register:{harness}"
+    ]
+
+
+EDIT_ENTRY = {"command": "npx", "args": ["tilth", "--mcp", "--edit"], "env": {}}
+NO_EDIT_ENTRY = {"command": "npx", "args": ["tilth", "--mcp"], "env": {}}
+
+
+def test_tilth_postcondition_reads_claude_code_and_cursor_json_configs(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path))
+    adapter = TilthAdapter(FakeRunner(npm_script()))
+    runner = FakeRunner()
+
+    (tmp_path / ".claude.json").write_text(json.dumps({"mcpServers": {"tilth": EDIT_ENTRY}}))
+    (tmp_path / ".cursor").mkdir()
+    (tmp_path / ".cursor/mcp.json").write_text(json.dumps({"mcpServers": {"tilth": EDIT_ENTRY}}))
+
+    assert adapter.check_postcondition(tilth_step("claude-code"), runner) is True
+    assert adapter.check_postcondition(tilth_step("cursor"), runner) is True
+    assert runner.argvs() == []
+
+
+def test_tilth_postcondition_reads_the_codex_toml_config(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path))
+    (tmp_path / ".codex").mkdir()
+    (tmp_path / ".codex/config.toml").write_text(
+        'model = "gpt-5"\n\n[mcp_servers.tilth]\n'
+        'command = "npx"\nargs = ["tilth", "--mcp", "--edit"]\n'
+    )
+
+    adapter = TilthAdapter(FakeRunner(npm_script()))
+    assert adapter.check_postcondition(tilth_step("codex"), FakeRunner()) is True
+
+
+def test_tilth_postcondition_false_when_edit_mode_missing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path))
+    (tmp_path / ".claude.json").write_text(json.dumps({"mcpServers": {"tilth": NO_EDIT_ENTRY}}))
+
+    adapter = TilthAdapter(FakeRunner(npm_script()))
+    assert adapter.check_postcondition(tilth_step("claude-code"), FakeRunner()) is False
+
+
+def test_tilth_postcondition_false_when_config_absent_or_unrelated(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path))
+    adapter = TilthAdapter(FakeRunner(npm_script()))
+
+    assert adapter.check_postcondition(tilth_step("claude-code"), FakeRunner()) is False
+
+    (tmp_path / ".claude.json").write_text(json.dumps({"mcpServers": {"other": EDIT_ENTRY}}))
+    assert adapter.check_postcondition(tilth_step("claude-code"), FakeRunner()) is False
+
+    (tmp_path / ".claude.json").write_text("{not json")
+    assert adapter.check_postcondition(tilth_step("claude-code"), FakeRunner()) is False
+
+
+# --------------------------------------------------------------------------
+# Cross-adapter invariants
+# --------------------------------------------------------------------------
+
+
+def all_planned_steps() -> tuple[PlanStep, ...]:
+    runner = FakeRunner(npm_script())
+    adapters = default_component_adapters(runner)
+    desired = state(selected=(Path("/repos/alpha"),))
+    return tuple(step for adapter in adapters.values() for step in adapter.plan_steps(desired))
+
+
+def test_default_component_adapters_cover_every_component() -> None:
+    adapters = default_component_adapters(FakeRunner(npm_script()))
+    assert set(adapters) == {"hallouminate", "easy-cheese", "tilth"}
+    assert all(name == adapter.name for name, adapter in adapters.items())
+
+
+def test_no_planned_argv_passes_force() -> None:
+    for step in all_planned_steps():
+        assert "--force" not in step.argv, step.step_id
+        assert "-f" not in step.argv, step.step_id
+
+
+def test_planned_step_ids_are_unique_and_dependencies_resolve_in_order() -> None:
+    steps = all_planned_steps()
+    ids = [step.step_id for step in steps]
+    assert len(ids) == len(set(ids))
+
+    seen: set[str] = set()
+    for step in steps:
+        assert set(step.depends_on) <= seen, step.step_id
+        seen.add(step.step_id)
+
+
+def test_planning_is_deterministic() -> None:
+    assert [s.model_dump() for s in all_planned_steps()] == [
+        s.model_dump() for s in all_planned_steps()
+    ]
