@@ -122,7 +122,10 @@ def test_treats_dot_cheese_no_trailing_slash_as_distinct(tmp_path: Path) -> None
     assert lines == [".cheese", ".cheese/"]
 
 
-# ─── hooks/cheese-bootstrap.sh — CLI handoff (R5) ────────────────────────────
+# ─── hooks/cheese-bootstrap.sh — no CLI handoff ──────────────────────────────
+#
+# The hook bootstraps the workspace only. ``cheese session-start`` was deleted
+# with the v0 surface, so the hook must invoke no ``cheese`` command at all.
 
 
 def test_exits_zero_when_cheese_is_not_on_path(tmp_path: Path) -> None:
@@ -136,29 +139,8 @@ def test_exits_zero_when_cheese_is_not_on_path(tmp_path: Path) -> None:
     assert (cwd / ".cheese").is_dir()
 
 
-def test_invokes_session_start_when_present_and_continues_on_nonzero_exit(
-    tmp_path: Path,
-) -> None:
-    cwd = tmp_path / "shim-7"
-    cwd.mkdir()
-    call_log = cwd / "cheese-call.log"
-    shim_dir = _make_shim_dir(
-        tmp_path,
-        f"#!/usr/bin/env bash\nprintf '%s\\n' \"$@\" > {call_log!s}\nexit 7\n",
-    )
-    new_path = f"{shim_dir}:{os.environ.get('PATH', '')}"
-
-    result = _run(cwd, new_path)
-    assert result.returncode == 0, f"stderr: {result.stderr}"
-
-    recorded = call_log.read_text(encoding="utf-8")
-    assert "session-start" in recorded
-    assert "--quiet" in recorded
-    assert "--max-time" in recorded
-
-
-def test_invokes_session_start_with_root_pointing_at_worktree(tmp_path: Path) -> None:
-    cwd = tmp_path / "shim-0"
+def test_never_invokes_the_cheese_cli(tmp_path: Path) -> None:
+    cwd = tmp_path / "shim"
     cwd.mkdir()
     call_log = cwd / "cheese-call.log"
     shim_dir = _make_shim_dir(
@@ -170,7 +152,11 @@ def test_invokes_session_start_with_root_pointing_at_worktree(tmp_path: Path) ->
     result = _run(cwd, new_path)
     assert result.returncode == 0, f"stderr: {result.stderr}"
 
-    recorded = call_log.read_text(encoding="utf-8")
-    assert "--root" in recorded
-    real_cwd = str(cwd.resolve())
-    assert str(cwd) in recorded or real_cwd in recorded
+    assert not call_log.exists(), f"hook called cheese: {call_log.read_text(encoding='utf-8')}"
+    assert (cwd / ".cheese").is_dir()
+
+
+def test_script_references_no_purged_cheese_command() -> None:
+    source = SCRIPT_PATH.read_text(encoding="utf-8")
+    assert "session-start" not in source
+    assert "cheese " not in source
