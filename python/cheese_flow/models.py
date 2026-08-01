@@ -15,7 +15,14 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Any, Literal, Protocol
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    field_serializer,
+    field_validator,
+    model_validator,
+)
 
 HarnessName = Literal["claude-code", "codex", "cursor"]
 """Harnesses supported in v1. Pi and OMP are deferred."""
@@ -123,6 +130,58 @@ def is_under_any_root(path: Path, search_roots: Sequence[Path]) -> bool:
     return any(canonical.is_relative_to(canonicalize(root)) for root in search_roots)
 
 
+REDACTED = "***"
+"""Marker written in place of a secret-looking argv token or config value."""
+
+_SECRET_NAME_HINTS = ("token", "secret", "password", "passwd", "api_key", "apikey", "credential")
+
+
+def _is_secret_name(name: str) -> bool:
+    normalized = name.lstrip("-").lower().replace("-", "_")
+    return any(hint in normalized for hint in _SECRET_NAME_HINTS)
+
+
+def scan_argv(argv: Sequence[str]) -> tuple[tuple[str, ...], tuple[str, ...]]:
+    """Redact secret-looking argv tokens, returning the redacted argv and the secrets found."""
+    redacted: list[str] = []
+    secrets: list[str] = []
+    expect_value = False
+    for token in argv:
+        if expect_value:
+            redacted.append(REDACTED)
+            secrets.append(token)
+            expect_value = False
+            continue
+        name, separator, value = token.partition("=")
+        if separator and _is_secret_name(name):
+            redacted.append(f"{name}={REDACTED}")
+            secrets.append(value)
+            continue
+        redacted.append(token)
+        expect_value = token.startswith("-") and _is_secret_name(token)
+    return tuple(redacted), tuple(secret for secret in secrets if secret)
+
+
+def redact_argv(argv: Sequence[str]) -> tuple[str, ...]:
+    """Replace secret-looking argv values with a redaction marker."""
+    return scan_argv(argv)[0]
+
+
+def _redact_config_value(value: dict[str, Any]) -> dict[str, Any]:
+    return {
+        key: (REDACTED if _is_secret_name(key) else _redact_nested(item))
+        for key, item in value.items()
+    }
+
+
+def _redact_nested(item: Any) -> Any:
+    if isinstance(item, dict):
+        return _redact_config_value(item)
+    if isinstance(item, list):
+        return [_redact_nested(sub) for sub in item]
+    return item
+
+
 def _require_unique(
     values: Sequence[object], label: str, *, display: Sequence[object] | None = None
 ) -> None:
@@ -154,7 +213,7 @@ class RepositorySelection(_Frozen):
     """
 
     search_roots: tuple[Path, ...] = ()
-    max_depth: int = DEFAULT_MAX_DEPTH
+    max_depth: int = Field(default=DEFAULT_MAX_DEPTH, ge=0)
     selected: tuple[Path, ...] = ()
 
     @field_validator("search_roots", "selected")
@@ -164,13 +223,6 @@ class RepositorySelection(_Frozen):
         canonical = tuple(canonicalize(path) for path in value)
         _require_unique(canonical, info.field_name, display=value)
         return canonical
-
-    @field_validator("max_depth")
-    @classmethod
-    def _non_negative_depth(cls, value: int) -> int:
-        if value < 0:
-            raise ValueError("max_depth must be >= 0")
-        return value
 
     @model_validator(mode="after")
     def _selection_under_a_search_root(self) -> RepositorySelection:
@@ -252,6 +304,10 @@ class ConfigEdit(_Frozen):
     value: dict[str, Any]
     """The object that must sit at ``pointer``."""
 
+    @field_serializer("value")
+    def _serialize_value(self, value: dict[str, Any]) -> dict[str, Any]:
+        return _redact_config_value(value)
+
     @field_validator("target")
     @classmethod
     def _absolute_target(cls, value: Path) -> Path:
@@ -288,6 +344,10 @@ class PlanStep(_Frozen):
     config_edit: ConfigEdit | None = None
     postcondition: str
     depends_on: tuple[str, ...] = ()
+
+    @field_serializer("argv")
+    def _serialize_argv(self, value: tuple[str, ...]) -> tuple[str, ...]:
+        return redact_argv(value)
 
     @field_validator("step_id", "postcondition")
     @classmethod
@@ -364,34 +424,27 @@ class StepResult(_Frozen):
     remediation: str | None = None
 
 
-class ApplyReport(_Frozen):
+class _PlanReport(_Frozen):
+    """Shared fields for the plan-execution reports (install and doctor)."""
+
+    status: ReportStatus
+    manifest: DesiredState
+    plan: InstallPlan
+    results: tuple[StepResult, ...] = ()
+
+    @model_validator(mode="after")
+    def _manifest_matches_plan(self) -> _PlanReport:
+        if self.manifest != self.plan.manifest:
+            raise ValueError("manifest must match the manifest the plan was built from")
+        return self
+
+
+class ApplyReport(_PlanReport):
     """Final document emitted by ``cheese install`` (including ``--dry-run``)."""
 
-    status: ReportStatus
-    manifest: DesiredState
-    plan: InstallPlan
-    results: tuple[StepResult, ...] = ()
 
-    @model_validator(mode="after")
-    def _manifest_matches_plan(self) -> ApplyReport:
-        if self.manifest != self.plan.manifest:
-            raise ValueError("manifest must match the manifest the plan was built from")
-        return self
-
-
-class DoctorReport(_Frozen):
+class DoctorReport(_PlanReport):
     """Final document emitted by ``cheese doctor``."""
-
-    status: ReportStatus
-    manifest: DesiredState
-    plan: InstallPlan
-    results: tuple[StepResult, ...] = ()
-
-    @model_validator(mode="after")
-    def _manifest_matches_plan(self) -> DoctorReport:
-        if self.manifest != self.plan.manifest:
-            raise ValueError("manifest must match the manifest the plan was built from")
-        return self
 
 
 class CommandOutcome(_Frozen):

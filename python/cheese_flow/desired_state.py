@@ -10,15 +10,7 @@ from typing import Any
 
 from pydantic import ValidationError
 
-from cheese_flow.models import (
-    COMPONENT_NAMES,
-    HARNESS_NAMES,
-    DesiredState,
-    RepositorySelection,
-)
-
-_TOP_LEVEL_KEYS = ("harnesses", "components", "repositories")
-_REPOSITORY_KEYS = ("search_roots", "max_depth", "selected")
+from cheese_flow.models import COMPONENT_NAMES, HARNESS_NAMES, DesiredState
 
 
 class ManifestError(Exception):
@@ -43,14 +35,8 @@ def load_desired_state(path: Path) -> DesiredState:
     components, and selections outside the search roots are validation errors.
     """
     document = _read_document(path)
-    _reject_unknown_keys(path, document.keys(), _TOP_LEVEL_KEYS, "top-level keys")
-
-    harnesses = _string_list(path, document, "harnesses")
-    components = _string_list(path, document, "components")
-    _reject_unknown_names(path, harnesses, HARNESS_NAMES, "harness names")
-    _reject_unknown_names(path, components, COMPONENT_NAMES, "component names")
-
-    return _build_state(path, harnesses, components, _repositories(path, document))
+    _reject_non_integer_max_depth(path, document)
+    return _build_state(path, document)
 
 
 def save_desired_state(state: DesiredState, path: Path) -> None:
@@ -84,73 +70,83 @@ def _read_document(path: Path) -> dict[str, Any]:
         raise ManifestError(path, f"invalid TOML: {error}") from error
 
 
-def _reject_unknown_keys(path: Path, keys: Any, allowed: tuple[str, ...], label: str) -> None:
-    unknown = [key for key in keys if key not in allowed]
-    if unknown:
-        raise ManifestError(path, f"unknown {label}: {', '.join(sorted(unknown))}")
+def _reject_non_integer_max_depth(path: Path, document: dict[str, Any]) -> None:
+    """Reject ``max_depth`` bool/str values pydantic's lax mode would silently coerce."""
+    repositories = document.get("repositories")
+    if not isinstance(repositories, dict) or "max_depth" not in repositories:
+        return
+    max_depth = repositories["max_depth"]
+    if not isinstance(max_depth, int) or isinstance(max_depth, bool):
+        raise ManifestError(path, "max_depth must be an integer")
 
 
-def _reject_unknown_names(
-    path: Path, values: list[str], allowed: tuple[str, ...], label: str
-) -> None:
-    unknown = [value for value in values if value not in allowed]
-    if unknown:
-        raise ManifestError(
-            path,
-            f"unknown {label}: {', '.join(unknown)} (supported: {', '.join(allowed)})",
-        )
-
-
-def _string_list(
-    path: Path, table: dict[str, Any], key: str, *, required: bool = True
-) -> list[str]:
-    if key not in table:
-        if required:
-            raise ManifestError(path, f"missing required key: {key}")
-        return []
-    value = table[key]
-    if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
-        raise ManifestError(path, f"{key} must be an array of strings")
-    return value
-
-
-def _repositories(path: Path, document: dict[str, Any]) -> dict[str, Any]:
-    table = document.get("repositories", {})
-    if not isinstance(table, dict):
-        raise ManifestError(path, "repositories must be a table")
-    _reject_unknown_keys(path, table.keys(), _REPOSITORY_KEYS, "keys in [repositories]")
-
-    fields: dict[str, Any] = {
-        "search_roots": tuple(
-            Path(item) for item in _string_list(path, table, "search_roots", required=False)
-        ),
-        "selected": tuple(
-            Path(item) for item in _string_list(path, table, "selected", required=False)
-        ),
-    }
-    if "max_depth" in table:
-        max_depth = table["max_depth"]
-        if not isinstance(max_depth, int) or isinstance(max_depth, bool):
-            raise ManifestError(path, "max_depth must be an integer")
-        fields["max_depth"] = max_depth
-    return fields
-
-
-def _build_state(
-    path: Path, harnesses: list[str], components: list[str], repositories: dict[str, Any]
-) -> DesiredState:
+def _build_state(path: Path, document: dict[str, Any]) -> DesiredState:
     try:
-        return DesiredState(
-            harnesses=tuple(harnesses),
-            components=tuple(components),
-            repositories=RepositorySelection(**repositories),
-        )
+        return DesiredState(**document)
     except ValidationError as error:
         raise ManifestError(path, _describe(error)) from error
 
 
 def _describe(error: ValidationError) -> str:
-    return "; ".join(detail["msg"].removeprefix("Value error, ") for detail in error.errors())
+    errors = error.errors()
+    parts: list[str] = []
+    reported: set[str] = set()
+
+    def add(key: str, message: str) -> None:
+        if key not in reported:
+            reported.add(key)
+            parts.append(message)
+
+    for detail in errors:
+        loc = detail["loc"]
+        kind = detail["type"]
+
+        if kind == "extra_forbidden" and len(loc) == 1:
+            keys = sorted(
+                str(d["loc"][0])
+                for d in errors
+                if d["type"] == "extra_forbidden" and len(d["loc"]) == 1
+            )
+            add("top_level_extra", f"unknown top-level keys: {', '.join(keys)}")
+        elif kind == "extra_forbidden" and len(loc) == 2 and loc[0] == "repositories":
+            keys = sorted(
+                str(d["loc"][1])
+                for d in errors
+                if d["type"] == "extra_forbidden"
+                and len(d["loc"]) == 2
+                and d["loc"][0] == "repositories"
+            )
+            add("repositories_extra", f"unknown keys in [repositories]: {', '.join(keys)}")
+        elif kind == "literal_error" and loc and loc[0] in ("harnesses", "components"):
+            field = loc[0]
+            bad = [
+                str(d["input"])
+                for d in errors
+                if d["type"] == "literal_error" and d["loc"] and d["loc"][0] == field
+            ]
+            allowed = HARNESS_NAMES if field == "harnesses" else COMPONENT_NAMES
+            label = "harness names" if field == "harnesses" else "component names"
+            add(
+                f"literal_{field}",
+                f"unknown {label}: {', '.join(bad)} (supported: {', '.join(allowed)})",
+            )
+        elif kind == "missing" and len(loc) == 1:
+            add(f"missing_{loc[0]}", f"missing required key: {loc[0]}")
+        elif kind == "model_type" and loc == ("repositories",):
+            add("repositories_type", "repositories must be a table")
+        elif kind == "greater_than_equal":
+            field = loc[-1] if loc else ""
+            add(f"ge_{field}", f"{field} must be >= {detail['ctx']['ge']}")
+        elif kind == "tuple_type":
+            field = loc[-1] if loc else ""
+            add(f"array_{field}", f"{field} must be an array of strings")
+        elif kind == "path_type" and len(loc) >= 2:
+            field = loc[-2]
+            add(f"array_{field}", f"{field} must be an array of strings")
+        else:
+            parts.append(detail["msg"].removeprefix("Value error, "))
+
+    return "; ".join(parts)
 
 
 def _render_toml(state: DesiredState) -> str:

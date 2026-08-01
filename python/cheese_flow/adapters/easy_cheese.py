@@ -27,9 +27,7 @@ CORE_SKILLS = frozenset({"mold", "cook", "press", "age", "cure", "plate", "chees
 def _normalize_source(raw: str) -> str:
     """Reduce a ``gh skill list`` sourceURL to its ``owner/repo`` identity."""
     trimmed = raw.strip().removesuffix(".git").rstrip("/")
-    if not trimmed:
-        return ""
-    parts = [part for part in trimmed.split("/") if part]
+    parts = [part for part in trimmed.replace(":", "/").split("/") if part]
     return "/".join(parts[-2:]) if len(parts) >= 2 else ""
 
 

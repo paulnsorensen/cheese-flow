@@ -190,7 +190,7 @@ class FakeWorld:
         if key == ("hallouminate", "config", "validate"):
             return self._validate(key, cwd)
         if key[:2] == ("hallouminate", "init-repo"):
-            self.initialized_repos.add(Path(key[4]))
+            self.initialized_repos.add(Path(key[3]))
             return _ok(key)
         if key[:2] == ("hallouminate", "index"):
             if cwd is not None:

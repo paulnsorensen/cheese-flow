@@ -373,9 +373,15 @@ def test_default_sigint_handling_is_restored_after_apply() -> None:
     assert signal.getsignal(signal.SIGINT) is before
 
 
-def test_secrets_are_redacted_in_argv_and_output_tails() -> None:
+def test_secrets_are_redacted_in_argv_and_output_tails(tmp_path: Path) -> None:
     argv = ("gh", "auth", "login", "--token", "ghp_secret", "GITHUB_TOKEN=ghp_other")
     secretive = step("a", argv=argv)
+    config_secret = ConfigEdit(
+        target=tmp_path / "mcp.json",
+        pointer="mcpServers.x.token",
+        value={"token": "ghp_config_secret"},
+    )
+    edited = step("b", config_edit=config_secret)
     outcome = CommandOutcome(
         argv=argv,
         exit_code=1,
@@ -383,16 +389,41 @@ def test_secrets_are_redacted_in_argv_and_output_tails() -> None:
         stderr="rejected ghp_other",
         elapsed_ms=2,
     )
-    adapter = ScriptedAdapter("hallouminate", (secretive,), {"a": [False, False]})
+    adapter = ScriptedAdapter(
+        "hallouminate", (secretive, edited), {"a": [False, False], "b": [False, True]}
+    )
     runner = FakeRunner({argv: outcome})
 
-    report = apply_install_plan(plan_of(secretive), runner, adapters={"hallouminate": adapter})
+    report = apply_install_plan(
+        plan_of(secretive, edited), runner, adapters={"hallouminate": adapter}
+    )
 
     result = report.results[0]
     assert result.argv == ("gh", "auth", "login", "--token", "***", "GITHUB_TOKEN=***")
     assert result.stdout_tail == "used ***"
     assert result.stderr_tail == "rejected ***"
     assert runner.argvs() == [argv]
+
+    serialized = json.dumps(report.model_dump(mode="json"))
+    assert "ghp_secret" not in serialized
+    assert "ghp_other" not in serialized
+    assert "ghp_config_secret" not in serialized
+
+
+def test_nested_config_secrets_are_redacted(tmp_path: Path) -> None:
+    config_secret = ConfigEdit(
+        target=tmp_path / "mcp.json",
+        pointer="mcpServers.x",
+        value={"env": {"GITHUB_TOKEN": "ghp_nested_secret"}},
+    )
+    edited = step("a", config_edit=config_secret)
+    adapter = ScriptedAdapter("hallouminate", (edited,), {"a": [False, True]})
+    runner = FakeRunner()
+
+    report = apply_install_plan(plan_of(edited), runner, adapters={"hallouminate": adapter})
+
+    serialized = json.dumps(report.model_dump(mode="json"))
+    assert "ghp_nested_secret" not in serialized
 
 
 def test_output_tails_are_bounded() -> None:

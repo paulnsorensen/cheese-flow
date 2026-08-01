@@ -87,10 +87,9 @@ class SubprocessRunner:
         try:
             stdout, stderr = process.communicate(timeout=self._timeout)
             exit_code = process.returncode
-        except subprocess.TimeoutExpired as expired:
+        except subprocess.TimeoutExpired:
             # A wedged `npm install -g` or `hallouminate index` must not stall
             # the whole run: kill it and report the timeout as its outcome.
-            drained_out, drained_err = _partial(expired)
             _kill_group(process)
             try:
                 stdout, stderr = process.communicate(timeout=_KILL_GRACE_SECONDS)
@@ -98,8 +97,8 @@ class SubprocessRunner:
                 # Whatever the child managed to say is the only evidence of why
                 # it wedged, so keep it rather than reporting an empty capture.
                 second_out, second_err = _partial(abandoned)
-                stdout = second_out or drained_out
-                stderr = second_err or drained_err
+                stdout = second_out
+                stderr = second_err
             exit_code = TIMEOUT_EXIT_CODE
             note = f"{command[0]} timed out after {self._timeout}s and was killed"
             stderr = f"{stderr}\n{note}" if stderr else note
@@ -150,12 +149,11 @@ def _partial(expired: subprocess.TimeoutExpired) -> tuple[str, str]:
     return _decode(expired.stdout), _decode(expired.stderr)
 
 
-def _decode(value: object) -> str:
+def _decode(value: bytes | None) -> str:
     if value is None:
         return ""
     if isinstance(value, bytes | bytearray):
         return bytes(value).decode("utf-8", "replace")
-    return str(value)
 
 
 def _reap(process: subprocess.Popen[str]) -> None:

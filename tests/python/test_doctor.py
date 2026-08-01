@@ -66,10 +66,15 @@ def test_doctor_checks_every_step_even_after_a_failure() -> None:
     assert report.results[0].remediation == "postcondition not satisfied: a holds"
 
 
-def test_doctor_redacts_secrets_in_reported_argv() -> None:
+def test_doctor_redacts_secrets_in_reported_argv(tmp_path: Path) -> None:
     argv = ("gh", "auth", "status", "--token", "ghp_secret")
-    steps = (step("a", argv=argv),)
-    adapter = ScriptedAdapter("hallouminate", steps, {"a": [True]})
+    config_secret = ConfigEdit(
+        target=tmp_path / "mcp.json",
+        pointer="mcpServers.x.token",
+        value={"token": "ghp_config_secret"},
+    )
+    steps = (step("a", argv=argv), step("b", config_edit=config_secret))
+    adapter = ScriptedAdapter("hallouminate", steps, {"a": [True], "b": [False]})
     easy = ScriptedAdapter("easy-cheese", ())
 
     report = verify_desired_state(
@@ -77,6 +82,10 @@ def test_doctor_redacts_secrets_in_reported_argv() -> None:
     )
 
     assert report.results[0].argv == ("gh", "auth", "status", "--token", "***")
+
+    serialized = json.dumps(report.model_dump(mode="json"))
+    assert "ghp_secret" not in serialized
+    assert "ghp_config_secret" not in serialized
 
 
 def test_doctor_never_applies_a_config_edit(tmp_path: Path) -> None:

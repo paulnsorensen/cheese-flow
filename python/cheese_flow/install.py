@@ -16,6 +16,7 @@ from typing import Any
 
 from cheese_flow.models import (
     COMPONENT_NAMES,
+    REDACTED,
     ApplyReport,
     CollisionClass,
     CommandOutcome,
@@ -32,16 +33,13 @@ from cheese_flow.models import (
     StepResult,
     StepStatus,
     canonicalize,
+    scan_argv,
 )
 from cheese_flow.repositories import discover_repositories
 from cheese_flow.runner import SignalForwardingRunner
 
 TAIL_LIMIT = 2000
 """Maximum number of characters kept from a command's stdout or stderr."""
-
-REDACTED = "***"
-
-_SECRET_NAME_HINTS = ("token", "secret", "password", "passwd", "api_key", "apikey", "credential")
 
 
 def build_install_plan(state: DesiredState, adapters: ComponentAdapters) -> InstallPlan:
@@ -86,7 +84,7 @@ def apply_install_plan(
             blocked = _blocking_reason(step, unmet, repositories)
             if blocked is not None:
                 unmet.add(step.step_id)
-                results.append(_result(step, StepStatus.BLOCKED, remediation=blocked))
+                results.append(step_result(step, StepStatus.BLOCKED, remediation=blocked))
                 continue
             result = _perform(step, adapters, runner, interruption)
             if result.status is not StepStatus.SKIPPED:
@@ -119,11 +117,6 @@ def report_status(results: Sequence[StepResult]) -> ReportStatus:
     if seen & {StepStatus.FAILED, StepStatus.BLOCKED}:
         return ReportStatus.FAILED
     return ReportStatus.SUCCEEDED
-
-
-def redact_argv(argv: Sequence[str]) -> tuple[str, ...]:
-    """Replace secret-looking argv values with a redaction marker."""
-    return _scan_argv(argv)[0]
 
 
 def apply_config_edit(edit: ConfigEdit) -> None:
@@ -205,7 +198,7 @@ def _perform(
     adapter = adapter_for(step, adapters)
     started = time.monotonic()
     if adapter.check_postcondition(step, runner):
-        return _result(step, StepStatus.SKIPPED, elapsed_ms=_elapsed_ms(started))
+        return step_result(step, StepStatus.SKIPPED, elapsed_ms=elapsed_ms(started))
 
     outcome: CommandOutcome | None = None
     failure: str | None = None
@@ -229,21 +222,23 @@ def _perform(
     if status is StepStatus.FAILED:
         unsatisfied = f"postcondition still unsatisfied: {step.postcondition}"
         remediation = f"{failure}; {unsatisfied}" if failure else unsatisfied
-    return _result(
+    return step_result(
         step,
         status,
         outcome=outcome,
-        elapsed_ms=_elapsed_ms(started),
+        elapsed_ms=elapsed_ms(started),
         remediation=remediation,
         failure=failure,
     )
 
 
 def _not_started(step: PlanStep) -> StepResult:
-    return _result(step, StepStatus.INTERRUPTED, remediation="not started: the run was interrupted")
+    return step_result(
+        step, StepStatus.INTERRUPTED, remediation="not started: the run was interrupted"
+    )
 
 
-def _result(
+def step_result(
     step: PlanStep,
     status: StepStatus,
     *,
@@ -252,7 +247,7 @@ def _result(
     remediation: str | None = None,
     failure: str | None = None,
 ) -> StepResult:
-    argv, secrets = _scan_argv(step.argv)
+    argv, secrets = scan_argv(step.argv)
     stderr = None if outcome is None else outcome.stderr
     if failure is not None:
         stderr = f"{stderr}\n{failure}" if stderr else failure
@@ -339,31 +334,6 @@ def _drift_reason(candidate: RepositoryCandidate | None, repository: Path) -> st
     return None
 
 
-def _scan_argv(argv: Sequence[str]) -> tuple[tuple[str, ...], tuple[str, ...]]:
-    redacted: list[str] = []
-    secrets: list[str] = []
-    expect_value = False
-    for token in argv:
-        if expect_value:
-            redacted.append(REDACTED)
-            secrets.append(token)
-            expect_value = False
-            continue
-        name, separator, value = token.partition("=")
-        if separator and _is_secret_name(name):
-            redacted.append(f"{name}={REDACTED}")
-            secrets.append(value)
-            continue
-        redacted.append(token)
-        expect_value = token.startswith("-") and _is_secret_name(token)
-    return tuple(redacted), tuple(secret for secret in secrets if secret)
-
-
-def _is_secret_name(name: str) -> bool:
-    normalized = name.lstrip("-").lower().replace("-", "_")
-    return any(hint in normalized for hint in _SECRET_NAME_HINTS)
-
-
 def _tail(text: str, secrets: Sequence[str]) -> str | None:
     if not text:
         return None
@@ -402,5 +372,5 @@ def _write_atomically(target: Path, text: str) -> None:
         raise
 
 
-def _elapsed_ms(started: float) -> int:
+def elapsed_ms(started: float) -> int:
     return max(0, int((time.monotonic() - started) * 1000))

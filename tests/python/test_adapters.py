@@ -14,7 +14,8 @@ from cheese_flow.adapters import (
     TilthAdapter,
     default_component_adapters,
 )
-from cheese_flow.adapters.easy_cheese import CORE_SKILLS
+from cheese_flow.adapters.easy_cheese import CORE_SKILLS, _normalize_source
+from cheese_flow.adapters.hallouminate import _owner_repo
 from cheese_flow.models import (
     CommandOutcome,
     ConfigEdit,
@@ -190,7 +191,14 @@ def test_hallouminate_emits_independent_steps_per_selected_repository() -> None:
     steps = steps_by_id(HallouminateAdapter(runner).plan_steps(state(selected=repos)))
 
     init = steps["hallouminate:init-repo:/repos/alpha"]
-    assert init.argv == ("hallouminate", "init-repo", "alpha", "--path", "/repos/alpha")
+    assert init.argv == (
+        "hallouminate",
+        "init-repo",
+        "--path",
+        "/repos/alpha",
+        "--",
+        "alpha",
+    )
     assert init.phase is Phase.INITIALIZE
     assert init.repository == Path("/repos/alpha")
     assert init.depends_on == ("hallouminate:config-init",)
@@ -204,6 +212,17 @@ def test_hallouminate_emits_independent_steps_per_selected_repository() -> None:
         "--strict",
     )
     assert index.depends_on == ("hallouminate:init-repo:/repos/beta",)
+
+
+def test_hallouminate_init_repo_argv_isolates_a_dash_prefixed_repository_name() -> None:
+    # H4: a bare positional ahead of flags lets a directory literally named
+    # `--corpus` be parsed as an option by the child CLI.
+    runner = FakeRunner(npm_script())
+    repo = Path("/repos/--corpus")
+    steps = steps_by_id(HallouminateAdapter(runner).plan_steps(state(selected=(repo,))))
+
+    argv = steps[f"hallouminate:init-repo:{repo.as_posix()}"].argv
+    assert argv == ("hallouminate", "init-repo", "--path", "/repos/--corpus", "--", "--corpus")
 
 
 def test_hallouminate_emits_no_repository_steps_when_selection_is_empty() -> None:
@@ -386,6 +405,14 @@ def test_hallouminate_marketplace_postcondition_names_the_json_listing() -> None
     assert steps["hallouminate:marketplace:codex"].postcondition == (
         "`codex plugin marketplace list --json` reports paulnsorensen/hallouminate"
     )
+
+
+def test_owner_repo_normalizes_scp_https_and_git_suffix_forms() -> None:
+    # H2: SCP-style remotes split only on ":", so the marketplace postcondition
+    # can never converge for a repo cloned via `git@github.com:owner/repo.git`.
+    assert _owner_repo("git@github.com:owner/repo.git") == "owner/repo"
+    assert _owner_repo("https://github.com/owner/repo.git") == "owner/repo"
+    assert _owner_repo("https://github.com/owner/repo") == "owner/repo"
 
 
 # Verbatim `claude plugin list --json` rows. Every plugin on a real machine
@@ -669,6 +696,27 @@ def test_hallouminate_repo_postconditions_run_in_the_repository() -> None:
     )
 
 
+def test_hallouminate_corpus_query_postcondition_parses_json_instead_of_a_raw_substring() -> None:
+    # A zero-exit envelope can mention "path" while reporting no results.
+    adapter = HallouminateAdapter(FakeRunner(npm_script()))
+    repo = Path("/repos/alpha")
+    steps = hallouminate_steps(FakeRunner(npm_script()), (repo,))
+
+    ground = (
+        "hallouminate",
+        "ground",
+        "repo:alpha:wiki",
+        "--corpus",
+        "repo:alpha:wiki",
+        "--format",
+        "json",
+        "--limit",
+        "1",
+    )
+    degraded = FakeRunner({ground: outcome(ground, stdout='{"chunks": [], "path": null}')})
+    assert adapter.check_postcondition(steps["hallouminate:index:/repos/alpha"], degraded) is False
+
+
 def test_hallouminate_repo_postcondition_reads_an_ascii_rendered_listing() -> None:
     # M-A3: `→` is what the CLI emits today, but a non-UTF-8 locale or a plain
     # renderer prints `->`. Missing it makes every init-repo step FAILED
@@ -709,6 +757,43 @@ def test_hallouminate_repo_postcondition_rejects_another_repositorys_corpus(
     seeded = validate_output([foreign, ("repo:foo:wiki", f"{selected}/./.hallouminate/wiki")])
     ok = FakeRunner({validate: outcome(validate, stdout=seeded)})
     assert adapter.check_postcondition(step, ok) is True
+
+
+def test_hallouminate_repo_postcondition_resolves_relative_target_against_the_repository(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # H1: a relative target must resolve against the repository the probe ran
+    # in, never the cheese-flow process's own working directory.
+    monkeypatch.chdir(tmp_path)
+    adapter = HallouminateAdapter(FakeRunner(npm_script()))
+    repo = Path("/repos/alpha")
+    steps = hallouminate_steps(FakeRunner(npm_script()), (repo,))
+    step = steps["hallouminate:init-repo:/repos/alpha"]
+
+    validate = ("hallouminate", "config", "validate")
+    listing = validate_output([("repo:alpha:wiki", "./.hallouminate/wiki")])
+    runner = FakeRunner({validate: outcome(validate, stdout=listing)})
+    assert adapter.check_postcondition(step, runner) is True
+
+
+def test_hallouminate_repo_postcondition_rejects_an_empty_target_from_inside_the_repository(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # H1: `_resolved("")` used to build `PosixPath('.')`, resolving to the
+    # cheese-flow process's own CWD rather than the repository. When cheese
+    # install runs from inside the selected repository, that false resolution
+    # falsely satisfied `is_relative_to`.
+    repo = tmp_path / "work" / "alpha"
+    repo.mkdir(parents=True)
+    monkeypatch.chdir(repo)
+    adapter = HallouminateAdapter(FakeRunner(npm_script()))
+    steps = hallouminate_steps(FakeRunner(npm_script()), (repo,), (tmp_path / "work",))
+    step = steps[f"hallouminate:init-repo:{repo.as_posix()}"]
+
+    validate = ("hallouminate", "config", "validate")
+    listing = validate_output([("repo:alpha:wiki", "")])
+    runner = FakeRunner({validate: outcome(validate, stdout=listing)})
+    assert adapter.check_postcondition(step, runner) is False
 
 
 # --------------------------------------------------------------------------
@@ -873,6 +958,12 @@ def test_easy_cheese_accepts_bare_owner_repo_source() -> None:
         EasyCheeseAdapter(FakeRunner()).check_postcondition(easy_cheese_step(), gh_list(entries))
         is True
     )
+
+
+def test_normalize_source_normalizes_scp_https_and_git_suffix_forms() -> None:
+    assert _normalize_source("git@github.com:owner/repo.git") == "owner/repo"
+    assert _normalize_source("https://github.com/owner/repo.git") == "owner/repo"
+    assert _normalize_source("https://github.com/owner/repo") == "owner/repo"
 
 
 # --------------------------------------------------------------------------

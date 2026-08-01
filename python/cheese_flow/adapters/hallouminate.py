@@ -162,7 +162,14 @@ class HallouminateAdapter:
                     component=self.name,
                     repository=repository,
                     phase=Phase.INITIALIZE,
-                    argv=("hallouminate", "init-repo", repository.name, "--path", str(repository)),
+                    argv=(
+                        "hallouminate",
+                        "init-repo",
+                        "--path",
+                        str(repository),
+                        "--",
+                        repository.name,
+                    ),
                     postcondition=(
                         f"`hallouminate config validate` in {key} reports "
                         f"{_corpus_name(repository)}"
@@ -229,9 +236,11 @@ class HallouminateAdapter:
         outcome = runner.run(("hallouminate", "config", "validate"), cwd=repository)
         if outcome.exit_code != 0:
             return False
-        root = _resolved(str(repository))
+        root = repository.resolve()
         name = _corpus_name(repository)
-        return any(path.is_relative_to(root) for path in _corpus_paths(outcome.stdout, name))
+        return any(
+            path.is_relative_to(root) for path in _corpus_paths(outcome.stdout, name, repository)
+        )
 
     def _check_corpus_query(self, step: PlanStep, runner: CommandRunner) -> bool:
         repository = _repository_of(step)
@@ -249,7 +258,7 @@ class HallouminateAdapter:
             ),
             cwd=repository,
         )
-        return outcome.exit_code == 0 and '"path"' in outcome.stdout
+        return outcome.exit_code == 0 and _has_corpus_result(outcome.stdout)
 
 
 def _check_cursor_mcp(step: PlanStep) -> bool:
@@ -269,7 +278,7 @@ _BULLETS = "-*•❯> \t"
 def _owner_repo(raw: str) -> str:
     """Reduce a marketplace's remote source to its ``owner/repo`` identity."""
     trimmed = raw.strip().removesuffix(".git").rstrip("/")
-    parts = [part for part in trimmed.split("/") if part]
+    parts = [part for part in trimmed.replace(":", "/").split("/") if part]
     return "/".join(parts[-2:]) if len(parts) >= 2 else ""
 
 
@@ -351,12 +360,46 @@ def _claude_plugin_ids(entries: object) -> set[str]:
     return ids
 
 
-def _resolved(raw: str) -> Path:
-    """Absolute, symlink-free path for a value printed by ``config validate``."""
-    return Path(raw.strip()).expanduser().resolve()
+def _has_corpus_result(stdout: str) -> bool:
+    """Whether a `hallouminate ground --format json` document reports a result.
+
+    A zero-exit envelope can mention ``"path"`` while reporting no chunks —
+    ``{"chunks": [], "path": null}`` — so this parses the document instead of
+    testing for the substring.
+    """
+    try:
+        document = json.loads(stdout)
+    except json.JSONDecodeError:
+        return False
+    if isinstance(document, dict):
+        entries = document.get("chunks")
+    elif isinstance(document, list):
+        entries = document
+    else:
+        return False
+    if not isinstance(entries, list):
+        return False
+    return any(isinstance(entry, dict) and entry.get("path") for entry in entries)
 
 
-def _corpus_paths(stdout: str, name: str) -> list[Path]:
+def _resolved(raw: str, repository: Path) -> Path:
+    """Absolute, symlink-free path for a value printed by ``config validate``.
+
+    Relative targets resolve against the repository the probe ran in, never
+    the cheese-flow process's own working directory. An empty target is
+    rejected rather than resolved, since it would otherwise collapse to
+    ``repository`` itself and falsely satisfy the caller's check.
+    """
+    target = raw.strip()
+    if not target:
+        raise ValueError("empty corpus target")
+    path = Path(target).expanduser()
+    if not path.is_absolute():
+        path = repository / path
+    return path.resolve()
+
+
+def _corpus_paths(stdout: str, name: str, repository: Path) -> list[Path]:
     """Directories ``config validate`` reports for the named corpus.
 
     ``config validate`` prints the merged XDG baseline, so the same corpus
@@ -374,7 +417,10 @@ def _corpus_paths(stdout: str, name: str) -> list[Path]:
             label, arrow, target = line.partition("->")
         if not arrow or label.strip().lstrip(_BULLETS) != name:
             continue
-        paths.append(_resolved(target))
+        try:
+            paths.append(_resolved(target, repository))
+        except ValueError:
+            continue
     return paths
 
 

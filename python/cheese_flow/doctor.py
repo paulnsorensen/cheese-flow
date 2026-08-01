@@ -7,9 +7,9 @@ import time
 from cheese_flow.install import (
     adapter_for,
     build_install_plan,
-    config_edit_summary,
-    redact_argv,
+    elapsed_ms,
     report_status,
+    step_result,
 )
 from cheese_flow.models import (
     CommandRunner,
@@ -40,16 +40,9 @@ def _verify(step: PlanStep, adapters: ComponentAdapters, runner: CommandRunner) 
     started = time.monotonic()
     satisfied = adapter_for(step, adapters).check_postcondition(step, runner)
     status = StepStatus.SUCCEEDED if satisfied else StepStatus.FAILED
-    return StepResult(
-        step_id=step.step_id,
-        component=step.component,
-        harness=step.harness,
-        repository=step.repository,
-        phase=step.phase,
-        argv=redact_argv(step.argv),
-        config_edit=config_edit_summary(step),
-        postcondition=step.postcondition,
-        status=status,
-        elapsed_ms=max(0, int((time.monotonic() - started) * 1000)),
+    return step_result(
+        step,
+        status,
+        elapsed_ms=elapsed_ms(started),
         remediation=(None if satisfied else f"postcondition not satisfied: {step.postcondition}"),
     )
