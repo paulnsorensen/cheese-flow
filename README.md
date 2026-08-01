@@ -2,7 +2,7 @@
 
 > _"The cheese must flow."_
 
-Opinionated scaffolding for portable agents and skills that can be compiled into harness-specific markdown bundles. Aged in Python, served on Sliced Bread, paired nicely with Claude Code, Codex, Cursor, and Copilot. 🧀
+A composition installer for the cheese ecosystem: it installs and verifies `hallouminate`, `easy-cheese`, and `tilth` across Claude Code, Codex, and Cursor, driven by a single declarative TOML manifest. Aged in Python, served on Sliced Bread. 🧀
 
 ## Why Cheese? Two reasons:
 
@@ -13,35 +13,31 @@ Opinionated scaffolding for portable agents and skills that can be compiled into
 
 - **CLI framework:** Typer — type-hint-driven Python CLIs that pair naturally with pydantic
 - **Object safety:** pydantic v2
-- **Template engine:** Jinja2 for portable template-to-markdown compilation
-- **Skill format:** Agent Skills compatible `SKILL.md`
-- **MCP server:** FastMCP — a single Python process exposes both `cheese_*` and `milknado_*` tools
+- **Manifest format:** TOML, parsed with the standard library `tomllib` and written atomically
+- **Terminal UI:** Rich — drives both the interactive wizard and headless status output
 
 ## Repository layout
 
-- `python/cheese_flow/` — Python CLI, compiler, and unified MCP server
-- `python/milknado/` — sovereign milknado slice (graph + planning, OR-Tools)
-- `agents/` — harness-agnostic Jinja2 markdown templates
-- `skills/` — portable Agent Skills definitions
+- `python/cheese_flow/` — the `cheese` CLI, desired-state manifest handling, install planner, doctor, and the interactive wizard TUI
+- `python/cheese_flow/adapters/` — one adapter per component (`hallouminate`, `easy-cheese`, `tilth`)
+- `tests/python/` — pytest suite
+- `agents/`, `skills/`, `commands/` — this repo's own agent-authoring assets (prompts, skills, slash commands), used to develop cheese-flow itself
 - `references/` — long-form architectural references (Sliced Bread, etc.)
-- `.claude-plugin/` — Claude Code + Copilot CLI plugin manifest
-- `.cursor-plugin/` — Cursor plugin manifest
-- `.mcp.json` — shared MCP server declarations (cheese-flow, tilth, Context7, Tavily)
-- `.claude/` / `.codex/` / `.cursor/` / `.copilot/` — generated harness bundles (gitignored)
+- `.claude-plugin/` / `.cursor-plugin/` — this repo's own Claude Code / Cursor plugin manifests
+- `.mcp.json` — shared MCP server declarations (tilth, Context7, Tavily)
 
 ## Getting started
 
-Host prerequisites: `uv` and `sg` (ast-grep) on `PATH`. Install ast-grep
-globally with `brew install ast-grep` or `cargo install ast-grep`.
+Host prerequisite: `uv` on `PATH`.
 
 ```bash
 uv sync --group dev
 
-# Emit bundles for every harness
-uv run cheese compile
-
-# Install into whichever local harnesses are detected
+# Interactive wizard install
 uv run cheese install
+
+# Verify already-declared managed state
+uv run cheese doctor
 ```
 
 Or use the repository automation entrypoints:
@@ -51,95 +47,61 @@ just build
 just build-ci
 ```
 
-Or target specific harnesses directly:
-
-```bash
-# Bundle emission
-uv run cheese compile
-uv run cheese compile --harness claude-code,copilot-cli
-uv run cheese compile --harness claude-code,codex,cursor,copilot-cli
-
-# Local installation (auto-detect by default)
-uv run cheese install
-uv run cheese install --harness cursor,copilot-cli
-uv run cheese install --harness claude-code,codex
-
-# Python demo
-uv run cheese milknado
-```
-
-`cheese compile` emits harness bundles for repo authors and CI. `cheese install`
-compiles the selected bundles and installs them into local harness surfaces,
-auto-detecting installed harnesses unless you pass `--harness`.
-
-## Installing compiled bundles locally
-
-Point harness installers at the compiled bundle directories (`.claude/`,
-`.codex/`, `.cursor/`, `.copilot/`) instead of the repository root.
-
-| Harness | Compiled install surface | What `cheese install` does |
-|---|---|---|
-| Claude Code | `.claude/` | Compiles the bundle, writes local marketplace metadata, and prints `claude plugin marketplace add "<repo>/.claude"` plus the in-app install step. |
-| Codex | `.codex/` | Compiles the bundle, writes local marketplace metadata, and prints `codex plugin marketplace add "<repo>/.codex"` plus the restart/install steps. |
-| Cursor | `.cursor/` | Compiles `.cursor/`; that tree is already the installed surface. |
-| Copilot CLI | `.copilot/` | Compiles `.copilot/` and runs `copilot plugin install "<repo>/.copilot"` when the CLI is available. |
-
-Examples:
-
-```bash
-# Auto-detect installed harnesses and install only those
-uv run cheese install
-
-# Explicit multi-harness install
-uv run cheese install --harness cursor,copilot-cli
-
-# Bundle emission only, then manual bundle-surface install
-uv run cheese compile --harness claude-code,codex
-claude plugin marketplace add ./.claude
-codex plugin marketplace add ./.codex
-```
-
 Once published to PyPI, install globally with:
 
 ```bash
 uv tool install cheese-flow
-cheese milknado
+cheese install
 ```
 
-## What `compile` does
+## Commands
 
-- Validates Agent Skills frontmatter with pydantic
-- Validates agent template metadata with pydantic
-- Compiles `agents/*.md.eta` into plain markdown for the selected harness
-- Copies `skills/*/SKILL.md` into the harness bundle
-- Writes a small manifest for the generated bundle
+### `cheese install`
 
-## `milknado`
+Installs the selected components for the selected harnesses and repositories.
 
-- Runs the milknado Python backend in-process (same `cheese` interpreter)
-- Streams the Rich-rendered terminal UI to stdout/stderr
-- Uses OR-Tools to solve and display a small linear optimization result
+| Option | Effect |
+|---|---|
+| `--config PATH` | Apply this manifest headlessly instead of running the wizard |
+| `--dry-run` | Emit the plan without changing managed state |
+| `--json` | Write one JSON document to stdout (also runs headlessly) |
+| `--timeout FLOAT` | Seconds a single command may run before it is killed |
+
+With no `--config`/`--json`, `install` runs the interactive wizard and, on acceptance, persists the manifest to the default config path before applying it.
+
+### `cheese doctor`
+
+Verifies declared managed state without changing it.
+
+| Option | Effect |
+|---|---|
+| `--config PATH` | Manifest to verify. Defaults to the standard path |
+| `--timeout FLOAT` | Seconds a single command may run before it is killed |
+
+Both commands write a single JSON report to stdout in headless mode; every prompt, progress line, and diagnostic goes to stderr.
+
+## The manifest
+
+Default path: `$XDG_CONFIG_HOME/cheese/config.toml` (falls back to `~/.config/cheese/config.toml`).
+
+```toml
+harnesses = ["claude-code", "codex", "cursor"]
+components = ["hallouminate", "easy-cheese", "tilth"]
+
+[repositories]
+search_roots = ["/home/you/Dev"]
+max_depth = 2
+selected = ["/home/you/Dev/some-repo"]
+```
+
+- **Harnesses:** `claude-code`, `codex`, `cursor`
+- **Components:** `hallouminate`, `easy-cheese`, `tilth` — `hallouminate` and `easy-cheese` are required in every manifest; `tilth` is optional
+- **Repositories:** `search_roots` are where repository discovery looks, `max_depth` bounds how deep it searches, and `selected` must each sit under one of the search roots
 
 ## Quality gates
 
 - `just build` installs deps, formats, lints with autofix, and runs the pytest suite
 - `just build-ci` uses the same checks without autofix and is what CI runs
-
-## Example bundle/install surfaces
-
-- Claude Code bundle/install surface: `.claude/`
-- Codex bundle/install surface: `.codex/`
-- Cursor bundle/install surface: `.cursor/`
-- Copilot CLI bundle/install surface: `.copilot/`
-
-Each bundle contains:
-
-- `agents/*.md`
-- `skills/*/SKILL.md` (Cursor: `rules/<skill>.mdc` + `commands/<skill>.md` dual-surface)
-- `manifest.json`
-- `.mcp.json` (Cursor: `mcp.json`)
-- Per-harness plugin manifest (`.claude-plugin/`, `.cursor-plugin/`, or `.codex-plugin/`)
-- `hooks.json` (except Cursor, which does not support hooks)
 
 ## References
 
