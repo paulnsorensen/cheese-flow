@@ -1,225 +1,197 @@
 """Typer CLI entry point for cheese-flow.
 
-Mirrors the TS Commander surface from ``src/index.ts``: ``compile``, ``install``,
-``doctor``, ``lint``, ``milknado``, ``session-start``, ``mcp``. Top-level
-aliases for selected milknado commands are wired through the same Typer app
-(``cheese solve-blend`` runs the milknado blend demo TUI directly).
+``cheese install`` runs the wizard, or applies a manifest headlessly with
+``--config``. ``cheese doctor`` verifies declared managed state.
+
+Output discipline: in headless mode stdout carries exactly one JSON document and
+nothing else. Every prompt, progress line, and diagnostic goes to stderr.
 """
 
 from __future__ import annotations
 
-import asyncio
-import contextlib
+import json
+import tempfile
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Annotated
 
 import typer
+from rich.console import Console
 
-from cheese_flow.adapters import HARNESS_NAMES
-from cheese_flow.lib.compiler import compile_harness_bundles
-from cheese_flow.lib.doctor import format_report, has_blocking_failure, run_all_tool_checks
-from cheese_flow.lib.harness import HarnessName
-from cheese_flow.lib.install_plan import dedupe_harness_names, parse_harness_overrides
-from cheese_flow.lib.installer import (
-    format_install_report,
-    has_blocking_install_result,
-    install_harnesses,
+from cheese_flow.adapters import default_component_adapters
+from cheese_flow.desired_state import (
+    ManifestError,
+    default_config_path,
+    load_desired_state,
+    save_desired_state,
 )
-from cheese_flow.lib.lint_skills import format_lint_report, has_errors, lint_skills_directory
-from cheese_flow.lib.session_start import RunSessionStartOptions, run_session_start
+from cheese_flow.doctor import verify_desired_state
+from cheese_flow.install import apply_install_plan, build_install_plan
+from cheese_flow.models import (
+    ApplyReport,
+    CommandRunner,
+    DesiredState,
+    DoctorReport,
+    InstallPlan,
+    ReportStatus,
+)
+from cheese_flow.runner import DEFAULT_TIMEOUT_SECONDS, SubprocessRunner
+from cheese_flow.tui import run_wizard
 
-DEFAULT_PROJECT_ROOT = str(Path(__file__).resolve().parents[2])
+_MANIFEST_EXIT_CODE = 2
+_FAILURE_EXIT_CODE = 1
 
 app = typer.Typer(
     name="cheese",
-    help=(
-        "Emit and locally install portable agents and Agent Skills as "
-        "harness-specific markdown bundles."
-    ),
+    help="Install and verify the cheese ecosystem across Claude Code, Codex, and Cursor.",
     no_args_is_help=True,
     add_completion=False,
 )
 
 
-def _resolve_targets(harness: list[str] | None) -> list[HarnessName]:
-    if not harness:
-        return list(HARNESS_NAMES)
-    return dedupe_harness_names(parse_harness_overrides(harness))
-
-
-def _split_harness(values: list[str] | None) -> list[str]:
-    """Commander accepts ``-H a,b`` and repeated ``-H``; mirror that."""
-    if not values:
-        return []
-    out: list[str] = []
-    for v in values:
-        out.extend(part.strip() for part in v.split(",") if part.strip())
-    return out
-
-
-@app.command()
-def compile(
-    harness: Annotated[
-        list[str] | None,
-        typer.Option(
-            "-H",
-            "--harness",
-            help="Harness target(s) to emit. Defaults to all supported harnesses.",
-        ),
-    ] = None,
-    project_root: Annotated[
-        str,
-        typer.Option(
-            "--project-root",
-            help="Project root that contains ./agents and ./skills.",
-        ),
-    ] = DEFAULT_PROJECT_ROOT,
-) -> None:
-    """Emit one or more harness bundles from the repository sources."""
-    targets = _resolve_targets(_split_harness(harness))
-    outputs = asyncio.run(
-        compile_harness_bundles(
-            project_root=str(Path(project_root).resolve()),
-            harnesses=targets,
-        )
-    )
-    for output in outputs:
-        typer.echo(f"Compiled harness bundle: {output}")
-
-
 @app.command()
 def install(
-    harness: Annotated[
-        list[str] | None,
+    config: Annotated[
+        Path | None,
         typer.Option(
-            "-H",
-            "--harness",
-            help="Harness target(s) to install for. Defaults to auto-detect.",
+            "--config",
+            help="Apply this manifest headlessly instead of running the wizard.",
         ),
     ] = None,
-    project_root: Annotated[
-        str,
+    dry_run: Annotated[
+        bool,
+        typer.Option("--dry-run", help="Emit the plan without changing managed state."),
+    ] = False,
+    json_output: Annotated[
+        bool,
+        typer.Option("--json", help="Write one JSON document to stdout."),
+    ] = False,
+    timeout: Annotated[
+        float,
         typer.Option(
-            "--project-root",
-            help="Project root that contains ./agents and ./skills.",
+            "--timeout",
+            help="Seconds a single command may run before it is killed.",
         ),
-    ] = DEFAULT_PROJECT_ROOT,
+    ] = DEFAULT_TIMEOUT_SECONDS,
 ) -> None:
-    """Compile and install harness bundles into the local workspace."""
-    requested = dedupe_harness_names(parse_harness_overrides(_split_harness(harness)))
-    report = asyncio.run(
-        install_harnesses(
-            project_root=str(Path(project_root).resolve()),
-            requested_harnesses=requested,
-        )
+    """Install the selected components for the selected harnesses and repositories."""
+    console = _console()
+    headless = config is not None or json_output
+    state = (
+        _headless_state(console, config)
+        if headless
+        else _interactive_state(console, dry_run=dry_run)
     )
-    typer.echo(format_install_report(report), nl=False)
-    if has_blocking_install_result(report):
-        raise typer.Exit(code=1)
+
+    if dry_run:
+        # spec:105 — resolve metadata against a throwaway npm cache, removed on exit.
+        with tempfile.TemporaryDirectory(prefix="cheese-npm-cache-") as cache:
+            runner = _default_runner({"npm_config_cache": cache}, timeout=timeout)
+            plan = build_install_plan(state, default_component_adapters(runner))
+        console.print("Dry run: emitting the plan without executing it.")
+        _announce(console, plan)
+        report = ApplyReport(status=ReportStatus.SUCCEEDED, manifest=state, plan=plan)
+    else:
+        runner = _default_runner(timeout=timeout)
+        # One adapter set for planning and apply: apply must reuse the versions
+        # planning resolved (acceptance:150).
+        adapters = default_component_adapters(runner)
+        plan = build_install_plan(state, adapters)
+        if not headless:
+            save_desired_state(state, default_config_path())
+            console.print(f"Wrote {default_config_path()}")
+        _announce(console, plan)
+        report = apply_install_plan(plan, runner, adapters=adapters)
+
+    _emit(console, report, headless=headless)
 
 
 @app.command()
-def doctor() -> None:
-    """Verify required, recommended, and suggested CLI tools are installed."""
-    results = asyncio.run(run_all_tool_checks())
-    typer.echo(format_report(results), nl=False)
-    if has_blocking_failure(results):
-        raise typer.Exit(code=1)
-
-
-@app.command()
-def lint(
-    project_root: Annotated[
-        str,
+def doctor(
+    config: Annotated[
+        Path | None,
+        typer.Option("--config", help="Manifest to verify. Defaults to the standard path."),
+    ] = None,
+    timeout: Annotated[
+        float,
         typer.Option(
-            "--project-root",
-            help="Project root that contains ./skills.",
+            "--timeout",
+            help="Seconds a single command may run before it is killed.",
         ),
-    ] = DEFAULT_PROJECT_ROOT,
+    ] = DEFAULT_TIMEOUT_SECONDS,
 ) -> None:
-    """Lint skills/ against the Agent Skills format (https://agentskills.io)."""
-    skills_dir = Path(project_root).resolve() / "skills"
-    report = asyncio.run(lint_skills_directory(str(skills_dir)))
-    typer.echo(format_lint_report(report), nl=False)
-    if has_errors(report):
-        raise typer.Exit(code=1)
+    """Verify declared managed state without changing it."""
+    console = _console()
+    state = _headless_state(console, config)
+    runner = _default_runner(timeout=timeout)
+    adapters = default_component_adapters(runner)
+    console.print("Verifying declared managed state.")
+    report = verify_desired_state(state, adapters, runner)
+    _emit(console, report, headless=True)
 
 
-def _run_milknado(project_root: str) -> None:
-    from blend_demo import render_tui, solve_blend_plan
-    from rich.console import Console
-
-    del project_root  # accepted for parity with TS surface; blend demo is in-process
-    render_tui(solve_blend_plan(), Console())
+def _console() -> Console:
+    """A console bound to stderr — stdout belongs to the JSON document alone."""
+    return Console(stderr=True, markup=False, highlight=False, soft_wrap=True)
 
 
-@app.command()
-def milknado(
-    project_root: Annotated[
-        str,
-        typer.Option(
-            "--project-root",
-            help="Project root that contains ./python and pyproject.toml.",
-        ),
-    ] = DEFAULT_PROJECT_ROOT,
-) -> None:
-    """Run the sample Python backend and print its TUI."""
-    _run_milknado(str(Path(project_root).resolve()))
+def _default_runner(
+    env: Mapping[str, str] | None = None,
+    *,
+    timeout: float = DEFAULT_TIMEOUT_SECONDS,
+) -> CommandRunner:
+    return SubprocessRunner(env=env, timeout=timeout)
 
 
-@app.command(name="solve-blend")
-def solve_blend() -> None:
-    """Top-level alias: run the milknado blend-demo TUI."""
-    _run_milknado(DEFAULT_PROJECT_ROOT)
+def _headless_state(console: Console, config: Path | None) -> DesiredState:
+    """Load the manifest, failing before planning, resolution, or mutation."""
+    path = config if config is not None else default_config_path()
+    try:
+        return load_desired_state(path)
+    except ManifestError as error:
+        console.print(f"Invalid manifest: {error}")
+        raise typer.Exit(_MANIFEST_EXIT_CODE) from error
 
 
-@app.command(name="session-start")
-def session_start(
-    root: Annotated[str, typer.Option("--root", help="project root")] = ".",
-    quiet: Annotated[bool, typer.Option("--quiet", help="suppress non-error output")] = False,
-    max_time: Annotated[
-        int,
-        typer.Option("--max-time", help="soft budget for housekeeping (ms)"),
-    ] = 5000,
-) -> None:
-    """Run cheese-flow housekeeping (sweep + update check) under a soft budget.
-
-    Best-effort; never blocks session start.
-    """
-    # Best-effort: never block session start on housekeeping failure.
-    with contextlib.suppress(Exception):
-        asyncio.run(
-            run_session_start(
-                RunSessionStartOptions(
-                    cwd=str(Path(root).resolve()),
-                    maxTimeMs=max_time,
-                    currentVersion="0.1.0",
-                    quiet=quiet,
-                )
-            )
-        )
-    raise typer.Exit(code=0)
+def _interactive_state(console: Console, *, dry_run: bool) -> DesiredState:
+    state = run_wizard(_prefill(console))
+    if state is None:
+        console.print("Cancelled: no manifest was written and nothing was installed.")
+        raise typer.Exit(_FAILURE_EXIT_CODE)
+    if dry_run:
+        console.print("Dry run: the accepted state will not be persisted.")
+    return state
 
 
-@app.command()
-def mcp(
-    project_root: Annotated[
-        str,
-        typer.Option(
-            "--project-root",
-            help="Project root that contains ./python/mcp_server.py and pyproject.toml.",
-        ),
-    ] = DEFAULT_PROJECT_ROOT,
-) -> None:
-    """Run the cheese-flow MCP server over stdio.
+def _prefill(console: Console) -> DesiredState | None:
+    """Load the default manifest to prefill every wizard screen, if one exists."""
+    path = default_config_path()
+    if not path.exists():
+        return None
+    return _headless_state(console, path)
 
-    Exposes both ``cheese_*`` and ``milknado_*`` prefixed tools from a single
-    FastMCP instance.
-    """
-    del project_root  # accepted for parity with TS surface; server runs in-process
-    from cheese_flow.mcp_server import run as run_mcp
 
-    run_mcp()
+def _announce(console: Console, plan: InstallPlan) -> None:
+    for step in plan.steps:
+        target = step.harness or step.repository or ""
+        console.print(f"  {step.step_id} [{step.component}] {target}".rstrip())
+
+
+def _emit(console: Console, report: ApplyReport | DoctorReport, *, headless: bool) -> None:
+    if headless:
+        print(json.dumps(report.model_dump(mode="json"), indent=2))
+    else:
+        _render(console, report)
+    if report.status is not ReportStatus.SUCCEEDED:
+        raise typer.Exit(_FAILURE_EXIT_CODE)
+
+
+def _render(console: Console, report: ApplyReport | DoctorReport) -> None:
+    console.print(f"Status: {report.status.value}")
+    for result in report.results:
+        console.print(f"  {result.status.value:<11} {result.step_id}")
+        if result.remediation:
+            console.print(f"    {result.remediation}")
 
 
 if __name__ == "__main__":

@@ -1,14 +1,34 @@
 """Tests for the Typer ``cheese`` CLI surface (``cheese_flow.cli``).
 
-Replaces the TS Commander coverage from the integration ``--help`` smoke
-tests in ``tests/mcp-proxy.test.ts`` and ``tests/milknado.test.ts``. Per
-US-015, the surface is the same seven subcommands plus selected milknado
-top-level aliases.
+The v1 surface is exactly two commands: ``install`` and ``doctor``. These tests
+own routing, headless output discipline, and persistence rules; planning,
+apply, and verification belong to ``install.py`` / ``doctor.py`` and are faked
+at their seams.
 """
 
 from __future__ import annotations
 
+import json
+from collections.abc import Sequence
+from pathlib import Path
+
+import pytest
+from cheese_flow import cli
 from cheese_flow.cli import app
+from cheese_flow.models import (
+    ApplyReport,
+    CommandOutcome,
+    DesiredState,
+    DoctorReport,
+    InstallPlan,
+    Phase,
+    PlanStep,
+    ReportStatus,
+    RepositorySelection,
+    StepResult,
+    StepStatus,
+)
+from cheese_flow.runner import DEFAULT_TIMEOUT_SECONDS
 from typer.testing import CliRunner
 
 # Help-text assertions below rely on Typer's plain (Click) help formatter, which
@@ -17,82 +37,562 @@ from typer.testing import CliRunner
 # enabled, headless CI panels render with no body text and these assertions fail.
 runner = CliRunner()
 
+REMOVED_COMMANDS = (
+    "compile",
+    "lint",
+    "milknado",
+    "session-start",
+    "mcp",
+    "solve-blend",
+)
 
-def test_root_help_lists_all_seven_subcommands() -> None:
+MANIFEST_TOML = """\
+harnesses = ["claude-code"]
+components = ["hallouminate", "easy-cheese"]
+
+[repositories]
+search_roots = ["/srv/code"]
+max_depth = 2
+selected = ["/srv/code/project"]
+"""
+
+
+class RecordingRunner:
+    """A ``CommandRunner`` that records every child process it is asked to run."""
+
+    def __init__(self) -> None:
+        self.commands: list[tuple[str, ...]] = []
+
+    def run(self, argv: Sequence[str], *, cwd: Path | None = None) -> CommandOutcome:
+        self.commands.append(tuple(argv))
+        return CommandOutcome(argv=tuple(argv), exit_code=0, stdout="", stderr="", elapsed_ms=0)
+
+
+def manifest_state() -> DesiredState:
+    return DesiredState(
+        harnesses=("claude-code",),
+        components=("hallouminate", "easy-cheese"),
+        repositories=RepositorySelection(
+            search_roots=(Path("/srv/code"),),
+            max_depth=2,
+            selected=(Path("/srv/code/project"),),
+        ),
+    )
+
+
+def a_plan(state: DesiredState) -> InstallPlan:
+    return InstallPlan(
+        manifest=state,
+        steps=(
+            PlanStep(
+                step_id="hallouminate:install",
+                component="hallouminate",
+                phase=Phase.INSTALL,
+                argv=("npm", "install", "--global", "hallouminate@1.2.3"),
+                postcondition="hallouminate --version reports 1.2.3",
+            ),
+        ),
+    )
+
+
+def a_result(status: StepStatus = StepStatus.SUCCEEDED) -> StepResult:
+    return StepResult(
+        step_id="hallouminate:install",
+        component="hallouminate",
+        phase=Phase.INSTALL,
+        argv=("npm", "install", "--global", "hallouminate@1.2.3"),
+        postcondition="hallouminate --version reports 1.2.3",
+        status=status,
+        exit_code=0 if status is StepStatus.SUCCEEDED else 1,
+        elapsed_ms=12,
+    )
+
+
+@pytest.fixture
+def config_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """Point ``default_config_path()`` at an empty per-test XDG config home."""
+    home = tmp_path / "xdg"
+    home.mkdir()
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(home))
+    return home / "cheese" / "config.toml"
+
+
+@pytest.fixture
+def command_runner(monkeypatch: pytest.MonkeyPatch) -> RecordingRunner:
+    recorder = RecordingRunner()
+    monkeypatch.setattr(cli, "_default_runner", lambda env=None, *, timeout=None: recorder)
+    monkeypatch.setattr(cli, "default_component_adapters", lambda _runner: {})
+    return recorder
+
+
+@pytest.fixture
+def calls(monkeypatch: pytest.MonkeyPatch) -> dict[str, list[object]]:
+    """Fake the sibling-owned plan/apply/verify seams and record every call."""
+    recorded: dict[str, list[object]] = {
+        "plan": [],
+        "apply": [],
+        "adapters": [],
+        "verify": [],
+        "wizard": [],
+    }
+
+    def build_install_plan(state: DesiredState, _adapters: object) -> InstallPlan:
+        recorded["plan"].append(state)
+        return a_plan(state)
+
+    def apply_install_plan(plan: InstallPlan, _runner: object, *, adapters: object) -> ApplyReport:
+        recorded["apply"].append(plan)
+        recorded["adapters"].append(adapters)
+        return ApplyReport(
+            status=ReportStatus.SUCCEEDED,
+            manifest=plan.manifest,
+            plan=plan,
+            results=(a_result(),),
+        )
+
+    def verify_desired_state(
+        state: DesiredState, _adapters: object, _runner: object
+    ) -> DoctorReport:
+        recorded["verify"].append(state)
+        plan = a_plan(state)
+        return DoctorReport(
+            status=ReportStatus.SUCCEEDED,
+            manifest=state,
+            plan=plan,
+            results=(a_result(),),
+        )
+
+    def run_wizard(initial: DesiredState | None) -> DesiredState | None:
+        recorded["wizard"].append(initial)
+        return manifest_state()
+
+    monkeypatch.setattr(cli, "build_install_plan", build_install_plan)
+    monkeypatch.setattr(cli, "apply_install_plan", apply_install_plan)
+    monkeypatch.setattr(cli, "verify_desired_state", verify_desired_state)
+    monkeypatch.setattr(cli, "run_wizard", run_wizard)
+    return recorded
+
+
+def write_manifest(tmp_path: Path, text: str = MANIFEST_TOML) -> Path:
+    path = tmp_path / "config.toml"
+    path.write_text(text, encoding="utf-8")
+    return path
+
+
+# ─── Command surface ─────────────────────────────────────────────────────────
+
+
+def test_root_help_lists_exactly_install_and_doctor() -> None:
     result = runner.invoke(app, ["--help"])
     assert result.exit_code == 0
     output = result.stdout
-    for command in (
-        "compile",
-        "install",
-        "doctor",
-        "lint",
-        "milknado",
-        "session-start",
-        "mcp",
-    ):
-        assert command in output, f"missing subcommand in --help: {command!r}\n{output}"
+    assert "install" in output
+    assert "doctor" in output
 
 
-def test_root_help_lists_milknado_top_level_alias() -> None:
+def test_root_help_omits_the_purged_v0_commands() -> None:
     result = runner.invoke(app, ["--help"])
     assert result.exit_code == 0
-    assert "solve-blend" in result.stdout
+    for command in REMOVED_COMMANDS:
+        assert command not in result.stdout, f"purged command still exposed: {command!r}"
 
 
-def test_mcp_help_mentions_project_root_option() -> None:
-    """Mirrors ``mcp-proxy.test.ts`` "wires up the mcp help" smoke."""
-    result = runner.invoke(app, ["mcp", "--help"])
-    assert result.exit_code == 0
-    assert "mcp" in result.stdout
-    assert "Usage:" in result.stdout
-    assert "project-root" in result.stdout.lower()
+def test_purged_commands_are_rejected() -> None:
+    for command in REMOVED_COMMANDS:
+        result = runner.invoke(app, [command])
+        assert result.exit_code != 0, f"purged command still runs: {command!r}"
 
 
-def test_milknado_help_mentions_project_root() -> None:
-    """Mirrors ``milknado.test.ts`` "wires up milknado help" smoke."""
-    result = runner.invoke(app, ["milknado", "--help"])
-    assert result.exit_code == 0
-    assert "milknado" in result.stdout
-    assert "Usage:" in result.stdout
-    assert "project-root" in result.stdout.lower()
-
-
-def test_doctor_help_describes_purpose() -> None:
-    result = runner.invoke(app, ["doctor", "--help"])
-    assert result.exit_code == 0
-    assert "Verify required" in result.stdout
-
-
-def test_compile_help_documents_harness_flag() -> None:
-    result = runner.invoke(app, ["compile", "--help"])
-    assert result.exit_code == 0
-    assert "-H" in result.stdout
-    assert "--harness" in result.stdout
-
-
-def test_install_help_documents_harness_flag() -> None:
+def test_install_help_documents_its_three_options() -> None:
     result = runner.invoke(app, ["install", "--help"])
     assert result.exit_code == 0
-    assert "-H" in result.stdout
-    assert "--harness" in result.stdout
+    output = result.stdout
+    assert "--config" in output
+    assert "--dry-run" in output
+    assert "--json" in output
 
 
-def test_lint_help_documents_project_root() -> None:
-    result = runner.invoke(app, ["lint", "--help"])
+def test_doctor_help_documents_config_option() -> None:
+    result = runner.invoke(app, ["doctor", "--help"])
     assert result.exit_code == 0
-    assert "project-root" in result.stdout.lower()
+    assert "--config" in result.stdout
 
 
-def test_session_start_help_documents_options() -> None:
-    result = runner.invoke(app, ["session-start", "--help"])
+def test_doctor_help_omits_install_only_options() -> None:
+    result = runner.invoke(app, ["doctor", "--help"])
     assert result.exit_code == 0
-    assert "--root" in result.stdout
-    assert "--quiet" in result.stdout
-    assert "--max-time" in result.stdout
+    assert "--dry-run" not in result.stdout
+    assert "--json" not in result.stdout
 
 
-def test_solve_blend_help_describes_alias() -> None:
-    result = runner.invoke(app, ["solve-blend", "--help"])
-    assert result.exit_code == 0
-    assert "blend" in result.stdout.lower()
+# ─── Headless install (acceptance:148, spec:125) ─────────────────────────────
+
+
+def test_headless_install_emits_one_json_document_with_the_four_root_keys(
+    tmp_path: Path, config_home: Path, command_runner: RecordingRunner, calls: dict
+) -> None:
+    manifest = write_manifest(tmp_path)
+
+    result = runner.invoke(app, ["install", "--config", str(manifest)])
+
+    assert result.exit_code == 0, result.stderr
+    document = json.loads(result.stdout)
+    assert set(document) == {"status", "manifest", "plan", "results"}
+    assert document["status"] == "succeeded"
+    assert document["manifest"]["harnesses"] == ["claude-code"]
+    assert document["manifest"]["components"] == ["hallouminate", "easy-cheese"]
+    assert document["plan"]["steps"][0]["step_id"] == "hallouminate:install"
+    assert [entry["status"] for entry in document["results"]] == ["succeeded"]
+
+
+def test_headless_install_never_runs_the_wizard(
+    tmp_path: Path, config_home: Path, command_runner: RecordingRunner, calls: dict
+) -> None:
+    manifest = write_manifest(tmp_path)
+
+    result = runner.invoke(app, ["install", "--config", str(manifest)])
+
+    assert result.exit_code == 0, result.stderr
+    assert calls["wizard"] == []
+    assert calls["apply"] == [a_plan(manifest_state())]
+
+
+def test_headless_install_stdout_carries_nothing_but_the_json_document(
+    tmp_path: Path, config_home: Path, command_runner: RecordingRunner, calls: dict
+) -> None:
+    manifest = write_manifest(tmp_path)
+
+    result = runner.invoke(app, ["install", "--config", str(manifest)])
+
+    assert result.exit_code == 0, result.stderr
+    # Parsing the whole stream is the assertion: any stray human text breaks it.
+    document = json.loads(result.stdout)
+    assert result.stdout.strip() == json.dumps(document, indent=2)
+    assert "hallouminate" in result.stderr, "progress must be reported on stderr"
+
+
+def test_headless_install_does_not_rewrite_the_default_manifest(
+    tmp_path: Path, config_home: Path, command_runner: RecordingRunner, calls: dict
+) -> None:
+    manifest = write_manifest(tmp_path)
+
+    result = runner.invoke(app, ["install", "--config", str(manifest)])
+
+    assert result.exit_code == 0, result.stderr
+    assert not config_home.exists()
+    assert manifest.read_text(encoding="utf-8") == MANIFEST_TOML
+
+
+def test_json_flag_without_config_runs_headless_from_the_default_manifest(
+    config_home: Path, command_runner: RecordingRunner, calls: dict
+) -> None:
+    config_home.parent.mkdir(parents=True)
+    config_home.write_text(MANIFEST_TOML, encoding="utf-8")
+
+    result = runner.invoke(app, ["install", "--json"])
+
+    assert result.exit_code == 0, result.stderr
+    assert calls["wizard"] == []
+    assert json.loads(result.stdout)["status"] == "succeeded"
+
+
+# ─── Invalid manifests fail first (acceptance:145) ───────────────────────────
+
+
+@pytest.mark.parametrize(
+    ("name", "text"),
+    [
+        ("missing required component", 'harnesses = ["codex"]\ncomponents = ["hallouminate"]\n'),
+        ("unknown harness", 'harnesses = ["pi"]\ncomponents = ["hallouminate", "easy-cheese"]\n'),
+        ("unknown key", 'harnesses = ["codex"]\ncomponents = []\nextra = 1\n'),
+        ("not toml", "harnesses = [\n"),
+        ("no harnesses", 'harnesses = []\ncomponents = ["hallouminate", "easy-cheese"]\n'),
+    ],
+)
+def test_invalid_manifest_exits_nonzero_before_planning_or_running_anything(
+    name: str,
+    text: str,
+    tmp_path: Path,
+    config_home: Path,
+    command_runner: RecordingRunner,
+    calls: dict,
+) -> None:
+    manifest = write_manifest(tmp_path, text)
+
+    result = runner.invoke(app, ["install", "--config", str(manifest)])
+
+    assert result.exit_code != 0, f"{name}: expected failure"
+    assert calls["plan"] == [], f"{name}: planned despite an invalid manifest"
+    assert calls["apply"] == [], f"{name}: applied despite an invalid manifest"
+    assert command_runner.commands == [], f"{name}: ran a command despite an invalid manifest"
+    assert result.stdout == "", f"{name}: stdout must stay empty on manifest failure"
+    assert str(manifest) in result.stderr
+
+
+def test_missing_manifest_exits_nonzero_with_the_path_on_stderr(
+    tmp_path: Path, config_home: Path, command_runner: RecordingRunner, calls: dict
+) -> None:
+    missing = tmp_path / "nope.toml"
+
+    result = runner.invoke(app, ["install", "--config", str(missing)])
+
+    assert result.exit_code != 0
+    assert calls["plan"] == []
+    assert command_runner.commands == []
+    assert result.stdout == ""
+    assert str(missing) in result.stderr
+
+
+def test_json_flag_without_any_manifest_fails_without_prompting(
+    config_home: Path, command_runner: RecordingRunner, calls: dict
+) -> None:
+    result = runner.invoke(app, ["install", "--json"])
+
+    assert result.exit_code != 0
+    assert calls["wizard"] == []
+    assert calls["plan"] == []
+    assert result.stdout == ""
+
+
+# ─── Dry run (acceptance:147) ────────────────────────────────────────────────
+
+
+def test_dry_run_emits_the_plan_without_applying_or_persisting(
+    tmp_path: Path, config_home: Path, command_runner: RecordingRunner, calls: dict
+) -> None:
+    manifest = write_manifest(tmp_path)
+
+    result = runner.invoke(app, ["install", "--config", str(manifest), "--dry-run"])
+
+    assert result.exit_code == 0, result.stderr
+    document = json.loads(result.stdout)
+    assert document["results"] == []
+    assert [step["argv"] for step in document["plan"]["steps"]] == [
+        ["npm", "install", "--global", "hallouminate@1.2.3"]
+    ]
+    assert calls["plan"] == [manifest_state()]
+    assert calls["apply"] == [], "dry-run must not apply"
+    assert command_runner.commands == [], "dry-run must execute no package code"
+    assert not config_home.exists(), "dry-run must not write managed state"
+
+
+def test_interactive_dry_run_persists_nothing(
+    config_home: Path, command_runner: RecordingRunner, calls: dict
+) -> None:
+    result = runner.invoke(app, ["install", "--dry-run"])
+
+    assert result.exit_code == 0, result.stderr
+    assert calls["wizard"] == [None]
+    assert calls["apply"] == []
+    assert command_runner.commands == []
+    assert not config_home.exists()
+
+
+# ─── Failure exit codes (acceptance:151) ─────────────────────────────────────
+
+
+def test_failed_apply_exits_nonzero_and_still_emits_one_json_document(
+    tmp_path: Path,
+    config_home: Path,
+    command_runner: RecordingRunner,
+    calls: dict,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    manifest = write_manifest(tmp_path)
+
+    def failing_apply(plan: InstallPlan, _runner: object, *, adapters: object) -> ApplyReport:
+        return ApplyReport(
+            status=ReportStatus.FAILED,
+            manifest=plan.manifest,
+            plan=plan,
+            results=(a_result(StepStatus.FAILED),),
+        )
+
+    monkeypatch.setattr(cli, "apply_install_plan", failing_apply)
+
+    result = runner.invoke(app, ["install", "--config", str(manifest)])
+
+    assert result.exit_code != 0
+    document = json.loads(result.stdout)
+    assert document["status"] == "failed"
+    assert [entry["status"] for entry in document["results"]] == ["failed"]
+
+
+# ─── Interactive install: persistence and cancellation ───────────────────────
+
+
+def test_interactive_install_writes_the_manifest_atomically_before_apply(
+    config_home: Path,
+    command_runner: RecordingRunner,
+    calls: dict,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    seen_on_disk: list[str] = []
+
+    def apply_install_plan(plan: InstallPlan, _runner: object, *, adapters: object) -> ApplyReport:
+        seen_on_disk.append(config_home.read_text(encoding="utf-8"))
+        return ApplyReport(status=ReportStatus.SUCCEEDED, manifest=plan.manifest, plan=plan)
+
+    monkeypatch.setattr(cli, "apply_install_plan", apply_install_plan)
+
+    result = runner.invoke(app, ["install"])
+
+    assert result.exit_code == 0, result.stderr
+    assert len(seen_on_disk) == 1, "apply must run exactly once, after persistence"
+    assert 'harnesses = ["claude-code"]' in seen_on_disk[0]
+    assert config_home.read_text(encoding="utf-8") == seen_on_disk[0]
+
+
+def test_interactive_install_prefills_the_wizard_from_the_default_manifest(
+    config_home: Path, command_runner: RecordingRunner, calls: dict
+) -> None:
+    config_home.parent.mkdir(parents=True)
+    config_home.write_text(MANIFEST_TOML, encoding="utf-8")
+
+    result = runner.invoke(app, ["install"])
+
+    assert result.exit_code == 0, result.stderr
+    assert calls["wizard"] == [manifest_state()]
+
+
+def test_interactive_install_keeps_stdout_empty(
+    config_home: Path, command_runner: RecordingRunner, calls: dict
+) -> None:
+    result = runner.invoke(app, ["install"])
+
+    assert result.exit_code == 0, result.stderr
+    assert result.stdout == "", "interactive mode writes human output to stderr only"
+
+
+def test_cancelled_wizard_exits_nonzero_and_writes_no_managed_state(
+    config_home: Path,
+    command_runner: RecordingRunner,
+    calls: dict,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(cli, "run_wizard", lambda _initial: None)
+
+    result = runner.invoke(app, ["install"])
+
+    assert result.exit_code != 0
+    assert not config_home.exists()
+    assert calls["plan"] == []
+    assert calls["apply"] == []
+    assert command_runner.commands == []
+    assert result.stdout == ""
+
+
+# ─── Doctor (acceptance:153) ─────────────────────────────────────────────────
+
+
+def test_doctor_emits_one_json_document_and_changes_no_state(
+    tmp_path: Path, config_home: Path, command_runner: RecordingRunner, calls: dict
+) -> None:
+    manifest = write_manifest(tmp_path)
+
+    result = runner.invoke(app, ["doctor", "--config", str(manifest)])
+
+    assert result.exit_code == 0, result.stderr
+    document = json.loads(result.stdout)
+    assert set(document) == {"status", "manifest", "plan", "results"}
+    assert document["status"] == "succeeded"
+    assert calls["verify"] == [manifest_state()]
+    assert calls["apply"] == []
+    assert manifest.read_text(encoding="utf-8") == MANIFEST_TOML
+    assert not config_home.exists()
+
+
+def test_doctor_defaults_to_the_standard_manifest_path(
+    config_home: Path, command_runner: RecordingRunner, calls: dict
+) -> None:
+    config_home.parent.mkdir(parents=True)
+    config_home.write_text(MANIFEST_TOML, encoding="utf-8")
+
+    result = runner.invoke(app, ["doctor"])
+
+    assert result.exit_code == 0, result.stderr
+    assert calls["verify"] == [manifest_state()]
+
+
+def test_doctor_with_an_invalid_manifest_exits_nonzero_without_verifying(
+    tmp_path: Path, config_home: Path, command_runner: RecordingRunner, calls: dict
+) -> None:
+    manifest = write_manifest(tmp_path, 'harnesses = ["codex"]\ncomponents = ["tilth"]\n')
+
+    result = runner.invoke(app, ["doctor", "--config", str(manifest)])
+
+    assert result.exit_code != 0
+    assert calls["verify"] == []
+    assert command_runner.commands == []
+    assert result.stdout == ""
+
+
+def test_doctor_reports_failure_with_a_nonzero_exit_code(
+    tmp_path: Path,
+    config_home: Path,
+    command_runner: RecordingRunner,
+    calls: dict,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    manifest = write_manifest(tmp_path)
+
+    def failing_verify(state: DesiredState, _adapters: object, _runner: object) -> DoctorReport:
+        plan = a_plan(state)
+        return DoctorReport(
+            status=ReportStatus.FAILED,
+            manifest=state,
+            plan=plan,
+            results=(a_result(StepStatus.FAILED),),
+        )
+
+    monkeypatch.setattr(cli, "verify_desired_state", failing_verify)
+
+    result = runner.invoke(app, ["doctor", "--config", str(manifest)])
+
+    assert result.exit_code != 0
+    assert json.loads(result.stdout)["status"] == "failed"
+
+
+# ─── Timeout plumbing ────────────────────────────────────────────────────────
+
+
+@pytest.fixture
+def built_timeouts(monkeypatch: pytest.MonkeyPatch) -> list[float | None]:
+    """Record the ``timeout`` every ``SubprocessRunner`` the CLI builds receives."""
+    recorded: list[float | None] = []
+
+    class TimeoutRecordingRunner(RecordingRunner):
+        def __init__(self, *, env: object = None, timeout: float | None = None) -> None:
+            super().__init__()
+            recorded.append(timeout)
+
+    monkeypatch.setattr(cli, "SubprocessRunner", TimeoutRecordingRunner)
+    monkeypatch.setattr(cli, "default_component_adapters", lambda _runner: {})
+    return recorded
+
+
+@pytest.mark.parametrize("command", ["install", "doctor"])
+def test_the_timeout_option_reaches_the_subprocess_runner(
+    tmp_path: Path,
+    config_home: Path,
+    calls: dict,
+    built_timeouts: list[float | None],
+    command: str,
+) -> None:
+    manifest = write_manifest(tmp_path)
+
+    result = runner.invoke(app, [command, "--config", str(manifest), "--timeout", "12.5"])
+
+    assert result.exit_code == 0, result.stderr
+    assert built_timeouts == [12.5]
+
+
+def test_without_the_timeout_option_the_runner_gets_the_package_default(
+    tmp_path: Path, config_home: Path, calls: dict, built_timeouts: list[float | None]
+) -> None:
+    manifest = write_manifest(tmp_path)
+
+    result = runner.invoke(app, ["install", "--config", str(manifest)])
+
+    assert result.exit_code == 0, result.stderr
+    assert built_timeouts == [DEFAULT_TIMEOUT_SECONDS]

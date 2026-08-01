@@ -1,9 +1,5 @@
 {
   "mcpServers": {
-    "milknado": {
-      "command": "uv",
-      "args": ["run", "cheese", "mcp"]
-    },
     "tilth": {
       "command": "npx",
       "args": ["tilth", "--mcp", "--edit"]

@@ -1,219 +1,250 @@
-"""Tests for `python/cheese_flow/lib/doctor.py`.
-
-`src/lib/doctor.ts` shipped without a matching `tests/doctor.test.ts`,
-so there were no vitest cases to port verbatim. These tests exercise
-the ported surface (`TOOL_CHECKS`, `run_tool_check`,
-`run_all_tool_checks`, `format_report`, `has_blocking_failure`) the way
-the TS suite would have, using a tmp_path executable for the
-subprocess-success case so we don't depend on whichever real binaries
-happen to be on the developer's PATH.
-"""
+"""Doctor tests: postconditions only, no mutation of cheese-managed state."""
 
 from __future__ import annotations
 
-import asyncio
-import stat
-import textwrap
+import json
 from pathlib import Path
 
 import pytest
-from cheese_flow.lib.doctor import (
-    TOOL_CHECKS,
-    ToolCheck,
-    ToolResult,
-    format_report,
-    has_blocking_failure,
-    run_all_tool_checks,
-    run_tool_check,
+from cheese_flow.adapters import default_component_adapters
+from cheese_flow.adapters.easy_cheese import CORE_SKILLS
+from cheese_flow.doctor import verify_desired_state
+from cheese_flow.models import (
+    CommandOutcome,
+    ConfigEdit,
+    ConfigEditSummary,
+    DesiredState,
+    Phase,
+    PlanStep,
+    ReportStatus,
+    StepStatus,
 )
+from test_install import FakeRunner, ScriptedAdapter, step
+
+STATE = DesiredState(harnesses=("claude-code",), components=("hallouminate", "easy-cheese"))
+
+HALLOUMINATE_VERSION = "0.42.1"
 
 
-def _make_executable(directory: Path, name: str, body: str) -> Path:
-    directory.mkdir(parents=True, exist_ok=True)
-    script = directory / name
-    script.write_text(body, encoding="utf-8")
-    script.chmod(script.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
-    return script
+def statuses(report: object) -> list[tuple[str, StepStatus]]:
+    return [(result.step_id, result.status) for result in report.results]  # type: ignore[attr-defined]
 
 
-def test_tool_checks_cover_required_recommended_and_suggested_tiers() -> None:
-    by_name = {check.name: check for check in TOOL_CHECKS}
-    assert by_name["tilth"].tier == "required"
-    assert by_name["mergiraf"].tier == "recommended"
-    assert by_name["rtk"].tier == "suggested"
-    assert {check.tier for check in TOOL_CHECKS} == {
-        "required",
-        "recommended",
-        "suggested",
-    }
-    for check in TOOL_CHECKS:
-        assert check.purpose
-        assert check.installHint
+def test_all_postconditions_satisfied_reports_success() -> None:
+    steps = (step("a"), step("b", depends_on=("a",)))
+    adapter = ScriptedAdapter("hallouminate", steps, {"a": [True], "b": [True]})
+    easy = ScriptedAdapter("easy-cheese", ())
+    runner = FakeRunner()
+
+    report = verify_desired_state(STATE, {"hallouminate": adapter, "easy-cheese": easy}, runner)
+
+    assert report.status is ReportStatus.SUCCEEDED
+    assert statuses(report) == [("a", StepStatus.SUCCEEDED), ("b", StepStatus.SUCCEEDED)]
+    assert report.manifest == STATE
+    assert [s.step_id for s in report.plan.steps] == ["a", "b"]
+    assert report.results[0].exit_code is None
+    assert report.results[0].stdout_tail is None
+    assert report.results[0].remediation is None
 
 
-def _result(
-    *,
-    name: str = "tilth",
-    tier: str = "required",
-    ok: bool = True,
-    version: str | None = None,
-    error: str | None = None,
-) -> ToolResult:
-    return ToolResult(
-        name=name,
-        tier=tier,  # type: ignore[arg-type]
-        purpose=f"{name} purpose",
-        installHint=f"install {name}",
-        ok=ok,
-        version=version,
-        error=error,
+def test_doctor_checks_every_step_even_after_a_failure() -> None:
+    steps = (step("a"), step("b", depends_on=("a",)), step("c"))
+    adapter = ScriptedAdapter("hallouminate", steps, {"a": [False], "b": [True], "c": [False]})
+    easy = ScriptedAdapter("easy-cheese", ())
+
+    report = verify_desired_state(
+        STATE, {"hallouminate": adapter, "easy-cheese": easy}, FakeRunner()
     )
 
-
-def test_format_report_renders_ok_results_with_version_and_purpose() -> None:
-    results = [_result(ok=True, version="tilth 1.2.3")]
-    report = format_report(results)
-    assert "cheese doctor — tool dependency check" in report
-    assert "[REQUIRED] tilth: ok" in report
-    assert "  tilth purpose" in report
-    assert "  found: tilth 1.2.3" in report
-
-
-def test_format_report_renders_ok_results_without_version_as_found() -> None:
-    results = [_result(ok=True, version=None)]
-    report = format_report(results)
-    assert "[REQUIRED] tilth: ok" in report
-    assert "  found" in report
-    assert "  found:" not in report
-
-
-def test_format_report_renders_missing_results_with_install_hint() -> None:
-    results = [
-        _result(name="mergiraf", tier="recommended", ok=False),
+    assert statuses(report) == [
+        ("a", StepStatus.FAILED),
+        ("b", StepStatus.SUCCEEDED),
+        ("c", StepStatus.FAILED),
     ]
-    report = format_report(results)
-    assert "[RECOMMENDED] mergiraf: missing" in report
-    assert "  install: install mergiraf" in report
+    assert report.status is ReportStatus.FAILED
+    assert adapter.checked == ["a", "b", "c"]
+    assert report.results[0].remediation == "postcondition not satisfied: a holds"
 
 
-def test_has_blocking_failure_is_true_only_for_missing_required_tools() -> None:
-    assert has_blocking_failure([_result(tier="required", ok=False)]) is True
-    assert has_blocking_failure([_result(tier="required", ok=True)]) is False
-    assert has_blocking_failure([_result(name="rtk", tier="suggested", ok=False)]) is False
-    assert has_blocking_failure([_result(name="mergiraf", tier="recommended", ok=False)]) is False
+def test_doctor_redacts_secrets_in_reported_argv(tmp_path: Path) -> None:
+    argv = ("gh", "auth", "status", "--token", "ghp_secret")
+    config_secret = ConfigEdit(
+        target=tmp_path / "mcp.json",
+        pointer="mcpServers.x.token",
+        value={"token": "ghp_config_secret"},
+    )
+    steps = (step("a", argv=argv), step("b", config_edit=config_secret))
+    adapter = ScriptedAdapter("hallouminate", steps, {"a": [True], "b": [False]})
+    easy = ScriptedAdapter("easy-cheese", ())
+
+    report = verify_desired_state(
+        STATE, {"hallouminate": adapter, "easy-cheese": easy}, FakeRunner()
+    )
+
+    assert report.results[0].argv == ("gh", "auth", "status", "--token", "***")
+
+    serialized = json.dumps(report.model_dump(mode="json"))
+    assert "ghp_secret" not in serialized
+    assert "ghp_config_secret" not in serialized
 
 
-def test_run_tool_check_returns_version_for_real_executable(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    bin_dir = tmp_path / "bin"
-    _make_executable(
-        bin_dir,
-        "fakery",
-        textwrap.dedent(
-            """\
-            #!/bin/sh
-            echo 'fakery 9.9.9'
-            """
+def test_doctor_never_applies_a_config_edit(tmp_path: Path) -> None:
+    from cheese_flow.models import ConfigEdit
+
+    target = tmp_path / "mcp.json"
+    target.write_text(json.dumps({"mcpServers": {}}), encoding="utf-8")
+    before = target.read_bytes()
+    edited = PlanStep(
+        step_id="cursor",
+        component="hallouminate",
+        phase=Phase.REGISTER,
+        config_edit=ConfigEdit(target=target, pointer="mcpServers.x", value={"command": "x"}),
+        postcondition="cursor holds x",
+    )
+    adapter = ScriptedAdapter("hallouminate", (edited,), {"cursor": [False]})
+    easy = ScriptedAdapter("easy-cheese", ())
+
+    report = verify_desired_state(
+        STATE, {"hallouminate": adapter, "easy-cheese": easy}, FakeRunner()
+    )
+
+    assert statuses(report) == [("cursor", StepStatus.FAILED)]
+    assert target.read_bytes() == before
+
+
+def _readonly_script(version: str) -> dict[tuple[str, ...], CommandOutcome]:
+    def ok(argv: tuple[str, ...], stdout: str) -> CommandOutcome:
+        return CommandOutcome(argv=argv, exit_code=0, stdout=stdout, stderr="", elapsed_ms=1)
+
+    # `gh skill list` reports the whole pack; the postcondition needs the full
+    # core quorum, and each entry carries the sourceURL gh derives from the
+    # installed SKILL.md frontmatter.
+    skills = json.dumps(
+        [
+            {
+                "agentHosts": ["claude-code", "cursor"],
+                "scope": "user",
+                "skillName": name,
+                "sourceURL": "https://github.com/paulnsorensen/easy-cheese",
+            }
+            for name in sorted(CORE_SKILLS)
+        ]
+    )
+    marketplaces = json.dumps(
+        [{"name": "hallouminate", "source": "github", "repo": "paulnsorensen/hallouminate"}]
+    )
+    fields = "agentHosts,scope,skillName,sourceURL"
+    return {
+        ("npm", "view", "hallouminate@latest", "version"): ok(
+            ("npm", "view", "hallouminate@latest", "version"), version
         ),
-    )
-    monkeypatch.setenv("PATH", str(bin_dir))
-    check = ToolCheck(
-        name="fakery",
-        tier="required",
-        purpose="fake tool",
-        installHint="brew install fakery",
-    )
-    result = asyncio.run(run_tool_check(check))
-    assert result.ok is True
-    assert result.version == "fakery 9.9.9"
-    assert result.error is None
-    assert result.name == "fakery"
-    assert result.tier == "required"
-
-
-def test_run_tool_check_marks_missing_when_executable_not_found(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    empty_dir = tmp_path / "empty"
-    empty_dir.mkdir()
-    monkeypatch.setenv("PATH", str(empty_dir))
-    check = ToolCheck(
-        name="definitely-not-a-real-binary-xyz",
-        tier="required",
-        purpose="...",
-        installHint="...",
-    )
-    result = asyncio.run(run_tool_check(check))
-    assert result.ok is False
-    assert result.version is None
-    assert result.error is not None and result.error != ""
-
-
-def test_run_tool_check_marks_failure_when_executable_exits_nonzero(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    bin_dir = tmp_path / "bin"
-    _make_executable(
-        bin_dir,
-        "grump",
-        textwrap.dedent(
-            """\
-            #!/bin/sh
-            exit 7
-            """
+        ("hallouminate", "--version"): ok(("hallouminate", "--version"), f"hallouminate {version}"),
+        ("claude", "plugin", "marketplace", "list", "--json"): ok(
+            ("claude", "plugin", "marketplace", "list", "--json"), marketplaces
         ),
-    )
-    monkeypatch.setenv("PATH", str(bin_dir))
-    check = ToolCheck(
-        name="grump",
-        tier="required",
-        purpose="grumpy",
-        installHint="install grump",
-    )
-    result = asyncio.run(run_tool_check(check))
-    assert result.ok is False
-    assert result.error == "exited with code 7"
-    assert result.version is None
-
-
-def test_run_tool_check_marks_ok_without_version_when_stdout_empty(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    bin_dir = tmp_path / "bin"
-    _make_executable(
-        bin_dir,
-        "silent",
-        textwrap.dedent(
-            """\
-            #!/bin/sh
-            exit 0
-            """
+        ("claude", "plugin", "list", "--json"): ok(
+            ("claude", "plugin", "list", "--json"),
+            json.dumps([{"id": "hallouminate@hallouminate", "scope": "user", "enabled": True}]),
         ),
-    )
-    monkeypatch.setenv("PATH", str(bin_dir))
-    check = ToolCheck(
-        name="silent",
-        tier="required",
-        purpose="silent",
-        installHint="install silent",
-    )
-    result = asyncio.run(run_tool_check(check))
-    assert result.ok is True
-    assert result.version is None
+        ("hallouminate", "config", "validate"): ok(("hallouminate", "config", "validate"), "ok"),
+        ("gh", "skill", "list", "--agent", "claude-code", "--scope", "user", "--json", fields): ok(
+            ("gh", "skill", "list", "--agent", "claude-code", "--scope", "user", "--json", fields),
+            skills,
+        ),
+        ("gh", "skill", "list", "--agent", "cursor", "--scope", "user", "--json", fields): ok(
+            ("gh", "skill", "list", "--agent", "cursor", "--scope", "user", "--json", fields),
+            skills,
+        ),
+    }
 
 
-def test_run_all_tool_checks_returns_one_result_per_tool_check(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
+def test_doctor_with_real_adapters_runs_only_read_only_commands(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    empty_dir = tmp_path / "empty"
-    empty_dir.mkdir()
-    monkeypatch.setenv("PATH", str(empty_dir))
-    results = asyncio.run(run_all_tool_checks())
-    assert len(results) == len(TOOL_CHECKS)
-    assert [r.name for r in results] == [c.name for c in TOOL_CHECKS]
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path))
+    cursor_config = tmp_path / ".cursor" / "mcp.json"
+    cursor_config.parent.mkdir()
+    cursor_config.write_text(
+        json.dumps(
+            {
+                "mcpServers": {
+                    "hallouminate": {"command": "hallouminate", "args": ["serve"]},
+                    "other": {"command": "other"},
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    before = cursor_config.read_bytes()
+    state = DesiredState(
+        harnesses=("claude-code", "cursor"), components=("hallouminate", "easy-cheese")
+    )
+    runner = FakeRunner(_readonly_script(HALLOUMINATE_VERSION))
+
+    report = verify_desired_state(state, default_component_adapters(runner), runner)
+
+    assert report.status is ReportStatus.SUCCEEDED
+    assert runner.argvs() == [
+        ("npm", "view", "hallouminate@latest", "version"),
+        ("hallouminate", "--version"),
+        ("claude", "plugin", "marketplace", "list", "--json"),
+        ("claude", "plugin", "list", "--json"),
+        ("hallouminate", "config", "validate"),
+        (
+            "gh",
+            "skill",
+            "list",
+            "--agent",
+            "claude-code",
+            "--scope",
+            "user",
+            "--json",
+            "agentHosts,scope,skillName,sourceURL",
+        ),
+        (
+            "gh",
+            "skill",
+            "list",
+            "--agent",
+            "cursor",
+            "--scope",
+            "user",
+            "--json",
+            "agentHosts,scope,skillName,sourceURL",
+        ),
+    ]
+    assert cursor_config.read_bytes() == before
+    assert [result.step_id for result in report.results] == [
+        "hallouminate:npm-install",
+        "hallouminate:marketplace:claude-code",
+        "hallouminate:plugin:claude-code",
+        "hallouminate:mcp:cursor",
+        "hallouminate:config-init",
+        "easy-cheese:install:claude-code",
+        "easy-cheese:install:cursor",
+    ]
+
+
+def test_doctor_identifies_the_file_a_config_edit_step_targets(tmp_path: Path) -> None:
+    """A config-edit step reports empty argv, so doctor must name its target too.
+
+    Apply already carried the summary; doctor did not, so ``cheese doctor --json``
+    showed ``argv: []`` with ``config_edit: null`` and no way to tell which file
+    the step is about.
+    """
+    target = tmp_path / "mcp.json"
+    edited = step(
+        "hallouminate:mcp:cursor",
+        config_edit=ConfigEdit(target=target, pointer="mcpServers.hallouminate", value={"a": 1}),
+        phase=Phase.REGISTER,
+    )
+    adapters = {
+        "hallouminate": ScriptedAdapter("hallouminate", (edited,), {edited.step_id: [True]}),
+        "easy-cheese": ScriptedAdapter("easy-cheese", ()),
+    }
+
+    report = verify_desired_state(STATE, adapters, FakeRunner())
+
+    result = report.results[0]
+    assert result.argv == ()
+    assert result.config_edit == ConfigEditSummary(target=target, pointer="mcpServers.hallouminate")

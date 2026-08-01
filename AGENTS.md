@@ -25,16 +25,16 @@ For anything else, call the underlying tool directly (`uv run cheese ...`, `uv r
 
 ## Required host tools
 
-- **uv** — Python toolchain for the `cheese` CLI, the unified MCP server, and `python/` checks.
+- **uv** — Python toolchain for the `cheese` CLI and `python/` checks.
 - **`sg` (ast-grep)** — invoked from agent prompts (e.g. `nih-scanner`) for AST-shape patterns the tilth MCP doesn't cover. Install with `brew install ast-grep` or `cargo install ast-grep`.
 
 ## Project Overview
 
-cheese-flow is opinionated scaffolding for portable agents and skills that compile into harness-specific markdown bundles (Claude Code, Codex, Cursor, Copilot CLI).
+cheese-flow is a composition installer for the cheese ecosystem: it installs and verifies `hallouminate`, `easy-cheese`, and `tilth` across Claude Code, Codex, and Cursor, driven by a declarative TOML manifest.
 
-- **Entry points**: `cheese` CLI (`python/cheese_flow/cli.py`), milknado Python TUI (`python/milknado/`)
-- **Architecture**: Sliced Bread — vertical slices under `python/cheese_flow/lib/` and `python/cheese_flow/adapters/`
-- **Templates**: Jinja2-rendered `agents/*.md.eta` and `skills/*/SKILL.md`
+- **Entry points**: `cheese` CLI (`python/cheese_flow/cli.py`)
+- **Architecture**: Sliced Bread — flat modules under `python/cheese_flow/` plus component adapters under `python/cheese_flow/adapters/`
+- **Templates**: Eta-rendered `agents/*.md.eta` and `skills/*/SKILL.md`
 - **Tests**: `tests/python/` (pytest)
 
 ## Code Style
