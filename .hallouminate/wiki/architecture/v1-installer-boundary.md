@@ -42,6 +42,17 @@ Milknado is post-v1 because its runtime is not ready for this installer contract
 7. Initialize each selected repository independently and continue after unrelated failures.
 8. Verify each result through Hallouminate's positive checks.
 
+## Headless output redaction
+
+The headless JSON contract emits one document carrying both the executed results and the plan they came from. Secret redaction must be enforced on the **producer** — the model that owns the field — not on the projection a consumer happens to read.[^7]
+
+Redacting only the result view leaves the plan beside it unredacted, and the same document republishes verbatim any secret the result just masked. Under `--dry-run` the plan *is* the entire body, so the leakiest path is the one a user tries first. The invariant now lives on the model as a field serializer over the argument vector and the config-edit value, and it recurses: a secret nested inside a config entry (canonically an `env` block) is redacted at any depth, not just at the top level.
+
+Two rules follow for anything added to this surface later:
+
+1. A new field that can carry user-supplied command input needs its own serializer. Enforcing redaction at the emit site instead means the next projection added silently bypasses it.
+2. Redaction *coverage* (which sinks are masked) and redaction *matching* (which tokens look secret) are separate concerns. The matching predicate recognizes `--flag value` and `NAME=value` forms; short flags, attached-value short flags, secret-named positionals, and credential-bearing URLs are **not** matched. Do not read the serializer's presence as proof that an arbitrary argument vector is safe to log.
+
 ## Deferred roadmap
 
 After v1:
@@ -70,3 +81,4 @@ The rationale is split into three records:
 [^3]: /home/paul/Dev/easy-cheese/README.md:149-232; https://cli.github.com/manual/gh_skill_install
 [^4]: pyproject.toml:7-15,31-32; python/cheese_flow/cli.py:148-214
 [^5]: /home/paul/Dev/cheez-wiki/.hallouminate/wiki/roadmap/unify-the-mcp-surface.md; /home/paul/Dev/cheez-wiki/.hallouminate/wiki/roadmap/cheese-flow-megazord.md
+[^7]: `python/cheese_flow/models.py` (the redaction primitive and its `PlanStep` / `ConfigEdit` field serializers); `python/cheese_flow/cli.py` (the single stdout JSON document). `tests/python/test_install.py` and `tests/python/test_doctor.py` assert the serialized document is secret-free across both the argument-vector and config-edit channels.
