@@ -1,0 +1,77 @@
+name: Smoke
+
+# A real `cheese install` on a runner stripped of gh and uv — the bare cloud box
+# the curl-pipe-sh one-liner claims to support. The unit suite shims every child
+# process, so it can prove control flow but never that the children terminate;
+# this job is the only gate that would catch a step sitting on a prompt.
+#
+# Scoped to the install path because it depends on npm and GitHub being
+# reachable, and an unrelated PR should not go red over a registry blip.
+
+on:
+  pull_request:
+    paths:
+      - bootstrap.sh
+      - python/cheese_flow/runner.py
+      - python/cheese_flow/install.py
+      - python/cheese_flow/adapters/**
+      - tests/smoke/**
+      - .github/workflows/smoke.yml
+  schedule:
+    # Catches breakage that arrives from outside the repository — a published
+    # `skills` release, an npm change — which no PR trigger ever would.
+    - cron: "17 6 * * *"
+  workflow_dispatch:
+
+jobs:
+  install:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+
+    strategy:
+      fail-fast: false
+      matrix:
+        harness: [claude-code, codex]
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6.0.2
+
+      # Deliberately no astral-sh/setup-uv: bootstrap.sh installing uv itself is
+      # half of what this job verifies.
+      - name: Strip the tools a bare host would not have
+        run: |
+          sudo rm -f "$(command -v gh)" || true
+          sudo rm -rf "$HOME/.cargo/bin/uv" "$HOME/.cargo/bin/uvx" || true
+          for tool in gh uv uvx; do
+            if command -v "$tool" >/dev/null 2>&1; then
+              echo "::error::$tool is still on PATH at $(command -v "$tool")"
+              exit 1
+            fi
+          done
+
+      - name: Install through bootstrap.sh
+        env:
+          # Without this the run installs the default branch and this job passes
+          # on code nobody is reviewing.
+          CHEESE_REPOSITORY: ${{ github.workspace }}
+        run: |
+          # `timeout` is the point: a child that waits on stdin turns into a
+          # failing exit code here instead of a job that burns its 20 minutes
+          # and reports nothing about which step is stuck.
+          timeout --signal=KILL 900 sh ./bootstrap.sh \
+            --harness ${{ matrix.harness }} --json --timeout 240 \
+            </dev/null | tee report.json
+
+      - name: Verify every step converged
+        run: python3 tests/smoke/assert_report.py report.json
+
+      - name: Upload the report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-report-${{ matrix.harness }}
+          path: report.json
+          if-no-files-found: warn

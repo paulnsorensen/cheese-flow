@@ -45,7 +45,7 @@ def _shim(directory: Path, name: str, body: str = RECORDING_SHIM) -> Path:
 
 
 def _invoke(
-    tmp_path: Path, *args: str, path: Path, home: Path
+    tmp_path: Path, *args: str, path: Path, home: Path, repository: str | None = None
 ) -> tuple[subprocess.CompletedProcess[str], list[str]]:
     """Run the script with ``path`` at the head of ``PATH``; return it and what ran."""
     record = tmp_path / "record"
@@ -59,6 +59,9 @@ def _invoke(
         "RECORD": str(record),
     }
     env.pop("XDG_BIN_HOME", None)
+    env.pop("CHEESE_REPOSITORY", None)
+    if repository is not None:
+        env["CHEESE_REPOSITORY"] = repository
     completed = subprocess.run(
         ["/bin/sh", str(SCRIPT_PATH), *args],
         capture_output=True,
@@ -69,8 +72,10 @@ def _invoke(
     return completed, record.read_text(encoding="utf-8").splitlines()
 
 
-def _run(tmp_path: Path, *args: str, path: Path, home: Path) -> list[str]:
-    completed, ran = _invoke(tmp_path, *args, path=path, home=home)
+def _run(
+    tmp_path: Path, *args: str, path: Path, home: Path, repository: str | None = None
+) -> list[str]:
+    completed, ran = _invoke(tmp_path, *args, path=path, home=home, repository=repository)
     assert completed.returncode == 0, completed.stderr
     return ran
 
@@ -129,6 +134,25 @@ def test_a_failed_uv_install_stops_the_run_and_names_the_real_failure(tmp_path: 
         f"{bin_dir / 'curl'} -fsSL --connect-timeout 10 --max-time 120 "
         "https://astral.sh/uv/install.sh"
     ]
+
+
+def test_cheese_repository_overrides_the_default_source(tmp_path: Path) -> None:
+    """Without this the smoke job installs the default branch and passes on code
+    nobody is reviewing — a green gate that never saw the change."""
+    bin_dir = tmp_path / "bin"
+    _shim(bin_dir, "uvx")
+    _shim(bin_dir, "curl")
+
+    ran = _run(
+        tmp_path,
+        "--harness",
+        "codex",
+        path=bin_dir,
+        home=tmp_path / "home",
+        repository="/srv/checkout",
+    )
+
+    assert ran == [f"{bin_dir / 'uvx'} --from /srv/checkout cheese install --harness codex"]
 
 
 def test_the_entry_point_is_executable_and_reaches_for_no_github_cli() -> None:

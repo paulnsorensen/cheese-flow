@@ -9,7 +9,11 @@
 # which is what the interactive wizard reads. Pass the state options.
 set -eu
 
-REPOSITORY="git+https://github.com/paulnsorensen/cheese-flow"
+# Overridable so a smoke test can install the checkout under review. Left to its
+# default this resolves to the repository's default branch, which is what the
+# curl-pipe-sh line above wants and what a CI job testing a pull request must
+# not get.
+REPOSITORY="${CHEESE_REPOSITORY:-git+https://github.com/paulnsorensen/cheese-flow}"
 
 if ! command -v uvx >/dev/null 2>&1; then
     echo "cheese: installing uv" >&2
