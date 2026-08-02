@@ -26,6 +26,10 @@ printf '%s\\n' "$0 $*" >> "$RECORD"
 UV_INSTALLER_SHIM = """#!/bin/sh
 printf '%s\\n' "$0 $*" >> "$RECORD"
 cat <<'INSTALLER'
+# The real installer narrates on stdout; reproduce that so the stream the
+# one-liner hands to a JSON parser is actually under test.
+echo "installing to $HOME/.local/bin"
+echo "everything's installed!"
 mkdir -p "$HOME/.local/bin"
 cat > "$HOME/.local/bin/uvx" <<'UVX'
 #!/bin/sh
@@ -134,6 +138,23 @@ def test_a_failed_uv_install_stops_the_run_and_names_the_real_failure(tmp_path: 
         f"{bin_dir / 'curl'} -fsSL --connect-timeout 10 --max-time 120 "
         "https://astral.sh/uv/install.sh"
     ]
+
+
+def test_stdout_carries_only_the_installs_own_output(tmp_path: Path) -> None:
+    """`--json` is the documented headless interface, so nothing may precede it.
+
+    The uv installer narrates on stdout. Left there it lands ahead of the JSON
+    document and breaks any caller piping the one-liner into a parser — only on
+    the bare hosts that need uv installed, which is where it matters most.
+    """
+    bin_dir = tmp_path / "bin"
+    _shim(bin_dir, "curl", UV_INSTALLER_SHIM)
+    # The generated uvx echoes a JSON-ish document, standing in for the report.
+    completed, _ = _invoke(tmp_path, "--json", path=bin_dir, home=tmp_path / "home")
+
+    assert completed.returncode == 0, completed.stderr
+    assert "installing to" not in completed.stdout
+    assert "everything's installed" not in completed.stdout
 
 
 def test_cheese_repository_overrides_the_default_source(tmp_path: Path) -> None:

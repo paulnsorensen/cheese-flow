@@ -52,12 +52,24 @@ jobs:
             fi
           done
 
+      # Registering a plugin with a harness needs that harness's CLI present.
+      # It is a prerequisite of the composition, not something cheese-flow
+      # installs — the cloud box this job models is one already running the
+      # agent. Without it the run fails on `could not run claude`.
+      - name: Install the harness CLI
+        run: npm install -g ${{ matrix.harness == 'codex' && '@openai/codex' || '@anthropic-ai/claude-code' }}
+
       - name: Install through bootstrap.sh
+        shell: bash
         env:
           # Without this the run installs the default branch and this job passes
           # on code nobody is reviewing.
           CHEESE_REPOSITORY: ${{ github.workspace }}
         run: |
+          # pipefail because a pipeline's status is its last command's: without
+          # it `tee` reports success and a failed install passes this step. That
+          # is the same trap bootstrap.sh guards against after `curl … | sh`.
+          set -o pipefail
           # `timeout` is the point: a child that waits on stdin turns into a
           # failing exit code here instead of a job that burns its 20 minutes
           # and reports nothing about which step is stuck.
@@ -65,7 +77,11 @@ jobs:
             --harness ${{ matrix.harness }} --json --timeout 240 \
             </dev/null | tee report.json
 
+      # `always()` so a nonzero install still gets graded: the step table naming
+      # which postcondition went unmet is the whole diagnostic value, and a bare
+      # failed exit code from the step above says nothing about where.
       - name: Verify every step converged
+        if: always()
         run: python3 tests/smoke/assert_report.py report.json
 
       - name: Upload the report
