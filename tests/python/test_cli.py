@@ -8,6 +8,7 @@ at their seams.
 
 from __future__ import annotations
 
+import io
 import json
 from collections.abc import Sequence
 from pathlib import Path
@@ -178,6 +179,9 @@ def calls(monkeypatch: pytest.MonkeyPatch) -> dict[str, list[object]]:
     monkeypatch.setattr(cli, "apply_install_plan", apply_install_plan)
     monkeypatch.setattr(cli, "verify_desired_state", verify_desired_state)
     monkeypatch.setattr(cli, "run_wizard", run_wizard)
+    # This fixture stands in a wizard that can be answered, and CliRunner's
+    # stdin is never a terminal. Tests about the no-terminal guard override it.
+    monkeypatch.setattr(cli, "_has_terminal", lambda: True)
     return recorded
 
 
@@ -263,6 +267,50 @@ def test_headless_install_never_runs_the_wizard(
     assert result.exit_code == 0, result.stderr
     assert calls["wizard"] == []
     assert calls["apply"] == [a_plan(manifest_state())]
+
+
+def test_the_wizard_without_a_terminal_names_the_options_that_avoid_it(
+    config_home: Path,
+    command_runner: RecordingRunner,
+    calls: dict,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """EOF on the first read is indistinguishable from a user quitting.
+
+    Reported as "Cancelled" it blames the operator for a run nobody could have
+    answered, so the failure has to name --harness/--component and --config.
+    """
+    monkeypatch.setattr(cli, "_has_terminal", lambda: False)
+
+    result = runner.invoke(app, ["install"])
+
+    assert result.exit_code == 1
+    assert calls["wizard"] == [], "the wizard must not be reached without a terminal"
+    assert "No terminal available" in result.stderr
+    assert "--harness" in result.stderr
+    assert "--config" in result.stderr
+
+
+def test_no_terminal_still_installs_headlessly_from_options(
+    config_home: Path,
+    command_runner: RecordingRunner,
+    calls: dict,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The guard gates the wizard, not the command: piped headless runs must survive it."""
+    monkeypatch.setattr(cli, "_has_terminal", lambda: False)
+
+    result = runner.invoke(app, ["install", "--harness", "claude-code"])
+
+    assert result.exit_code == 0, result.stderr
+    assert calls["wizard"] == []
+    assert len(calls["apply"]) == 1
+
+
+def test_the_probe_reads_the_real_stdin(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Guard the seam itself, so patching it in other tests cannot hide a broken probe."""
+    monkeypatch.setattr(cli.sys, "stdin", io.StringIO())
+    assert cli._has_terminal() is False
 
 
 def test_headless_install_stdout_carries_nothing_but_the_json_document(

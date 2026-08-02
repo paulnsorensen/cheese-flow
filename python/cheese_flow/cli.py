@@ -11,6 +11,7 @@ nothing else. Every prompt, progress line, and diagnostic goes to stderr.
 from __future__ import annotations
 
 import json
+import sys
 import tempfile
 from collections.abc import Mapping
 from pathlib import Path
@@ -235,7 +236,24 @@ def _headless_state(console: Console, config: Path | None) -> DesiredState:
         raise typer.Exit(_MANIFEST_EXIT_CODE) from error
 
 
+def _has_terminal() -> bool:
+    """Whether stdin can carry wizard answers — the one environment probe here."""
+    return sys.stdin.isatty()
+
+
 def _interactive_state(console: Console, *, dry_run: bool) -> DesiredState:
+    # The wizard reads stdin a line at a time. Without a terminal the first read
+    # returns EOF, which the wizard cannot distinguish from a user quitting, so
+    # the run would report "Cancelled" and hide the real problem: nobody could
+    # have answered. Fail here instead, where the options that avoid the wizard
+    # are still worth naming. bootstrap.sh reconnects /dev/tty for the
+    # curl-pipe-sh case, so reaching this means no terminal exists at all.
+    if not _has_terminal():
+        console.print(
+            "No terminal available for the wizard. Pass --harness/--component "
+            "to install headlessly, or --config <manifest> to apply a saved one."
+        )
+        raise typer.Exit(_FAILURE_EXIT_CODE)
     state = run_wizard(_prefill(console))
     if state is None:
         console.print("Cancelled: no manifest was written and nothing was installed.")

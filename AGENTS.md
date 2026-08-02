@@ -28,6 +28,36 @@ For anything else, call the underlying tool directly (`uv run cheese ...`, `uv r
 - **uv** — Python toolchain for the `cheese` CLI and `python/` checks.
 - **`sg` (ast-grep)** — invoked from agent prompts (e.g. `nih-scanner`) for AST-shape patterns the tilth MCP doesn't cover. Install with `brew install ast-grep` or `cargo install ast-grep`.
 
+## Pinned uv installer
+
+`bootstrap.sh` is the `curl … | sh` entry point, and the uv installer it downloads is the
+only code it runs that is not ours. It is pinned by version **and** SHA-256, and refuses to
+execute a body that does not match.
+
+Refresh the pin as part of cutting a release, so a fresh install never provisions a uv that
+is many releases stale:
+
+```bash
+UV_VERSION=$(curl -fsSL https://api.github.com/repos/astral-sh/uv/releases/latest | jq -r .tag_name)
+curl -fsSL --proto '=https' --tlsv1.2 "https://astral.sh/uv/${UV_VERSION}/install.sh" -o /tmp/uv-install.sh
+sha256sum /tmp/uv-install.sh
+```
+
+Set `UV_VERSION` and `UV_INSTALLER_SHA256` in `bootstrap.sh` to those two values, then run
+`just build`.
+
+Two rules for anyone touching this:
+
+1. **Keep the version in the URL.** Astral serves the unversioned `/uv/install.sh` from
+   whatever release is current, so a hash pinned against it breaks for every user on every
+   uv release. Only `/uv/<version>/install.sh` is frozen.
+2. **Never add an environment variable that skips verification.** A bypass knob is exactly
+   the hole the pin exists to close. Tests that need their own installer accepted rewrite
+   the constant in a copy of the script instead.
+
+A hash mismatch against a frozen versioned URL means the content changed underneath a
+release that should be immutable. Treat that as a supply-chain incident, not a stale pin.
+
 ## Project Overview
 
 cheese-flow is a composition installer for the cheese ecosystem: it installs and verifies `hallouminate`, `easy-cheese`, and `tilth` across Claude Code, Codex, and Cursor, driven by a declarative TOML manifest.
