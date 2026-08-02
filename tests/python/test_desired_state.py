@@ -8,9 +8,11 @@ import pytest
 from cheese_flow import desired_state as ds
 from cheese_flow.desired_state import (
     ManifestError,
+    OptionError,
     default_config_path,
     load_desired_state,
     save_desired_state,
+    state_from_options,
 )
 from cheese_flow.models import DEFAULT_MAX_DEPTH, DesiredState, RepositorySelection
 from pydantic import ValidationError
@@ -481,3 +483,57 @@ def test_the_wizard_cannot_build_a_state_the_loader_would_reject() -> None:
         )
 
     assert "selected repositories are not under any search root: /srv/b/foo" in str(caught.value)
+
+
+# ─── Options, not a manifest ─────────────────────────────────────────────────
+
+
+def a_repository(path: Path) -> Path:
+    (path / ".git").mkdir(parents=True)
+    return path.resolve()
+
+
+def test_state_from_options_accepts_repositories_and_roots_them_at_their_parents(
+    tmp_path: Path,
+) -> None:
+    repository = a_repository(tmp_path / "code" / "project")
+
+    state = state_from_options(("codex",), ("hallouminate", "easy-cheese"), (repository,))
+
+    assert state.repositories.selected == (repository,)
+    assert state.repositories.search_roots == (repository.parent,)
+
+
+def test_state_from_options_rejects_a_repo_path_that_is_not_a_repository(tmp_path: Path) -> None:
+    """A path the installer cannot index fails here, not as a blocked step mid-apply."""
+    stranger = tmp_path / "not-a-repository"
+    stranger.mkdir()
+
+    with pytest.raises(OptionError) as caught:
+        state_from_options(("codex",), ("hallouminate", "easy-cheese"), (stranger,))
+
+    assert str(caught.value) == f"not a git repository: {stranger.resolve()}"
+
+
+def test_state_from_options_names_every_rejected_path(tmp_path: Path) -> None:
+    """A directory that is not a repository and a path that is not there at all."""
+    first = tmp_path / "one"
+    second = tmp_path / "two"
+    first.mkdir()  # `second` is never created: the mistyped-path case.
+    repository = a_repository(tmp_path / "real")
+
+    with pytest.raises(OptionError) as caught:
+        state_from_options(("codex",), ("hallouminate", "easy-cheese"), (first, repository, second))
+
+    assert str(caught.value) == f"not a git repository: {first.resolve()}, {second.resolve()}"
+
+
+def test_state_from_options_accepts_a_linked_worktree(tmp_path: Path) -> None:
+    """A worktree's ``.git`` is a file, not a directory; it is still a repository."""
+    worktree = tmp_path / "code" / "linked"
+    worktree.mkdir(parents=True)
+    (worktree / ".git").write_text("gitdir: /elsewhere/.git/worktrees/linked\n", encoding="utf-8")
+
+    state = state_from_options(("codex",), ("hallouminate", "easy-cheese"), (worktree,))
+
+    assert state.repositories.selected == (worktree.resolve(),)

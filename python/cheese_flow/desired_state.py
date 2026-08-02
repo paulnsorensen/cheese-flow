@@ -18,6 +18,7 @@ from cheese_flow.models import (
     RepositorySelection,
     canonicalize,
 )
+from cheese_flow.repositories import is_repository
 
 
 class ManifestError(Exception):
@@ -60,8 +61,15 @@ def state_from_options(
     Repository paths are resolved against the working directory, so a caller may
     name one relatively; each selection's parent becomes its search root, which
     is the narrowest root that satisfies the selection-under-a-root rule.
+
+    A path that is not a git repository is rejected here, before planning: the
+    installer can only index repositories, so accepting one would buy nothing
+    but a blocked step in the middle of an otherwise applied run.
     """
     selected = tuple(dict.fromkeys(canonicalize(path) for path in repositories))
+    strangers = [str(path) for path in selected if not is_repository(path)]
+    if strangers:
+        raise OptionError(f"not a git repository: {', '.join(strangers)}")
     search_roots = tuple(dict.fromkeys(path.parent for path in selected))
     try:
         return DesiredState(

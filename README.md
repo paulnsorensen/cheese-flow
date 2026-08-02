@@ -25,8 +25,22 @@ A composition installer for the cheese ecosystem: it installs and verifies `hall
 - `references/` — long-form architectural references (Sliced Bread, etc.)
 - `.claude-plugin/` / `.cursor-plugin/` — this repo's own Claude Code / Cursor plugin manifests
 - `.mcp.json` — shared MCP server declarations (tilth, Context7, Tavily)
+- `bootstrap.sh` — the curl-pipe-sh entry point: installs `uv` when absent, then runs `cheese install`
 
 ## Getting started
+
+On a bare box — a cloud sandbox, a fresh VM, a container with nothing but curl, git, and node — one line does the whole install:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/paulnsorensen/cheese-flow/main/bootstrap.sh \
+  | sh -s -- --harness claude-code
+```
+
+`bootstrap.sh` installs `uv` when it is absent and hands every argument after `--` to `cheese install`. Pass the state options: piping the script into `sh` consumes stdin, which is what the interactive wizard reads, so this path is headless by construction.
+
+The only host prerequisites are `curl`, `git`, and the `npm` toolchain the components install themselves with. No GitHub CLI is needed.
+
+### From a checkout
 
 Host prerequisite: `uv` on `PATH`.
 
@@ -78,7 +92,7 @@ Installs the selected components for the selected harnesses and repositories.
 | `--config PATH` | Apply this manifest headlessly instead of running the wizard |
 | `--harness NAMES` | Harnesses to manage, comma- or space-separated. Repeatable. Runs headlessly |
 | `--component NAMES` | Components to install, comma- or space-separated. Defaults to all of them |
-| `--repo PATHS` | Repositories to index, comma- or space-separated. Relative paths are resolved |
+| `--repo PATHS` | Repositories to index, comma- or space-separated. Relative paths are resolved. Each must be a git repository |
 | `--write-config` | Persist the resolved manifest. Options are ephemeral without it |
 | `--dry-run` | Emit the plan without changing managed state |
 | `--json` | Write one JSON document to stdout (also runs headlessly) |
@@ -86,7 +100,7 @@ Installs the selected components for the selected harnesses and repositories.
 
 With no `--config`/`--json` and no state options, `install` runs the interactive wizard and, on acceptance, persists the manifest to the default config path before applying it.
 
-`--harness`/`--component`/`--repo` declare the desired state without a manifest file, which is the CI and cloud path — nothing is persisted unless you pass `--write-config`. Each selected repository's parent becomes its search root. Two combinations are rejected: `--config` with any state option (two sources of state), and `--write-config` with `--dry-run` (a dry run persists nothing).
+`--harness`/`--component`/`--repo` declare the desired state without a manifest file, which is the CI and cloud path — nothing is persisted unless you pass `--write-config`. Each selected repository's parent becomes its search root, and a `--repo` path that is not a git repository is rejected before anything is planned. Two combinations are rejected: `--config` with any state option (two sources of state), and `--write-config` with `--dry-run` (a dry run persists nothing).
 
 ### `cheese doctor`
 

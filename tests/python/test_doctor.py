@@ -116,24 +116,9 @@ def _readonly_script(version: str) -> dict[tuple[str, ...], CommandOutcome]:
     def ok(argv: tuple[str, ...], stdout: str) -> CommandOutcome:
         return CommandOutcome(argv=argv, exit_code=0, stdout=stdout, stderr="", elapsed_ms=1)
 
-    # `gh skill list` reports the whole pack; the postcondition needs the full
-    # core quorum, and each entry carries the sourceURL gh derives from the
-    # installed SKILL.md frontmatter.
-    skills = json.dumps(
-        [
-            {
-                "agentHosts": ["claude-code", "cursor"],
-                "scope": "user",
-                "skillName": name,
-                "sourceURL": "https://github.com/paulnsorensen/easy-cheese",
-            }
-            for name in sorted(CORE_SKILLS)
-        ]
-    )
     marketplaces = json.dumps(
         [{"name": "hallouminate", "source": "github", "repo": "paulnsorensen/hallouminate"}]
     )
-    fields = "agentHosts,scope,skillName,sourceURL"
     return {
         ("npm", "view", "hallouminate@latest", "version"): ok(
             ("npm", "view", "hallouminate@latest", "version"), version
@@ -147,21 +132,27 @@ def _readonly_script(version: str) -> dict[tuple[str, ...], CommandOutcome]:
             json.dumps([{"id": "hallouminate@hallouminate", "scope": "user", "enabled": True}]),
         ),
         ("hallouminate", "config", "validate"): ok(("hallouminate", "config", "validate"), "ok"),
-        ("gh", "skill", "list", "--agent", "claude-code", "--scope", "user", "--json", fields): ok(
-            ("gh", "skill", "list", "--agent", "claude-code", "--scope", "user", "--json", fields),
-            skills,
-        ),
-        ("gh", "skill", "list", "--agent", "cursor", "--scope", "user", "--json", fields): ok(
-            ("gh", "skill", "list", "--agent", "cursor", "--scope", "user", "--json", fields),
-            skills,
-        ),
     }
+
+
+def install_core_skills(home: Path) -> None:
+    """Put the easy-cheese pack where a global `skills add` leaves it.
+
+    Claude Code reads its own directory, Cursor the canonical store both share.
+    """
+    for relative in (".claude/skills", ".agents/skills"):
+        for name in sorted(CORE_SKILLS):
+            directory = home / relative / name
+            directory.mkdir(parents=True, exist_ok=True)
+            (directory / "SKILL.md").write_text(f"# {name}\n", encoding="utf-8")
 
 
 def test_doctor_with_real_adapters_runs_only_read_only_commands(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path))
+    monkeypatch.delenv("CLAUDE_CONFIG_DIR", raising=False)
+    install_core_skills(tmp_path)
     cursor_config = tmp_path / ".cursor" / "mcp.json"
     cursor_config.parent.mkdir()
     cursor_config.write_text(
@@ -190,28 +181,6 @@ def test_doctor_with_real_adapters_runs_only_read_only_commands(
         ("claude", "plugin", "marketplace", "list", "--json"),
         ("claude", "plugin", "list", "--json"),
         ("hallouminate", "config", "validate"),
-        (
-            "gh",
-            "skill",
-            "list",
-            "--agent",
-            "claude-code",
-            "--scope",
-            "user",
-            "--json",
-            "agentHosts,scope,skillName,sourceURL",
-        ),
-        (
-            "gh",
-            "skill",
-            "list",
-            "--agent",
-            "cursor",
-            "--scope",
-            "user",
-            "--json",
-            "agentHosts,scope,skillName,sourceURL",
-        ),
     ]
     assert cursor_config.read_bytes() == before
     assert [result.step_id for result in report.results] == [

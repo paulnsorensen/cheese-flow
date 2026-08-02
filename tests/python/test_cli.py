@@ -70,6 +70,12 @@ class RecordingRunner:
         return CommandOutcome(argv=tuple(argv), exit_code=0, stdout="", stderr="", elapsed_ms=0)
 
 
+def make_repository(path: Path) -> Path:
+    """A real git repository, which ``--repo`` now requires its paths to be."""
+    (path / ".git").mkdir(parents=True)
+    return path
+
+
 def manifest_state() -> DesiredState:
     return DesiredState(
         harnesses=("claude-code",),
@@ -304,8 +310,7 @@ def test_json_flag_without_config_runs_headless_from_the_default_manifest(
 def test_options_build_the_desired_state_without_a_manifest(
     tmp_path: Path, config_home: Path, command_runner: RecordingRunner, calls: dict
 ) -> None:
-    project = tmp_path / "code" / "project"
-    project.mkdir(parents=True)
+    project = make_repository(tmp_path / "code" / "project")
 
     result = runner.invoke(
         app,
@@ -370,8 +375,7 @@ def test_a_relative_repo_option_resolves_against_the_working_directory(
     calls: dict,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    project = tmp_path / "code" / "project"
-    project.mkdir(parents=True)
+    project = make_repository(tmp_path / "code" / "project")
     monkeypatch.chdir(project.parent)
 
     result = runner.invoke(app, ["install", "--harness", "claude-code", "--repo", "project"])
@@ -392,8 +396,7 @@ def test_options_are_ephemeral_unless_write_config_is_passed(
 def test_write_config_persists_the_option_built_manifest(
     tmp_path: Path, config_home: Path, command_runner: RecordingRunner, calls: dict
 ) -> None:
-    project = tmp_path / "code" / "project"
-    project.mkdir(parents=True)
+    project = make_repository(tmp_path / "code" / "project")
 
     result = runner.invoke(
         app,

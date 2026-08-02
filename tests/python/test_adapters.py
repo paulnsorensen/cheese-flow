@@ -4,6 +4,7 @@ positive postconditions driven entirely through a scripted fake ``CommandRunner`
 from __future__ import annotations
 
 import json
+import re
 from collections.abc import Sequence
 from pathlib import Path
 
@@ -13,8 +14,9 @@ from cheese_flow.adapters import (
     HallouminateAdapter,
     TilthAdapter,
     default_component_adapters,
+    easy_cheese,
 )
-from cheese_flow.adapters.easy_cheese import CORE_SKILLS, _normalize_source
+from cheese_flow.adapters.easy_cheese import AGENT_TOKENS, CORE_SKILLS, skills_directory
 from cheese_flow.adapters.hallouminate import _owner_repo
 from cheese_flow.models import (
     CommandOutcome,
@@ -801,7 +803,22 @@ def test_hallouminate_repo_postcondition_rejects_an_empty_target_from_inside_the
 # --------------------------------------------------------------------------
 
 
-def test_easy_cheese_plans_one_gh_skill_install_per_harness() -> None:
+SKILLS_ADD_ARGV = (
+    "npx",
+    "-y",
+    "skills@latest",
+    "add",
+    "paulnsorensen/easy-cheese",
+    "--skill",
+    "*",
+    "--agent",
+    "cursor",
+    "--global",
+    "--yes",
+)
+
+
+def test_easy_cheese_plans_one_skills_add_per_harness() -> None:
     runner = FakeRunner()
     steps = EasyCheeseAdapter(runner).plan_steps(state())
 
@@ -810,160 +827,210 @@ def test_easy_cheese_plans_one_gh_skill_install_per_harness() -> None:
         "easy-cheese:install:codex",
         "easy-cheese:install:cursor",
     ]
-    assert steps[2].argv == (
-        "gh",
-        "skill",
-        "install",
-        "paulnsorensen/easy-cheese",
-        "--all",
-        "--agent",
-        "cursor",
-        "--scope",
-        "user",
-    )
+    assert steps[2].argv == SKILLS_ADD_ARGV
     assert steps[2].phase is Phase.REGISTER
     assert steps[2].depends_on == ()
     assert runner.argvs() == []
 
 
-LIST_ARGV = (
-    "gh",
-    "skill",
-    "list",
-    "--agent",
-    "claude-code",
-    "--scope",
-    "user",
-    "--json",
-    "agentHosts,scope,skillName,sourceURL",
-)
+def test_easy_cheese_uses_the_agent_token_the_skills_cli_accepts() -> None:
+    steps = steps_by_id(EasyCheeseAdapter(FakeRunner()).plan_steps(state()))
+
+    assert [_agent_token(step) for step in steps.values()] == ["claude-code", "codex", "cursor"]
+    assert set(AGENT_TOKENS) == set(ALL_HARNESSES)
 
 
-def gh_list(entries: list[dict[str, object]], *, exit_code: int = 0) -> FakeRunner:
-    return FakeRunner(
-        {LIST_ARGV: outcome(LIST_ARGV, exit_code=exit_code, stdout=json.dumps(entries))}
-    )
+def _agent_token(step: PlanStep) -> str:
+    return step.argv[step.argv.index("--agent") + 1]
 
 
-def easy_cheese_step() -> PlanStep:
-    return steps_by_id(EasyCheeseAdapter(FakeRunner()).plan_steps(state()))[
-        "easy-cheese:install:claude-code"
+def test_easy_cheese_needs_no_gh_anywhere_in_the_adapter() -> None:
+    """acceptance:21 — `gh` is an undeclared prerequisite a cloud box does not have."""
+    source = Path(easy_cheese.__file__).read_text(encoding="utf-8")
+
+    assert re.search(r"\bgh\b", source) is None
+
+
+def test_easy_cheese_skips_a_harness_the_skills_cli_cannot_target(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A harness with no accepted `--agent` token gets no step, not one that cannot converge."""
+    monkeypatch.delitem(AGENT_TOKENS, "cursor")
+
+    steps = EasyCheeseAdapter(FakeRunner()).plan_steps(state())
+
+    assert [s.step_id for s in steps] == [
+        "easy-cheese:install:claude-code",
+        "easy-cheese:install:codex",
     ]
 
 
-def sourced_entry(
-    name: str, *, harness: str = "claude-code", source: str = "paulnsorensen/easy-cheese"
-) -> dict[str, object]:
-    """A `gh skill list --json` row for a skill gh installed from a repository."""
-    return {
-        "agentHosts": [harness],
-        "scope": "user",
-        "skillName": name,
-        "sourceURL": f"https://github.com/{source}",
-    }
+@pytest.fixture
+def sandbox_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    home = tmp_path / "home"
+    home.mkdir()
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.delenv("CLAUDE_CONFIG_DIR", raising=False)
+    return home
 
 
-def test_easy_cheese_postcondition_confirms_source_agent_scope_and_skills() -> None:
-    adapter = EasyCheeseAdapter(FakeRunner())
-    runner = gh_list([sourced_entry(name) for name in CORE_SKILLS])
-    assert adapter.check_postcondition(easy_cheese_step(), runner) is True
-    assert runner.argvs() == [LIST_ARGV]
+def easy_cheese_step(harness: str = "claude-code") -> PlanStep:
+    return steps_by_id(EasyCheeseAdapter(FakeRunner()).plan_steps(state()))[
+        f"easy-cheese:install:{harness}"
+    ]
 
 
-def test_easy_cheese_postcondition_requires_the_full_core_quorum_from_our_source() -> None:
-    # `--all` installs the whole pack; a partial install is not convergence.
-    partial = gh_list([sourced_entry(name) for name in sorted(CORE_SKILLS)[:-1]])
-    assert EasyCheeseAdapter(FakeRunner()).check_postcondition(easy_cheese_step(), partial) is False
-
-
-def test_easy_cheese_postcondition_ignores_a_foreign_pack_carrying_a_source() -> None:
-    # M-A1: an unrelated pack reporting its own sourceURL must not veto ours.
-    entries = [sourced_entry(name) for name in CORE_SKILLS]
-    entries.append(sourced_entry("terraform", source="hashicorp/skills"))
-    runner = gh_list(entries)
-    assert EasyCheeseAdapter(FakeRunner()).check_postcondition(easy_cheese_step(), runner) is True
+def install_skills(directory: Path, names: Sequence[str]) -> Path:
+    """What `skills add --global` leaves on disk: one directory per skill."""
+    for name in names:
+        (directory / name).mkdir(parents=True, exist_ok=True)
+        (directory / name / "SKILL.md").write_text(f"# {name}\n", encoding="utf-8")
+    return directory
 
 
 @pytest.mark.parametrize(
-    "override",
+    ("harness", "relative"),
     [
-        pytest.param({"scope": "project"}, id="wrong-scope"),
-        pytest.param({"agentHosts": ["codex"]}, id="wrong-agent"),
-        pytest.param({"sourceURL": "https://github.com/someone/other-skills"}, id="wrong-source"),
-        pytest.param({"skillName": ""}, id="no-skill-installed"),
+        pytest.param("claude-code", ".claude/skills", id="claude-code"),
+        pytest.param("codex", ".agents/skills", id="codex"),
+        pytest.param("cursor", ".agents/skills", id="cursor"),
     ],
 )
-def test_easy_cheese_postcondition_rejects_wrong_end_state(override: dict[str, object]) -> None:
-    # A full core quorum is present in every case; `gh skill list` exits 0 in
-    # every case. Only the parsed end state distinguishes them.
-    entries = [sourced_entry(name) | override for name in CORE_SKILLS]
+def test_easy_cheese_postcondition_reads_the_harness_skills_directory(
+    harness: str, relative: str, sandbox_home: Path
+) -> None:
+    """Each harness is verified where the `skills` CLI actually writes its pack.
+
+    Codex and Cursor read the shared `.agents/skills` store the CLI treats as
+    canonical; Claude Code gets its own directory, linked per skill.
+    """
+    step = easy_cheese_step(harness)
+    adapter = EasyCheeseAdapter(FakeRunner())
+    assert adapter.check_postcondition(step, FakeRunner()) is False
+
+    install_skills(sandbox_home / relative, sorted(CORE_SKILLS))
+
+    assert adapter.check_postcondition(step, FakeRunner()) is True
+    assert str(sandbox_home / relative) in step.postcondition
+
+
+def test_easy_cheese_raises_rather_than_guessing_a_directory_for_an_unlisted_harness(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A harness with no recorded directory must not fall through to another one's.
+
+    Defaulting would verify a directory the install never wrote and report a
+    harness as converged that the pack never reached.
+    """
+    monkeypatch.delitem(easy_cheese._SKILLS_DIRS, "cursor")
+
+    with pytest.raises(KeyError):
+        skills_directory("cursor")
+
+
+def test_easy_cheese_postcondition_does_not_read_another_harnesss_directory(
+    sandbox_home: Path,
+) -> None:
+    """One harness's pack must never satisfy a harness that reads elsewhere.
+
+    Claude Code's directory and the canonical store are distinct places, and
+    collapsing them — in either direction — would report an install that never
+    reached the harness the step names.
+    """
+    adapter = EasyCheeseAdapter(FakeRunner())
+    install_skills(sandbox_home / ".claude" / "skills", sorted(CORE_SKILLS))
+
+    assert adapter.check_postcondition(easy_cheese_step("claude-code"), FakeRunner()) is True
+    assert adapter.check_postcondition(easy_cheese_step("codex"), FakeRunner()) is False
+    assert adapter.check_postcondition(easy_cheese_step("cursor"), FakeRunner()) is False
+
+
+def test_easy_cheese_postcondition_runs_no_command_so_a_host_without_gh_converges(
+    sandbox_home: Path,
+) -> None:
+    """acceptance:24 — the check is a filesystem read; an unreachable `gh` cannot break it."""
+    install_skills(sandbox_home / ".claude" / "skills", sorted(CORE_SKILLS))
+    runner = FakeRunner()
+
+    assert EasyCheeseAdapter(FakeRunner()).check_postcondition(easy_cheese_step(), runner) is True
+    assert runner.argvs() == []
+
+
+def test_easy_cheese_postcondition_requires_the_full_core_quorum(sandbox_home: Path) -> None:
+    # The step installs the whole pack; a partial install is not convergence.
+    install_skills(sandbox_home / ".claude" / "skills", sorted(CORE_SKILLS)[:-1])
+
     assert (
-        EasyCheeseAdapter(FakeRunner()).check_postcondition(easy_cheese_step(), gh_list(entries))
+        EasyCheeseAdapter(FakeRunner()).check_postcondition(easy_cheese_step(), FakeRunner())
         is False
     )
 
 
-def test_easy_cheese_postcondition_false_on_empty_listing_and_bad_json() -> None:
-    adapter = EasyCheeseAdapter(FakeRunner())
-    assert adapter.check_postcondition(easy_cheese_step(), gh_list([])) is False
+def test_easy_cheese_postcondition_rejects_a_skill_directory_without_its_skill_file(
+    sandbox_home: Path,
+) -> None:
+    """An empty directory of the right name is not an installed skill."""
+    skills = install_skills(sandbox_home / ".claude" / "skills", sorted(CORE_SKILLS))
+    (skills / "cook" / "SKILL.md").unlink()
 
-    garbage = FakeRunner({LIST_ARGV: outcome(LIST_ARGV, stdout="not json")})
-    assert adapter.check_postcondition(easy_cheese_step(), garbage) is False
-
-    failed = gh_list([], exit_code=1)
-    assert adapter.check_postcondition(easy_cheese_step(), failed) is False
-
-
-def blank_source_entry(name: str, *, harness: str = "claude-code") -> dict[str, object]:
-    """A locally authored skill: gh wrote no install metadata, so no source."""
-    return {"agentHosts": [harness], "scope": "user", "skillName": name, "sourceURL": ""}
-
-
-def test_easy_cheese_postcondition_rejects_locally_authored_core_skills() -> None:
-    # M-A2: `gh skill list --scope user` reports every hand-written skill in the
-    # harness directory with `sourceURL: ""`. A machine whose author happens to
-    # keep skills named `mold`/`cook`/... must not read as an installed pack.
-    runner = gh_list([blank_source_entry(name) for name in CORE_SKILLS])
-    assert EasyCheeseAdapter(FakeRunner()).check_postcondition(easy_cheese_step(), runner) is False
-
-
-def test_easy_cheese_postcondition_rejects_a_harness_missing_core_skills() -> None:
-    runner = gh_list([blank_source_entry(name) for name in ("chezmoi", "prek", "explain")])
-    assert EasyCheeseAdapter(FakeRunner()).check_postcondition(easy_cheese_step(), runner) is False
-
-
-def test_easy_cheese_postcondition_keeps_source_matching_authoritative() -> None:
-    # A full core quorum from a foreign pack must not satisfy the step.
-    runner = gh_list([sourced_entry(name, source="someone/other-skills") for name in CORE_SKILLS])
-    assert EasyCheeseAdapter(FakeRunner()).check_postcondition(easy_cheese_step(), runner) is False
-
-
-def test_easy_cheese_postcondition_ignores_core_skills_owned_by_another_harness() -> None:
-    entries = [sourced_entry(name, harness="codex") for name in CORE_SKILLS]
-    runner = gh_list(entries)
-    assert EasyCheeseAdapter(FakeRunner()).check_postcondition(easy_cheese_step(), runner) is False
-
-
-def test_easy_cheese_accepts_bare_owner_repo_source() -> None:
-    entries = [
-        {
-            "agentHosts": ["claude-code", "cursor"],
-            "scope": "user",
-            "skillName": name,
-            "sourceURL": "paulnsorensen/easy-cheese.git",
-        }
-        for name in CORE_SKILLS
-    ]
     assert (
-        EasyCheeseAdapter(FakeRunner()).check_postcondition(easy_cheese_step(), gh_list(entries))
+        EasyCheeseAdapter(FakeRunner()).check_postcondition(easy_cheese_step(), FakeRunner())
+        is False
+    )
+
+
+def test_easy_cheese_postcondition_ignores_skills_outside_the_core_quorum(
+    sandbox_home: Path,
+) -> None:
+    install_skills(sandbox_home / ".claude" / "skills", [*sorted(CORE_SKILLS), "chezmoi", "prek"])
+
+    assert (
+        EasyCheeseAdapter(FakeRunner()).check_postcondition(easy_cheese_step(), FakeRunner())
         is True
     )
 
 
-def test_normalize_source_normalizes_scp_https_and_git_suffix_forms() -> None:
-    assert _normalize_source("git@github.com:owner/repo.git") == "owner/repo"
-    assert _normalize_source("https://github.com/owner/repo.git") == "owner/repo"
-    assert _normalize_source("https://github.com/owner/repo") == "owner/repo"
+def test_easy_cheese_postcondition_resolves_a_symlinked_skill(sandbox_home: Path) -> None:
+    """The CLI symlinks into the harness directory by default; the check follows links."""
+    canonical = install_skills(sandbox_home / ".agents" / "skills", sorted(CORE_SKILLS))
+    linked = sandbox_home / ".claude" / "skills"
+    linked.mkdir(parents=True)
+    for name in sorted(CORE_SKILLS):
+        (linked / name).symlink_to(canonical / name, target_is_directory=True)
+
+    assert (
+        EasyCheeseAdapter(FakeRunner()).check_postcondition(easy_cheese_step(), FakeRunner())
+        is True
+    )
+
+
+def test_easy_cheese_postcondition_honours_the_claude_config_dir_override(
+    sandbox_home: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The `skills` CLI writes where `CLAUDE_CONFIG_DIR` points, so the check reads there."""
+    elsewhere = tmp_path / "claude-config"
+    install_skills(elsewhere / "skills", sorted(CORE_SKILLS))
+    install_skills(sandbox_home / ".claude" / "skills", ["cook"])
+    monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(elsewhere))
+
+    assert skills_directory("claude-code") == elsewhere / "skills"
+    assert (
+        EasyCheeseAdapter(FakeRunner()).check_postcondition(easy_cheese_step(), FakeRunner())
+        is True
+    )
+
+
+def test_easy_cheese_postcondition_rejects_a_step_without_a_harness() -> None:
+    orphan = PlanStep(
+        step_id="easy-cheese:install:none",
+        component="easy-cheese",
+        phase=Phase.REGISTER,
+        argv=("npx", "-y", "skills@latest"),
+        postcondition="never",
+    )
+
+    with pytest.raises(ValueError, match="has no harness"):
+        EasyCheeseAdapter(FakeRunner()).check_postcondition(orphan, FakeRunner())
 
 
 # --------------------------------------------------------------------------
