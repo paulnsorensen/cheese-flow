@@ -104,6 +104,16 @@ main() {
         exit 1
     fi
 
+    # git has no read timeout of its own: a proxied host that accepts the
+    # connection and then stalls hangs the uvx clone below forever, before
+    # `cheese install`'s own per-command timeout exists to catch it. Exporting
+    # rather than flagging means every git the install tree runs — this clone
+    # and every child clone `cheese install` runs later — inherits the bound.
+    # `:-` defaults keep a caller's own tuning authoritative.
+    GIT_HTTP_LOW_SPEED_LIMIT="${GIT_HTTP_LOW_SPEED_LIMIT:-1000}"
+    GIT_HTTP_LOW_SPEED_TIME="${GIT_HTTP_LOW_SPEED_TIME:-30}"
+    export GIT_HTTP_LOW_SPEED_LIMIT GIT_HTTP_LOW_SPEED_TIME
+
     # Under `curl … | sh` this script *is* stdin, so the child inherits a pipe
     # sitting at EOF and the wizard's first read looks like the user quitting.
     # Reconnect the terminal so an argument-less run reaches the wizard. When

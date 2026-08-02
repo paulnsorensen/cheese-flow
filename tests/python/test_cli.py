@@ -917,3 +917,69 @@ def test_without_the_timeout_option_the_runner_gets_the_package_default(
 
     assert result.exit_code == 0, result.stderr
     assert built_timeouts == [DEFAULT_TIMEOUT_SECONDS]
+
+
+# ─── Git low-speed bound ─────────────────────────────────────────────────────
+
+
+def test_default_runner_bounds_a_stalled_git_clone_for_every_child(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """bootstrap.sh only bounds the uvx clone it execs; every child the runner
+    itself spawns (``npx skills add``, ``claude plugin marketplace add``, and
+    the checkout / uvx entry points bootstrap.sh cannot reach) must inherit the
+    same stall guard."""
+    monkeypatch.delenv("GIT_HTTP_LOW_SPEED_LIMIT", raising=False)
+    monkeypatch.delenv("GIT_HTTP_LOW_SPEED_TIME", raising=False)
+    script = 'printf "%s %s" "$GIT_HTTP_LOW_SPEED_LIMIT" "$GIT_HTTP_LOW_SPEED_TIME"'
+
+    outcome = cli._default_runner().run(("sh", "-c", script))
+
+    assert outcome.stdout == "1000 30"
+
+
+def test_default_runner_lets_a_caller_exported_bound_win(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Mixed state: only LIMIT is caller-set, so this also covers the LIMIT
+    override (TIME-override coverage lives in test_bootstrap.py's
+    ``test_preserves_caller_supplied_git_low_speed_bounds``)."""
+    monkeypatch.setenv("GIT_HTTP_LOW_SPEED_LIMIT", "42")
+    monkeypatch.delenv("GIT_HTTP_LOW_SPEED_TIME", raising=False)
+    script = 'printf "%s %s" "$GIT_HTTP_LOW_SPEED_LIMIT" "$GIT_HTTP_LOW_SPEED_TIME"'
+
+    outcome = cli._default_runner().run(("sh", "-c", script))
+
+    assert outcome.stdout == "42 30"
+
+
+def test_default_runner_passes_a_caller_env_through_with_the_git_bound(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Regression for a mutant that drops ``overlay.update(env or {})``: the
+    dry-run npm cache override (spec:105) must survive alongside the git
+    stall guard, not get clobbered by it."""
+    monkeypatch.delenv("GIT_HTTP_LOW_SPEED_LIMIT", raising=False)
+    monkeypatch.delenv("GIT_HTTP_LOW_SPEED_TIME", raising=False)
+    script = (
+        'printf "%s %s %s" "$npm_config_cache" '
+        '"$GIT_HTTP_LOW_SPEED_LIMIT" "$GIT_HTTP_LOW_SPEED_TIME"'
+    )
+
+    outcome = cli._default_runner({"npm_config_cache": "/tmp/x"}).run(("sh", "-c", script))
+
+    assert outcome.stdout == "/tmp/x 1000 30"
+
+
+def test_default_runner_fills_the_default_when_the_caller_exported_an_empty_value(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An exported-but-empty value must not skip the default: git 2.50.1
+    fails to parse an empty low-speed-time and disables the guard entirely."""
+    monkeypatch.setenv("GIT_HTTP_LOW_SPEED_TIME", "")
+    monkeypatch.delenv("GIT_HTTP_LOW_SPEED_LIMIT", raising=False)
+    script = 'printf "%s %s" "$GIT_HTTP_LOW_SPEED_LIMIT" "$GIT_HTTP_LOW_SPEED_TIME"'
+
+    outcome = cli._default_runner().run(("sh", "-c", script))
+
+    assert outcome.stdout == "1000 30"
