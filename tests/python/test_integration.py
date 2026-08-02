@@ -28,6 +28,7 @@ import pytest
 import typer
 from cheese_flow import cli
 from cheese_flow.adapters import default_component_adapters
+from cheese_flow.adapters.tilth import RELEASE_URL, _bin_dir, _install_script, _target_triple
 from cheese_flow.cli import app
 from cheese_flow.desired_state import load_desired_state, save_desired_state
 from cheese_flow.install import apply_install_plan, build_install_plan
@@ -74,7 +75,11 @@ CLAUDE_MCP_CONFIG = ".claude.json"
 CODEX_MCP_CONFIG = ".codex/config.toml"
 CURSOR_MCP_CONFIG = ".cursor/mcp.json"
 
-TILTH_ENTRY = {"command": "npx", "args": ["tilth", "--mcp", "--edit"]}
+
+def tilth_entry() -> dict:
+    return {"command": str(_bin_dir() / "tilth"), "args": ["--mcp", "--edit"]}
+
+
 HALLOUMINATE_CURSOR_ENTRY = {"command": "hallouminate", "args": ["serve"]}
 
 
@@ -137,6 +142,7 @@ class FakeWorld:
     def converge(self, *, harnesses: Sequence[str], version: str = "1.0.0") -> None:
         """Bring the world to the state a successful install would leave behind."""
         self.installed["hallouminate"] = version
+        self.installed["tilth"] = "nightly"
         self.marketplaces.add(MARKETPLACE_SOURCE)
         self.plugins.add(PLUGIN_ID)
         self.config_exists = True
@@ -161,18 +167,19 @@ class FakeWorld:
                     link.symlink_to(canonical / name, target_is_directory=True)
 
     def write_tilth_entry(self, harness: str) -> None:
-        """What ``npx tilth install <harness> --edit`` leaves in the native config."""
+        """What ``tilth install <harness> --edit`` leaves in the native config."""
+        binary = str(_bin_dir() / "tilth")
         if harness == "codex":
             path = self.home / CODEX_MCP_CONFIG
             path.parent.mkdir(parents=True, exist_ok=True)
             existing = path.read_text(encoding="utf-8") if path.exists() else ""
-            entry = '[mcp_servers.tilth]\ncommand = "npx"\nargs = ["tilth", "--mcp", "--edit"]\n'
+            entry = f'[mcp_servers.tilth]\ncommand = "{binary}"\nargs = ["--mcp", "--edit"]\n'
             path.write_text(f"{existing}\n{entry}" if existing else entry, encoding="utf-8")
             return
         path = self.home / (CLAUDE_MCP_CONFIG if harness == "claude-code" else CURSOR_MCP_CONFIG)
         path.parent.mkdir(parents=True, exist_ok=True)
         document = _read_json(path)
-        document.setdefault("mcpServers", {})["tilth"] = dict(TILTH_ENTRY)
+        document.setdefault("mcpServers", {})["tilth"] = tilth_entry()
         path.write_text(json.dumps(document, indent=2) + "\n", encoding="utf-8")
 
     # -- Command modelling -----------------------------------------------------
@@ -233,8 +240,17 @@ class FakeWorld:
         if key[:4] == ("npx", "-y", "skills@latest", "add"):
             self.install_skills(_agent_of(key))
             return _ok(key)
-        if key[:2] == ("npx", "--yes") and key[2].startswith("tilth@"):
-            self.write_tilth_entry(key[4])
+        if key[:2] == ("sh", "-c"):
+            expected_url = f"{RELEASE_URL}/tilth-{_target_triple()}.tar.gz"
+            assert expected_url in key[2]
+            self.installed["tilth"] = "nightly"
+            return _ok(key)
+        if len(key) == 2 and Path(key[0]).name == "tilth" and key[1] == "--version":
+            if "tilth" not in self.installed:
+                return _fail(key, "tilth: command not found")
+            return _ok(key, "tilth 0.0.0-nightly")
+        if len(key) == 4 and Path(key[0]).name == "tilth" and key[1] == "install":
+            self.write_tilth_entry(key[2])
             return _ok(key)
         raise AssertionError(f"the fake world was asked to run an unmodelled command: {key}")
 
@@ -349,6 +365,7 @@ def home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     monkeypatch.setenv("HOME", str(root))
     monkeypatch.setenv("XDG_CONFIG_HOME", str(root / ".config"))
     monkeypatch.setenv("PATH", str(empty_bin))
+    monkeypatch.delenv("XDG_BIN_HOME", raising=False)
     return root
 
 
@@ -485,7 +502,7 @@ def test_cancelling_the_wizard_writes_no_manifest_and_runs_nothing(
 def test_dry_run_emits_the_exact_plan_without_executing_package_code(
     tmp_path: Path, home: Path, config_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    world = wire(monkeypatch, FakeWorld(home, versions={"tilth": ["4.5.6"]}))
+    world = wire(monkeypatch, FakeWorld(home))
     manifest = write_manifest(
         tmp_path,
         manifest_text(harnesses=["codex"], components=["hallouminate", "easy-cheese", "tilth"]),
@@ -503,8 +520,10 @@ def test_dry_run_emits_the_exact_plan_without_executing_package_code(
         "hallouminate:plugin:codex",
         "hallouminate:config-init",
         "easy-cheese:install:codex",
+        "tilth:install",
         "tilth:register:codex",
     ]
+    tilth_binary = str(_bin_dir() / "tilth")
     assert [entry["argv"] for entry in document["plan"]["steps"]] == [
         ["npm", "install", "-g", "hallouminate@1.0.0"],
         ["codex", "plugin", "marketplace", "add", MARKETPLACE_SOURCE],
@@ -523,12 +542,12 @@ def test_dry_run_emits_the_exact_plan_without_executing_package_code(
             "--global",
             "--yes",
         ],
-        ["npx", "--yes", "tilth@4.5.6", "install", "codex", "--edit"],
+        ["sh", "-c", _install_script(_target_triple(), _bin_dir())],
+        [tilth_binary, "install", "codex", "--edit"],
     ]
     # Metadata resolution is the only thing a dry run is allowed to do.
     assert world.argvs() == [
         ("npm", "view", "hallouminate@latest", "version"),
-        ("npm", "view", "tilth@latest", "version"),
     ]
     assert snapshot(home) == {}
     assert not config_path.exists()
@@ -541,7 +560,7 @@ def test_complete_config_runs_headlessly_and_stdout_is_one_json_document(
     tmp_path: Path, home: Path, config_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     repository = make_repository(tmp_path / "code" / "alpha")
-    world = wire(monkeypatch, FakeWorld(home, versions={"tilth": ["4.5.6"]}))
+    world = wire(monkeypatch, FakeWorld(home))
     manifest = write_manifest(
         tmp_path,
         manifest_text(
@@ -582,11 +601,12 @@ def test_complete_config_runs_headlessly_and_stdout_is_one_json_document(
         # just filled, so its postcondition already holds and no second
         # `skills add` runs.
         ("easy-cheese:install:cursor", "skipped"),
+        ("tilth:install", "succeeded"),
         ("tilth:register:claude-code", "succeeded"),
         ("tilth:register:cursor", "succeeded"),
     ]
     # Every reported "succeeded" corresponds to a real mutation of the world.
-    assert world.installed == {"hallouminate": "1.0.0"}
+    assert world.installed == {"hallouminate": "1.0.0", "tilth": "nightly"}
     assert world.initialized_repos == {repository}
     assert world.indexed_repos == {repository}
     assert "hallouminate:npm-install" in result.stderr
@@ -596,28 +616,29 @@ def test_complete_config_runs_headlessly_and_stdout_is_one_json_document(
 # ─── acceptance:149 — a satisfied postcondition skips its mutation ───────────
 
 
-READ_ONLY_PROBES = [
-    ("npm", "view", "hallouminate@latest", "version"),
-    ("npm", "view", "tilth@latest", "version"),
-    ("hallouminate", "--version"),
-    ("claude", "plugin", "marketplace", "list", "--json"),
-    ("claude", "plugin", "list", "--json"),
-    ("codex", "plugin", "marketplace", "list", "--json"),
-    ("codex", "plugin", "list", "--json"),
-    ("hallouminate", "config", "validate"),
-]
-"""Every command a fully converged run may still run.
+def read_only_probes(home: Path) -> list[tuple[str, ...]]:
+    """Every command a fully converged run may still run.
 
-easy-cheese contributes none: its postcondition reads the installed files
-directly, so a converged host needs no child process to prove the pack is
-there — and a host with no GitHub CLI reaches the same verdict.
-"""
+    easy-cheese contributes none: its postcondition reads the installed files
+    directly, so a converged host needs no child process to prove the pack is
+    there — and a host with no GitHub CLI reaches the same verdict.
+    """
+    return [
+        ("npm", "view", "hallouminate@latest", "version"),
+        ("hallouminate", "--version"),
+        ("claude", "plugin", "marketplace", "list", "--json"),
+        ("claude", "plugin", "list", "--json"),
+        ("codex", "plugin", "marketplace", "list", "--json"),
+        ("codex", "plugin", "list", "--json"),
+        ("hallouminate", "config", "validate"),
+        (str(_bin_dir() / "tilth"), "--version"),
+    ]
 
 
 def test_already_satisfied_postconditions_skip_every_mutation(
     tmp_path: Path, home: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    world = wire(monkeypatch, FakeWorld(home, versions={"tilth": ["4.5.6"]}))
+    world = wire(monkeypatch, FakeWorld(home))
     world.converge(harnesses=["claude-code", "codex"])
     manifest = write_manifest(
         tmp_path,
@@ -633,8 +654,8 @@ def test_already_satisfied_postconditions_skip_every_mutation(
     assert result.exit_code == 0, result.stderr
     document = json.loads(result.stdout)
     assert {status for _, status in statuses(document)} == {"skipped"}
-    assert len(document["results"]) == 10
-    assert world.argvs() == READ_ONLY_PROBES
+    assert len(document["results"]) == 11
+    assert world.argvs() == read_only_probes(home)
     assert snapshot(home) == before
 
 
@@ -655,7 +676,7 @@ def test_apply_installs_exactly_the_version_planning_resolved(
         monkeypatch,
         FakeWorld(
             home,
-            versions={"hallouminate": ["1.0.0", "9.9.9"], "tilth": ["4.5.6", "8.8.8"]},
+            versions={"hallouminate": ["1.0.0", "9.9.9"]},
         ),
     )
     manifest = write_manifest(
@@ -670,26 +691,24 @@ def test_apply_installs_exactly_the_version_planning_resolved(
     assert result.exit_code == 0, result.stderr
     document = json.loads(result.stdout)
     assert world.count(("npm", "view", "hallouminate@latest", "version")) == 1
-    assert world.count(("npm", "view", "tilth@latest", "version")) == 1
     planned = {entry["step_id"]: entry["argv"] for entry in document["plan"]["steps"]}
     assert planned["hallouminate:npm-install"] == ["npm", "install", "-g", "hallouminate@1.0.0"]
     assert planned["tilth:register:claude-code"] == [
-        "npx",
-        "--yes",
-        "tilth@4.5.6",
+        str(_bin_dir() / "tilth"),
         "install",
         "claude-code",
         "--edit",
     ]
     # The version the postcondition accepted is the version that got installed,
     # which is the version the plan declared.
-    assert world.installed == {"hallouminate": "1.0.0"}
+    assert world.installed == {"hallouminate": "1.0.0", "tilth": "nightly"}
     assert statuses(document) == [
         ("hallouminate:npm-install", "succeeded"),
         ("hallouminate:marketplace:claude-code", "succeeded"),
         ("hallouminate:plugin:claude-code", "succeeded"),
         ("hallouminate:config-init", "succeeded"),
         ("easy-cheese:install:claude-code", "succeeded"),
+        ("tilth:install", "succeeded"),
         ("tilth:register:claude-code", "succeeded"),
     ]
 
@@ -722,7 +741,7 @@ def test_failed_step_blocks_adapter_wired_dependents_and_lets_others_run(
     repository = make_repository(tmp_path / "code" / "alpha")
     world = wire(
         monkeypatch,
-        FakeWorld(home, versions={"tilth": ["4.5.6"]}, refuse=frozenset({"hallouminate-config"})),
+        FakeWorld(home, refuse=frozenset({"hallouminate-config"})),
     )
     manifest = write_manifest(
         tmp_path,
@@ -748,6 +767,7 @@ def test_failed_step_blocks_adapter_wired_dependents_and_lets_others_run(
         (f"hallouminate:init-repo:{key}", "blocked"),
         (f"hallouminate:index:{key}", "blocked"),
         ("easy-cheese:install:claude-code", "succeeded"),
+        ("tilth:install", "succeeded"),
         ("tilth:register:claude-code", "succeeded"),
     ]
     blocked = {entry["step_id"]: entry["remediation"] for entry in document["results"]}
@@ -801,7 +821,7 @@ def test_interrupt_forwards_the_signal_and_reports_the_remaining_steps(
 def test_doctor_runs_read_only_probes_and_leaves_every_file_byte_identical(
     tmp_path: Path, home: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    world = wire(monkeypatch, FakeWorld(home, versions={"tilth": ["4.5.6"]}))
+    world = wire(monkeypatch, FakeWorld(home))
     world.converge(harnesses=["claude-code", "codex"])
     manifest = write_manifest(
         tmp_path,
@@ -818,7 +838,7 @@ def test_doctor_runs_read_only_probes_and_leaves_every_file_byte_identical(
     assert result.exit_code == 0, result.stderr
     document = json.loads(result.stdout)
     assert {status for _, status in statuses(document)} == {"succeeded"}
-    assert world.argvs() == READ_ONLY_PROBES
+    assert world.argvs() == read_only_probes(home)
     assert snapshot(home) == before_home
     assert manifest.read_bytes() == before_manifest
 
@@ -1028,7 +1048,7 @@ def test_cursor_selection_writes_both_mcp_entries_and_preserves_the_rest(
         ),
         encoding="utf-8",
     )
-    world = wire(monkeypatch, FakeWorld(home, versions={"tilth": ["4.5.6"]}))
+    world = wire(monkeypatch, FakeWorld(home))
     manifest = write_manifest(
         tmp_path,
         manifest_text(harnesses=["cursor"], components=["hallouminate", "easy-cheese", "tilth"]),
@@ -1043,6 +1063,7 @@ def test_cursor_selection_writes_both_mcp_entries_and_preserves_the_rest(
         ("hallouminate:mcp:cursor", "succeeded"),
         ("hallouminate:config-init", "succeeded"),
         ("easy-cheese:install:cursor", "succeeded"),
+        ("tilth:install", "succeeded"),
         ("tilth:register:cursor", "succeeded"),
     ]
     assert json.loads(cursor_config.read_text(encoding="utf-8")) == {
@@ -1050,7 +1071,7 @@ def test_cursor_selection_writes_both_mcp_entries_and_preserves_the_rest(
         "mcpServers": {
             "unrelated": {"command": "unrelated-server"},
             "hallouminate": HALLOUMINATE_CURSOR_ENTRY,
-            "tilth": TILTH_ENTRY,
+            "tilth": tilth_entry(),
         },
     }
     assert not any(argv[:2] == ("cursor", "plugin") for argv in world.argvs())

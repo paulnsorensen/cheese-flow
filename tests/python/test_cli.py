@@ -874,6 +874,51 @@ def test_doctor_reports_failure_with_a_nonzero_exit_code(
     assert json.loads(result.stdout)["status"] == "failed"
 
 
+def test_doctor_planning_failure_exits_cleanly_without_a_traceback(
+    tmp_path: Path,
+    config_home: Path,
+    command_runner: RecordingRunner,
+    calls: dict,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    manifest = write_manifest(tmp_path)
+
+    def failing_verify(_state: DesiredState, _adapters: object, _runner: object) -> DoctorReport:
+        raise RuntimeError("could not resolve a tilth release asset for Windows/AMD64")
+
+    monkeypatch.setattr(cli, "verify_desired_state", failing_verify)
+
+    result = runner.invoke(app, ["doctor", "--config", str(manifest)])
+
+    assert result.exit_code == 1
+    assert result.exception is None or isinstance(result.exception, SystemExit)
+    assert "Planning failed: could not resolve a tilth release asset" in result.stderr
+    assert result.stdout == ""
+
+
+def test_install_planning_failure_exits_cleanly_without_a_traceback(
+    tmp_path: Path,
+    config_home: Path,
+    command_runner: RecordingRunner,
+    calls: dict,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    manifest = write_manifest(tmp_path)
+
+    def failing_plan(_state: DesiredState, _adapters: object) -> InstallPlan:
+        raise RuntimeError("could not resolve a tilth release asset for Windows/AMD64")
+
+    monkeypatch.setattr(cli, "build_install_plan", failing_plan)
+
+    result = runner.invoke(app, ["install", "--config", str(manifest)])
+
+    assert result.exit_code == 1
+    assert result.exception is None or isinstance(result.exception, SystemExit)
+    assert "Planning failed: could not resolve a tilth release asset" in result.stderr
+    assert calls["apply"] == []
+    assert result.stdout == ""
+
+
 # ─── Timeout plumbing ────────────────────────────────────────────────────────
 
 
