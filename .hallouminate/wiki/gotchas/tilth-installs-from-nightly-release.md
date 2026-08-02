@@ -6,6 +6,7 @@ The npm package `tilth` declares `repository: github.com/jahala/tilth` — a dif
 
 - **Rolling nightly, sidecar integrity, no pinning** — a nightly cannot be content-pinned like the uv installer; the `.sha256` sidecar over pinned TLS is the bar.
 - **Install-once** — postcondition is "installed binary runs `--version` exit 0". No digest drift-chasing: `cheese doctor` must not go red every morning a nightly publishes. Upgrade = remove the binary and re-run.
+- **Harness registration must stay absolute** — `_launches_tilth` accepts only an absolute command path whose basename is `tilth`. Bare `command: "tilth"` is not converged because the install directory may be absent from `PATH`; another absolute Tilth path remains acceptable.[^1]
 - **Stale `npx tilth` entries are rejected** by `_launches_tilth` on purpose — accepting them would leave harnesses launching the foreign npm package forever.
 
 ## The republish window (measured 2026-08-02)
@@ -15,4 +16,8 @@ The nightly workflow deletes and re-uploads assets around ~19:00Z: each asset 40
 ## Requirements this created
 
 - curl ≥ 7.71 (`--retry-all-errors`), `tar`, `sha256sum` or `shasum` — named in README prerequisites.
-- `${XDG_BIN_HOME:-$HOME/.local/bin}` on PATH for the dev-time `.mcp.json` entry (`command: tilth`); harness configs are immune — registration writes the absolute path.
+- `${XDG_BIN_HOME:-$HOME/.local/bin}` on `PATH` for the dev-time `.mcp.json` entry (`command: tilth`); harness configs are immune — registration writes the absolute path.
+
+[^1]: `python/cheese_flow/adapters/tilth.py:112-119`; `tests/python/test_adapters.py:1366-1372`; PR #95 restacked commit `19c9625`.
+
+_Source: /affinage PR #95 fresh review and cure · Updated: 2026-08-02 · Supersedes: —_

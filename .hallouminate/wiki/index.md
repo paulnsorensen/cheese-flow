@@ -5,4 +5,5 @@
 - [architecture/](./architecture/index.md) — architecture
 - [gotchas/](./gotchas/index.md) — gotchas
 - [domain-model](./domain-model.md) — Cheese-flow domain model
+- [log](./log.md) — Ingest Log
 <!-- HALLOUMINATE:INDEX-END -->
