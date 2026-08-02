@@ -27,6 +27,24 @@ build-ci:
     uv run --group dev pytest
     @echo "CI build passed"
 
+# Real install into a throwaway HOME, bounded and non-interactive (default: claude-code)
+smoke harness="claude-code":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    # A shimmed test proves control flow; only a real run proves the children
+    # terminate. `timeout` turns the hang this exists to catch into a failing
+    # exit code, and </dev/null makes a prompt fail rather than wait forever.
+    sandbox=$(mktemp -d)
+    trap 'rm -rf "$sandbox"' EXIT
+    echo "smoke: installing --harness {{harness}} into $sandbox" >&2
+    CHEESE_REPOSITORY="$PWD" \
+    HOME="$sandbox" \
+    XDG_BIN_HOME="$sandbox/bin" \
+        timeout --signal=KILL 600 sh ./bootstrap.sh \
+            --harness {{harness}} --json --timeout 180 </dev/null \
+        | tee "$sandbox/report.json"
+    python3 tests/smoke/assert_report.py "$sandbox/report.json"
+
 # Run the Python test suite (passes args through to pytest)
 test *args:
     uv run --group dev pytest {{args}}

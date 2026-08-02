@@ -9,14 +9,22 @@
 # which is what the interactive wizard reads. Pass the state options.
 set -eu
 
-REPOSITORY="git+https://github.com/paulnsorensen/cheese-flow"
+# Overridable so a smoke test can install the checkout under review. Left to its
+# default this resolves to the repository's default branch, which is what the
+# curl-pipe-sh line above wants and what a CI job testing a pull request must
+# not get.
+REPOSITORY="${CHEESE_REPOSITORY:-git+https://github.com/paulnsorensen/cheese-flow}"
 
 if ! command -v uvx >/dev/null 2>&1; then
     echo "cheese: installing uv" >&2
     # Bounded on purpose: a box with no egress to astral.sh blocks in connect()
     # with no timeout of its own, and this runs before the installer's own
     # per-command timeout exists to catch it.
-    curl -fsSL --connect-timeout 10 --max-time 120 https://astral.sh/uv/install.sh | sh
+    # `>&2` because stdout belongs to `cheese install --json`. The uv installer
+    # narrates its progress on stdout, which lands ahead of the JSON document
+    # and breaks any caller piping this one-liner into a parser — on precisely
+    # the bare hosts where uv has to be installed.
+    curl -fsSL --connect-timeout 10 --max-time 120 https://astral.sh/uv/install.sh | sh >&2
     # The uv installer targets ~/.local/bin, which a non-login shell may not
     # already carry; without this, the exec below fails on the host we just
     # provisioned.

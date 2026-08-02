@@ -168,13 +168,20 @@ def test_hallouminate_omits_the_cursor_mcp_step_when_cursor_is_not_selected() ->
     assert "hallouminate:mcp:cursor" not in steps_by_id(steps)
 
 
-def test_hallouminate_config_init_never_forces_and_depends_on_install() -> None:
+def test_hallouminate_config_init_forces_and_depends_on_install() -> None:
+    """The step runs only when validation already failed, so overwriting is the fix.
+
+    Real `hallouminate config init` exits 1 on an existing config with "pass
+    --force to overwrite". Planning it without the flag leaves anyone whose
+    config is present but invalid with an install that fails the same way on
+    every retry, citing a flag they cannot supply.
+    """
     runner = FakeRunner(npm_script())
     config = steps_by_id(HallouminateAdapter(runner).plan_steps(state()))[
         "hallouminate:config-init"
     ]
 
-    assert config.argv == ("hallouminate", "config", "init")
+    assert config.argv == ("hallouminate", "config", "init", "--force")
     assert config.phase is Phase.CONFIGURE
     assert config.depends_on == ("hallouminate:npm-install",)
 
@@ -1276,10 +1283,27 @@ def test_default_component_adapters_cover_every_component() -> None:
     assert all(name == adapter.name for name, adapter in adapters.items())
 
 
-def test_no_planned_argv_passes_force() -> None:
+# The single step allowed to overwrite, and why: `hallouminate config init`
+# refuses an existing config without `--force`, and its postcondition
+# (`config validate` succeeds) means the step is skipped unless that config is
+# already broken. Every other step must reach its postcondition without
+# destroying user state — a new entry here needs the same guarantee.
+FORCING_STEPS = frozenset({"hallouminate:config-init"})
+
+
+def test_no_planned_argv_passes_force_except_the_declared_step() -> None:
     for step in all_planned_steps():
+        if step.step_id in FORCING_STEPS:
+            continue
         assert "--force" not in step.argv, step.step_id
         assert "-f" not in step.argv, step.step_id
+
+
+def test_every_forcing_step_is_guarded_by_a_postcondition_that_skips_it() -> None:
+    """`--force` is only safe where a satisfied postcondition prevents the mutation."""
+    for step in all_planned_steps():
+        if step.step_id in FORCING_STEPS:
+            assert step.postcondition, step.step_id
 
 
 def test_planned_step_ids_are_unique_and_dependencies_resolve_in_order() -> None:
