@@ -38,11 +38,13 @@ curl -fsSL https://raw.githubusercontent.com/paulnsorensen/cheese-flow/main/boot
 
 `bootstrap.sh` installs `uv` when it is absent and hands every argument after `--` to `cheese install`. Pass the state options: piping the script into `sh` consumes stdin, which is what the interactive wizard reads, so this path is headless by construction.
 
-On a time-budgeted sandbox setup (e.g. Claude Code on the web's setup script, ~5-minute budget), append `--timeout 90` so a stuck child fails inside the budget instead of consuming the default 900s — it's a budget-derived floor, so raise it if a legitimate step (e.g. a cold `npm install -g`) trips it.
+On a time-budgeted sandbox setup (e.g. Claude Code on the web's setup script, ~5-minute budget), append `--timeout 90` so a stuck child fails inside the budget instead of consuming the default 900s — it's a budget-derived floor, so raise it if a legitimate step (e.g. a cold `npm install -g` or the tilth nightly download) trips it.
 
 Every `cheese` run bounds stalled git transfers via `GIT_HTTP_LOW_SPEED_LIMIT`/`GIT_HTTP_LOW_SPEED_TIME` (1000 B/s over 30s by default); caller-set values win.
 
-The only host prerequisites are `curl`, `git`, and the `npm` toolchain the components install themselves with. No GitHub CLI is needed.
+The only host prerequisites are `curl` ≥ 7.71 (needed for `--retry-all-errors`), `git`, `tar`, a sha256 tool (`sha256sum` or `shasum`), and the `npm` toolchain the npm-based components install themselves with; `tilth` downloads its own binary. No GitHub CLI is needed. During the nightly republish window the tilth download can retry for up to ~2 min per file.
+
+Registered harnesses launch `tilth` from `${XDG_BIN_HOME:-$HOME/.local/bin}`, so that directory must be on `PATH`.
 
 ### From a checkout
 

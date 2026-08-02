@@ -1,8 +1,8 @@
 {
   "mcpServers": {
     "tilth": {
-      "command": "npx",
-      "args": ["tilth", "--mcp", "--edit"]
+      "command": "tilth",
+      "args": ["--mcp", "--edit"]
     },
     "context7": {
       "command": "npx",

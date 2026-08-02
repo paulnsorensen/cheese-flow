@@ -74,7 +74,7 @@ jobs:
           # failing exit code here instead of a job that burns its 20 minutes
           # and reports nothing about which step is stuck.
           timeout --signal=KILL 900 sh ./bootstrap.sh \
-            --harness ${{ matrix.harness }} --json --timeout 240 \
+            --harness ${{ matrix.harness }} --json --timeout 420 \
             </dev/null | tee report.json
 
       # `always()` so a nonzero install still gets graded: the step table naming

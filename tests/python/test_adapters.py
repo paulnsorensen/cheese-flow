@@ -3,8 +3,14 @@ positive postconditions driven entirely through a scripted fake ``CommandRunner`
 
 from __future__ import annotations
 
+import hashlib
 import json
+import os
+import platform
 import re
+import shlex
+import stat as stat_mod
+import subprocess
 from collections.abc import Sequence
 from pathlib import Path
 
@@ -18,6 +24,13 @@ from cheese_flow.adapters import (
 )
 from cheese_flow.adapters.easy_cheese import AGENT_TOKENS, CORE_SKILLS, skills_directory
 from cheese_flow.adapters.hallouminate import _owner_repo
+from cheese_flow.adapters.tilth import (
+    RELEASE_URL,
+    _bin_dir,
+    _install_script,
+    _launches_tilth,
+    _target_triple,
+)
 from cheese_flow.models import (
     CommandOutcome,
     ConfigEdit,
@@ -56,16 +69,13 @@ def outcome(argv: tuple[str, ...], *, exit_code: int = 0, stdout: str = "") -> C
 
 
 NPM_VIEW_HALLOUMINATE = ("npm", "view", "hallouminate@latest", "version")
-NPM_VIEW_TILTH = ("npm", "view", "tilth@latest", "version")
 
 HALLOUMINATE_VERSION = "0.42.1"
-TILTH_VERSION = "1.7.0"
 
 
 def npm_script() -> dict[tuple[str, ...], CommandOutcome]:
     return {
         NPM_VIEW_HALLOUMINATE: outcome(NPM_VIEW_HALLOUMINATE, stdout=f"{HALLOUMINATE_VERSION}\n"),
-        NPM_VIEW_TILTH: outcome(NPM_VIEW_TILTH, stdout=f"{TILTH_VERSION}\n"),
     }
 
 
@@ -1045,53 +1055,300 @@ def test_easy_cheese_postcondition_rejects_a_step_without_a_harness() -> None:
 # --------------------------------------------------------------------------
 
 
-def test_tilth_plans_versioned_npx_install_per_harness() -> None:
-    runner = FakeRunner(npm_script())
+DARWIN_ARM64_TRIPLE = "aarch64-apple-darwin"
+DARWIN_X86_64_TRIPLE = "x86_64-apple-darwin"
+LINUX_AARCH64_TRIPLE = "aarch64-unknown-linux-musl"
+LINUX_X86_64_TRIPLE = "x86_64-unknown-linux-musl"
+
+
+@pytest.mark.parametrize(
+    ("system", "machine", "expected"),
+    [
+        ("Darwin", "arm64", DARWIN_ARM64_TRIPLE),
+        ("Darwin", "x86_64", DARWIN_X86_64_TRIPLE),
+        ("Linux", "aarch64", LINUX_AARCH64_TRIPLE),
+        ("Linux", "x86_64", LINUX_X86_64_TRIPLE),
+    ],
+)
+def test_target_triple_resolves_supported_platforms(
+    system: str, machine: str, expected: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(platform, "system", lambda: system)
+    monkeypatch.setattr(platform, "machine", lambda: machine)
+    assert _target_triple() == expected
+
+
+def test_target_triple_rejects_an_unsupported_platform(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(platform, "system", lambda: "Windows")
+    monkeypatch.setattr(platform, "machine", lambda: "AMD64")
+    with pytest.raises(RuntimeError, match="could not resolve"):
+        _target_triple()
+
+
+def test_tilth_plans_one_install_step_and_a_register_step_per_harness(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(platform, "system", lambda: "Darwin")
+    monkeypatch.setattr(platform, "machine", lambda: "arm64")
+    runner = FakeRunner()
     steps = TilthAdapter(runner).plan_steps(state())
 
     assert [s.step_id for s in steps] == [
+        "tilth:install",
         "tilth:register:claude-code",
         "tilth:register:codex",
         "tilth:register:cursor",
     ]
-    assert steps[0].argv == (
-        "npx",
-        "--yes",
-        f"tilth@{TILTH_VERSION}",
-        "install",
-        "claude-code",
-        "--edit",
-    )
-    assert steps[2].argv == (
-        "npx",
-        "--yes",
-        f"tilth@{TILTH_VERSION}",
-        "install",
-        "cursor",
-        "--edit",
-    )
-    assert steps[2].phase is Phase.REGISTER
+    install = steps[0]
+    assert install.phase is Phase.INSTALL
+    assert install.argv[:2] == ("sh", "-c")
+    assert install.depends_on == ()
 
-
-def test_tilth_resolves_npm_view_once_per_run() -> None:
-    runner = FakeRunner(npm_script())
-    adapter = TilthAdapter(runner)
-    adapter.plan_steps(state())
-    adapter.plan_steps(state())
-
-    assert runner.argvs().count(NPM_VIEW_TILTH) == 1
+    binary = str(_bin_dir() / "tilth")
+    for register in steps[1:]:
+        assert register.phase is Phase.REGISTER
+        assert register.depends_on == ("tilth:install",)
+    assert steps[1].argv == (binary, "install", "claude-code", "--edit")
+    assert steps[3].argv == (binary, "install", "cursor", "--edit")
 
 
 def test_tilth_plans_nothing_when_component_not_selected() -> None:
-    runner = FakeRunner(npm_script())
+    runner = FakeRunner()
     assert TilthAdapter(runner).plan_steps(state(components=("hallouminate", "easy-cheese"))) == ()
     assert runner.argvs() == []
 
 
+def test_tilth_install_script_downloads_both_release_assets_with_bounded_curl(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(platform, "system", lambda: "Linux")
+    monkeypatch.setattr(platform, "machine", lambda: "x86_64")
+    script = TilthAdapter(FakeRunner()).plan_steps(state())[0].argv[2]
+
+    tarball_url = f"{RELEASE_URL}/tilth-{LINUX_X86_64_TRIPLE}.tar.gz"
+    assert tarball_url in script
+    assert f"{tarball_url}.sha256" in script
+    assert "--proto '=https' --tlsv1.2" in script
+    assert "--connect-timeout 10 --max-time 60" in script
+    assert "--retry 4 --retry-delay 15 --retry-all-errors --retry-max-time 120" in script
+
+
+def test_tilth_install_script_installs_atomically_into_the_bin_dir() -> None:
+    script = TilthAdapter(FakeRunner()).plan_steps(state())[0].argv[2]
+
+    bin_dir = _bin_dir()
+    quoted = shlex.quote(str(bin_dir))
+    assert f"mkdir -p {quoted}" in script
+    assert f"mktemp {quoted}/tilth.XXXXXX" in script
+    assert 'mv "$workdir/tilth" "$staged"' in script
+    assert 'chmod +x "$staged"' in script
+    assert f'mv "$staged" {quoted}/tilth' in script
+
+
+@pytest.mark.parametrize(
+    "bin_dir",
+    [
+        Path("/opt/bin"),
+        Path("/opt/bin with space"),
+        Path("/opt/bin's"),
+    ],
+)
+def test_tilth_install_script_is_valid_sh_for_unusual_bin_dirs(bin_dir: Path) -> None:
+    script = _install_script(DARWIN_ARM64_TRIPLE, bin_dir)
+    result = subprocess.run(["sh", "-n"], input=script, text=True, capture_output=True)
+    assert result.returncode == 0, result.stderr
+
+
+CURL_FIXTURE_SHIM = """#!/bin/sh
+if [ "${CURL_FAIL:-}" = "1" ]; then
+    exit 22
+fi
+dest=""
+url=""
+prev=""
+for arg in "$@"; do
+    if [ "$prev" = "-o" ]; then
+        dest="$arg"
+    fi
+    case "$arg" in
+        http*) url="$arg" ;;
+    esac
+    prev="$arg"
+done
+case "$url" in
+    *.sha256) cp "$SHA256_FIXTURE" "$dest" ;;
+    *) cp "$TARBALL_FIXTURE" "$dest" ;;
+esac
+"""
+
+
+def _write_curl_shim(bin_dir: Path) -> None:
+    bin_dir.mkdir(parents=True, exist_ok=True)
+    shim = bin_dir / "curl"
+    shim.write_text(CURL_FIXTURE_SHIM, encoding="utf-8")
+    shim.chmod(shim.stat().st_mode | stat_mod.S_IEXEC | stat_mod.S_IXGRP | stat_mod.S_IXOTH)
+
+
+def _build_tarball_fixture(tmp_path: Path) -> Path:
+    """A real gzip tarball, built by the system ``tar``, holding one executable
+    ``tilth`` script that prints a version line and exits 0."""
+    payload_dir = tmp_path / "payload"
+    payload_dir.mkdir()
+    tilth_script = payload_dir / "tilth"
+    tilth_script.write_text("#!/bin/sh\necho 'tilth 0.0.0-test'\n", encoding="utf-8")
+    tilth_script.chmod(0o755)
+    tarball = tmp_path / "tilth.tar.gz"
+    subprocess.run(
+        ["tar", "czf", str(tarball), "-C", str(payload_dir), "tilth"],
+        check=True,
+    )
+    return tarball
+
+
+def test_tilth_install_script_downloads_verifies_and_installs_the_binary(
+    tmp_path: Path,
+) -> None:
+    shim_dir = tmp_path / "shims"
+    _write_curl_shim(shim_dir)
+    tarball = _build_tarball_fixture(tmp_path)
+    digest = hashlib.sha256(tarball.read_bytes()).hexdigest()
+    sidecar = tmp_path / "tilth.tar.gz.sha256"
+    sidecar.write_text(f"{digest}  tilth.tar.gz\n", encoding="utf-8")
+
+    bin_dir = tmp_path / "bin"
+    mktemp_root = tmp_path / "mktemp-root"
+    mktemp_root.mkdir()
+
+    script = _install_script(DARWIN_ARM64_TRIPLE, bin_dir)
+    env = dict(os.environ) | {
+        "PATH": f"{shim_dir}:/usr/bin:/bin",
+        "TMPDIR": str(mktemp_root),
+        "TARBALL_FIXTURE": str(tarball),
+        "SHA256_FIXTURE": str(sidecar),
+    }
+
+    result = subprocess.run(
+        ["sh", "-c", script],
+        stdin=subprocess.DEVNULL,
+        capture_output=True,
+        text=True,
+        env=env,
+        timeout=30,
+    )
+
+    assert result.returncode == 0, result.stderr
+    installed = bin_dir / "tilth"
+    assert installed.exists()
+    assert os.access(installed, os.X_OK)
+    run = subprocess.run([str(installed)], capture_output=True, text=True, timeout=10)
+    assert run.returncode == 0
+    assert "tilth" in run.stdout
+    assert list(mktemp_root.iterdir()) == []
+
+
+def test_tilth_install_script_refuses_and_installs_nothing_on_digest_mismatch(
+    tmp_path: Path,
+) -> None:
+    shim_dir = tmp_path / "shims"
+    _write_curl_shim(shim_dir)
+    tarball = _build_tarball_fixture(tmp_path)
+    correct_digest = hashlib.sha256(tarball.read_bytes()).hexdigest()
+    wrong_digest = "0" * 64
+    assert wrong_digest != correct_digest
+    sidecar = tmp_path / "tilth.tar.gz.sha256"
+    sidecar.write_text(f"{wrong_digest}  tilth.tar.gz\n", encoding="utf-8")
+
+    bin_dir = tmp_path / "bin"
+    mktemp_root = tmp_path / "mktemp-root"
+    mktemp_root.mkdir()
+
+    script = _install_script(DARWIN_ARM64_TRIPLE, bin_dir)
+    env = dict(os.environ) | {
+        "PATH": f"{shim_dir}:/usr/bin:/bin",
+        "TMPDIR": str(mktemp_root),
+        "TARBALL_FIXTURE": str(tarball),
+        "SHA256_FIXTURE": str(sidecar),
+    }
+
+    result = subprocess.run(
+        ["sh", "-c", script],
+        stdin=subprocess.DEVNULL,
+        capture_output=True,
+        text=True,
+        env=env,
+        timeout=30,
+    )
+
+    assert result.returncode != 0
+    assert not (bin_dir / "tilth").exists()
+    assert "refusing to install tilth — checksum mismatch" in result.stderr
+    assert f"  expected {wrong_digest}" in result.stderr
+    assert f"  actual   {correct_digest}" in result.stderr
+    assert list(mktemp_root.iterdir()) == []
+
+
+def test_tilth_install_script_reports_context_and_installs_nothing_on_download_failure(
+    tmp_path: Path,
+) -> None:
+    shim_dir = tmp_path / "shims"
+    _write_curl_shim(shim_dir)
+    tarball = _build_tarball_fixture(tmp_path)
+    digest = hashlib.sha256(tarball.read_bytes()).hexdigest()
+    sidecar = tmp_path / "tilth.tar.gz.sha256"
+    sidecar.write_text(f"{digest}  tilth.tar.gz\n", encoding="utf-8")
+
+    bin_dir = tmp_path / "bin"
+    mktemp_root = tmp_path / "mktemp-root"
+    mktemp_root.mkdir()
+
+    script = _install_script(DARWIN_ARM64_TRIPLE, bin_dir)
+    env = dict(os.environ) | {
+        "PATH": f"{shim_dir}:/usr/bin:/bin",
+        "TMPDIR": str(mktemp_root),
+        "TARBALL_FIXTURE": str(tarball),
+        "SHA256_FIXTURE": str(sidecar),
+        "CURL_FAIL": "1",
+    }
+
+    result = subprocess.run(
+        ["sh", "-c", script],
+        stdin=subprocess.DEVNULL,
+        capture_output=True,
+        text=True,
+        env=env,
+        timeout=30,
+    )
+
+    assert result.returncode != 0
+    assert not (bin_dir / "tilth").exists()
+    tarball_url = f"{RELEASE_URL}/tilth-{DARWIN_ARM64_TRIPLE}.tar.gz"
+    assert (
+        f"cheese: could not download tilth for {DARWIN_ARM64_TRIPLE} from {tarball_url}"
+        in result.stderr
+    )
+
+
+def test_tilth_bin_dir_honours_xdg_bin_home(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("XDG_BIN_HOME", "/opt/bin")
+    assert _bin_dir() == Path("/opt/bin")
+
+
+def test_tilth_install_postcondition_checks_the_installed_binary_version() -> None:
+    binary = str(_bin_dir() / "tilth")
+    adapter = TilthAdapter(FakeRunner())
+    install_step = steps_by_id(adapter.plan_steps(state()))["tilth:install"]
+
+    ok_runner = FakeRunner({(binary, "--version"): outcome((binary, "--version"))})
+    assert adapter.check_postcondition(install_step, ok_runner) is True
+
+    failing_runner = FakeRunner(
+        {(binary, "--version"): outcome((binary, "--version"), exit_code=1)}
+    )
+    assert adapter.check_postcondition(install_step, failing_runner) is False
+
+
 def tilth_step(harness: str) -> PlanStep:
-    return steps_by_id(TilthAdapter(FakeRunner(npm_script())).plan_steps(state()))[
-        f"tilth:register:{harness}"
-    ]
+    return steps_by_id(TilthAdapter(FakeRunner()).plan_steps(state()))[f"tilth:register:{harness}"]
 
 
 EDIT_ENTRY = {"command": "npx", "args": ["tilth", "--mcp", "--edit"], "env": {}}
@@ -1106,11 +1363,16 @@ GLOBAL_EDIT_ENTRY = {
 GLOBAL_NO_EDIT_ENTRY = {"command": "/home/paul/.local/bin/tilth", "args": ["--mcp"], "env": {}}
 
 
+def test_launches_tilth_rejects_a_staging_artifact_command() -> None:
+    assert _launches_tilth("/home/paul/.local/bin/tilth") is True
+    assert _launches_tilth("/home/paul/.local/bin/tilth.XXXXXX") is False
+
+
 def test_tilth_postcondition_accepts_a_globally_installed_absolute_command(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setenv("HOME", str(tmp_path))
-    adapter = TilthAdapter(FakeRunner(npm_script()))
+    adapter = TilthAdapter(FakeRunner())
 
     (tmp_path / ".claude.json").write_text(json.dumps({"mcpServers": {"tilth": GLOBAL_EDIT_ENTRY}}))
     assert adapter.check_postcondition(tilth_step("claude-code"), FakeRunner()) is True
@@ -1120,7 +1382,7 @@ def test_tilth_postcondition_false_when_a_global_entry_lacks_edit_mode(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setenv("HOME", str(tmp_path))
-    adapter = TilthAdapter(FakeRunner(npm_script()))
+    adapter = TilthAdapter(FakeRunner())
 
     (tmp_path / ".claude.json").write_text(
         json.dumps({"mcpServers": {"tilth": GLOBAL_NO_EDIT_ENTRY}})
@@ -1144,7 +1406,7 @@ def test_tilth_postcondition_rejects_a_foreign_command(
     monkeypatch.setenv("HOME", str(tmp_path))
     (tmp_path / ".claude.json").write_text(json.dumps({"mcpServers": {"tilth": entry}}))
 
-    adapter = TilthAdapter(FakeRunner(npm_script()))
+    adapter = TilthAdapter(FakeRunner())
     assert adapter.check_postcondition(tilth_step("claude-code"), FakeRunner()) is False
 
 
@@ -1152,15 +1414,15 @@ def test_tilth_postcondition_reads_claude_code_and_cursor_json_configs(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setenv("HOME", str(tmp_path))
-    adapter = TilthAdapter(FakeRunner(npm_script()))
+    adapter = TilthAdapter(FakeRunner())
     runner = FakeRunner()
 
     (tmp_path / ".claude.json").write_text(json.dumps({"mcpServers": {"tilth": EDIT_ENTRY}}))
     (tmp_path / ".cursor").mkdir()
     (tmp_path / ".cursor/mcp.json").write_text(json.dumps({"mcpServers": {"tilth": EDIT_ENTRY}}))
 
-    assert adapter.check_postcondition(tilth_step("claude-code"), runner) is True
-    assert adapter.check_postcondition(tilth_step("cursor"), runner) is True
+    assert adapter.check_postcondition(tilth_step("claude-code"), runner) is False
+    assert adapter.check_postcondition(tilth_step("cursor"), runner) is False
     assert runner.argvs() == []
 
 
@@ -1174,8 +1436,8 @@ def test_tilth_postcondition_reads_the_codex_toml_config(
         'command = "npx"\nargs = ["tilth", "--mcp", "--edit"]\n'
     )
 
-    adapter = TilthAdapter(FakeRunner(npm_script()))
-    assert adapter.check_postcondition(tilth_step("codex"), FakeRunner()) is True
+    adapter = TilthAdapter(FakeRunner())
+    assert adapter.check_postcondition(tilth_step("codex"), FakeRunner()) is False
 
 
 def test_tilth_postcondition_false_when_edit_mode_missing(
@@ -1184,7 +1446,7 @@ def test_tilth_postcondition_false_when_edit_mode_missing(
     monkeypatch.setenv("HOME", str(tmp_path))
     (tmp_path / ".claude.json").write_text(json.dumps({"mcpServers": {"tilth": NO_EDIT_ENTRY}}))
 
-    adapter = TilthAdapter(FakeRunner(npm_script()))
+    adapter = TilthAdapter(FakeRunner())
     assert adapter.check_postcondition(tilth_step("claude-code"), FakeRunner()) is False
 
 
@@ -1192,7 +1454,7 @@ def test_tilth_postcondition_false_when_config_absent_or_unrelated(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setenv("HOME", str(tmp_path))
-    adapter = TilthAdapter(FakeRunner(npm_script()))
+    adapter = TilthAdapter(FakeRunner())
 
     assert adapter.check_postcondition(tilth_step("claude-code"), FakeRunner()) is False
 
