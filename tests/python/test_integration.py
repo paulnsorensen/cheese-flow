@@ -34,9 +34,11 @@ from cheese_flow.desired_state import load_desired_state, save_desired_state
 from cheese_flow.install import apply_install_plan, build_install_plan
 from cheese_flow.models import CommandOutcome, DesiredState, StepStatus
 from cheese_flow.tui import run_wizard
+from pytest_bdd import given, scenarios, then, when
 from typer.testing import CliRunner
 
 cli_runner = CliRunner()
+scenarios("features/easy_cheese.feature")
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
@@ -918,6 +920,52 @@ def test_install_converges_every_easy_cheese_step_with_gh_absent(
     for name in EASY_CHEESE_SKILLS:
         assert (home / CANONICAL_SKILLS_DIR / name / "SKILL.md").is_file()
         assert (home / CLAUDE_SKILLS_DIR / name / "SKILL.md").is_file()
+
+
+@given("a cloud host without the GitHub CLI", target_fixture="cloud_install")
+def cloud_install(
+    tmp_path: Path, home: Path, monkeypatch: pytest.MonkeyPatch
+) -> tuple[GhlessWorld, Path]:
+    world = wire(monkeypatch, GhlessWorld(home))
+    manifest = write_manifest(
+        tmp_path,
+        manifest_text(
+            harnesses=["claude-code", "codex", "cursor"],
+            components=["hallouminate", "easy-cheese"],
+        ),
+    )
+    return world, manifest
+
+
+@when("I install easy-cheese for every supported harness", target_fixture="install_document")
+def install_easy_cheese(
+    cloud_install: tuple[GhlessWorld, Path],
+) -> tuple[GhlessWorld, dict[str, object]]:
+    world, manifest = cloud_install
+    result = cli_runner.invoke(app, ["install", "--config", str(manifest)])
+
+    assert result.exit_code == 0, result.stderr
+    return world, json.loads(result.stdout)
+
+
+@then("easy-cheese is installed for every supported harness")
+def easy_cheese_is_installed(install_document: tuple[GhlessWorld, dict[str, object]]) -> None:
+    _world, document = install_document
+    easy_cheese = [entry for entry in document["results"] if entry["component"] == "easy-cheese"]
+
+    assert [entry["step_id"] for entry in easy_cheese] == [
+        "easy-cheese:install:claude-code",
+        "easy-cheese:install:codex",
+        "easy-cheese:install:cursor",
+    ]
+    assert {entry["status"] for entry in easy_cheese} <= {"succeeded", "skipped"}
+
+
+@then("no command uses the GitHub CLI")
+def no_github_cli_command_runs(install_document: tuple[GhlessWorld, dict[str, object]]) -> None:
+    world, _document = install_document
+
+    assert not any(argv[0] == "gh" for argv in world.argvs())
 
 
 def test_install_repairs_a_config_that_exists_but_does_not_validate(
