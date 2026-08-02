@@ -11,6 +11,7 @@ nothing else. Every prompt, progress line, and diagnostic goes to stderr.
 from __future__ import annotations
 
 import json
+import os
 import sys
 import tempfile
 from collections.abc import Iterator, Mapping
@@ -46,6 +47,11 @@ from cheese_flow.tui import run_wizard
 
 _MANIFEST_EXIT_CODE = 2
 _FAILURE_EXIT_CODE = 1
+
+# git has no read timeout of its own; every child clone must abort a stalled
+# transfer instead of hanging forever. bootstrap.sh sets the same bound for the
+# uvx clone it execs directly, which this runner cannot reach.
+_GIT_LOW_SPEED_DEFAULTS = {"GIT_HTTP_LOW_SPEED_LIMIT": "1000", "GIT_HTTP_LOW_SPEED_TIME": "30"}
 
 app = typer.Typer(
     name="cheese",
@@ -198,7 +204,14 @@ def _default_runner(
     *,
     timeout: float = DEFAULT_TIMEOUT_SECONDS,
 ) -> CommandRunner:
-    return SubprocessRunner(env=env, timeout=timeout)
+    # Only fill in a default when the caller hasn't exported a non-empty value —
+    # SubprocessRunner overlays ``env`` on top of ``os.environ``, so a plain
+    # unconditional default would override a caller-set value.
+    overlay = {
+        key: value for key, value in _GIT_LOW_SPEED_DEFAULTS.items() if not os.environ.get(key)
+    }
+    overlay.update(env or {})
+    return SubprocessRunner(env=overlay, timeout=timeout)
 
 
 def _tokens(values: list[str] | None) -> tuple[str, ...]:

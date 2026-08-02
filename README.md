@@ -38,6 +38,10 @@ curl -fsSL https://raw.githubusercontent.com/paulnsorensen/cheese-flow/main/boot
 
 `bootstrap.sh` installs `uv` when it is absent and hands every argument after `--` to `cheese install`. Pass the state options: piping the script into `sh` consumes stdin, which is what the interactive wizard reads, so this path is headless by construction.
 
+On a time-budgeted sandbox setup (e.g. Claude Code on the web's setup script, ~5-minute budget), append `--timeout 90` so a stuck child fails inside the budget instead of consuming the default 900s — it's a budget-derived floor, so raise it if a legitimate step (e.g. a cold `npm install -g`) trips it.
+
+Every `cheese` run bounds stalled git transfers via `GIT_HTTP_LOW_SPEED_LIMIT`/`GIT_HTTP_LOW_SPEED_TIME` (1000 B/s over 30s by default); caller-set values win.
+
 The only host prerequisites are `curl`, `git`, and the `npm` toolchain the components install themselves with. No GitHub CLI is needed.
 
 ### From a checkout

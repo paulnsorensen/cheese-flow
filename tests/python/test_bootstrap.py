@@ -13,6 +13,7 @@ import pty
 import re
 import stat as stat_mod
 import subprocess
+from collections.abc import Mapping
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -63,6 +64,16 @@ printf '%s' "$INSTALLER_BODY" > "$target"
 """
 
 
+# Records $0, argv, and the two git low-speed env vars the exec'd child must
+# see — argv alone can't show whether bootstrap.sh exported them.
+GIT_ENV_SHIM = """#!/bin/sh
+limit="${GIT_HTTP_LOW_SPEED_LIMIT:-unset}"
+low_speed_time="${GIT_HTTP_LOW_SPEED_TIME:-unset}"
+record="$0 $* GIT_HTTP_LOW_SPEED_LIMIT=$limit GIT_HTTP_LOW_SPEED_TIME=$low_speed_time"
+printf '%s\\n' "$record" >> "$RECORD"
+"""
+
+
 def _shim(directory: Path, name: str, body: str = RECORDING_SHIM) -> Path:
     directory.mkdir(parents=True, exist_ok=True)
     shim = directory / name
@@ -97,6 +108,7 @@ def _invoke(
     repository: str | None = None,
     script: Path | None = None,
     installer_body: str = UV_INSTALLER_BODY,
+    env_overrides: Mapping[str, str] | None = None,
 ) -> tuple[subprocess.CompletedProcess[str], list[str]]:
     """Run the script with ``path`` at the head of ``PATH``; return it and what ran."""
     record = tmp_path / "record"
@@ -112,8 +124,12 @@ def _invoke(
     }
     env.pop("XDG_BIN_HOME", None)
     env.pop("CHEESE_REPOSITORY", None)
+    env.pop("GIT_HTTP_LOW_SPEED_LIMIT", None)
+    env.pop("GIT_HTTP_LOW_SPEED_TIME", None)
     if repository is not None:
         env["CHEESE_REPOSITORY"] = repository
+    if env_overrides is not None:
+        env.update(env_overrides)
     completed = subprocess.run(
         ["/bin/sh", str(script or SCRIPT_PATH), *args],
         capture_output=True,
@@ -131,9 +147,16 @@ def _run(
     home: Path,
     repository: str | None = None,
     script: Path | None = None,
+    env_overrides: Mapping[str, str] | None = None,
 ) -> list[str]:
     completed, ran = _invoke(
-        tmp_path, *args, path=path, home=home, repository=repository, script=script
+        tmp_path,
+        *args,
+        path=path,
+        home=home,
+        repository=repository,
+        script=script,
+        env_overrides=env_overrides,
     )
     assert completed.returncode == 0, completed.stderr
     return ran
@@ -156,6 +179,52 @@ def test_hands_every_argument_to_a_headless_cheese_install(tmp_path: Path) -> No
 
     assert ran == [
         f"{bin_dir / 'uvx'} {FROM} cheese install --harness claude-code --repo /srv/code/project"
+    ]
+
+
+def test_exports_git_low_speed_abort_for_the_exec_child(tmp_path: Path) -> None:
+    """git has no read timeout of its own; the uvx clone (and every child clone
+    `cheese install` runs later) must abort a stalled transfer instead of
+    hanging forever, before `cheese install`'s own timeout exists to catch it."""
+    bin_dir = tmp_path / "bin"
+    _shim(bin_dir, "uvx", GIT_ENV_SHIM)
+    _shim(bin_dir, "curl")
+
+    ran = _run(
+        tmp_path,
+        "--harness",
+        "claude-code",
+        path=bin_dir,
+        home=tmp_path / "home",
+    )
+
+    assert ran == [
+        f"{bin_dir / 'uvx'} {FROM} cheese install --harness claude-code "
+        "GIT_HTTP_LOW_SPEED_LIMIT=1000 GIT_HTTP_LOW_SPEED_TIME=30"
+    ]
+
+
+def test_preserves_caller_supplied_git_low_speed_bounds(tmp_path: Path) -> None:
+    """A caller's own tuning stays authoritative; only the missing half fills
+    in. Overrides TIME only, so this also covers TIME-override (LIMIT-override
+    coverage lives in test_cli.py's
+    ``test_default_runner_lets_a_caller_exported_bound_win``)."""
+    bin_dir = tmp_path / "bin"
+    _shim(bin_dir, "uvx", GIT_ENV_SHIM)
+    _shim(bin_dir, "curl")
+
+    ran = _run(
+        tmp_path,
+        "--harness",
+        "claude-code",
+        path=bin_dir,
+        home=tmp_path / "home",
+        env_overrides={"GIT_HTTP_LOW_SPEED_TIME": "5"},
+    )
+
+    assert ran == [
+        f"{bin_dir / 'uvx'} {FROM} cheese install --harness claude-code "
+        "GIT_HTTP_LOW_SPEED_LIMIT=1000 GIT_HTTP_LOW_SPEED_TIME=5"
     ]
 
 
