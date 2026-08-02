@@ -8,6 +8,7 @@ run on a host that has nothing but curl.
 from __future__ import annotations
 
 import os
+import pty
 import stat as stat_mod
 import subprocess
 from pathlib import Path
@@ -114,7 +115,7 @@ def test_installs_uv_first_when_the_host_has_none_and_then_runs_it(tmp_path: Pat
     # `uvx` existed nowhere on PATH, so reaching it at all proves the script
     # both installed uv and put its target directory on PATH.
     assert ran == [
-        f"{bin_dir / 'curl'} -fsSL --connect-timeout 10 --max-time 120 "
+        f"{bin_dir / 'curl'} -fsSL --proto =https --tlsv1.2 --connect-timeout 10 --max-time 120 "
         "https://astral.sh/uv/install.sh",
         f"installed-uvx {FROM} cheese install --harness codex",
     ]
@@ -135,7 +136,7 @@ def test_a_failed_uv_install_stops_the_run_and_names_the_real_failure(tmp_path: 
     assert completed.returncode == 1
     assert "uv install failed" in completed.stderr
     assert ran == [
-        f"{bin_dir / 'curl'} -fsSL --connect-timeout 10 --max-time 120 "
+        f"{bin_dir / 'curl'} -fsSL --proto =https --tlsv1.2 --connect-timeout 10 --max-time 120 "
         "https://astral.sh/uv/install.sh"
     ]
 
@@ -174,6 +175,87 @@ def test_cheese_repository_overrides_the_default_source(tmp_path: Path) -> None:
     )
 
     assert ran == [f"{bin_dir / 'uvx'} --from /srv/checkout cheese install --harness codex"]
+
+
+def test_a_truncated_download_executes_nothing(tmp_path: Path) -> None:
+    """`curl … | sh` runs whatever bytes arrived, so a dropped connection must be inert.
+
+    Cut the transfer after the uv block and the pre-``main()`` script installed
+    uv, never reached the exec, and exited 0 — a silent partial install that a
+    caller parsing ``--json`` reads as success with empty stdout.
+    """
+    bin_dir = tmp_path / "bin"
+    _shim(bin_dir, "curl", UV_INSTALLER_SHIM)
+    source = SCRIPT_PATH.read_text(encoding="utf-8")
+    # Everything up to and including the uv install, minus the call on the last line.
+    cutoff = source.index('    if ! command -v uvx >/dev/null 2>&1; then\n        echo "cheese: uv')
+    truncated = tmp_path / "truncated.sh"
+    truncated.write_text(source[:cutoff], encoding="utf-8")
+
+    record = tmp_path / "record"
+    record.touch()
+    home = tmp_path / "home"
+    home.mkdir()
+    completed = subprocess.run(
+        ["/bin/sh", str(truncated)],
+        capture_output=True,
+        text=True,
+        env=dict(os.environ)
+        | {"PATH": f"{bin_dir}:/usr/bin:/bin", "HOME": str(home), "RECORD": str(record)},
+        check=False,
+    )
+
+    # An unterminated main() is a parse error, so nothing in it ever runs.
+    assert completed.returncode != 0
+    assert record.read_text(encoding="utf-8") == ""
+    assert not (home / ".local" / "bin" / "uvx").exists()
+
+
+def test_reconnects_the_terminal_so_a_piped_run_can_still_reach_the_wizard(tmp_path: Path) -> None:
+    """The wizard reads stdin, and `curl … | sh` leaves the child a pipe at EOF.
+
+    Without the /dev/tty reconnect an argument-less one-liner reports "Cancelled"
+    and installs nothing, because the wizard's first read looks like a user quit.
+    """
+    bin_dir = tmp_path / "bin"
+    _shim(
+        bin_dir,
+        "uvx",
+        "#!/bin/sh\nif [ -t 0 ]; then printf 'stdin=tty\\n' >> \"$RECORD\";"
+        " else printf 'stdin=pipe\\n' >> \"$RECORD\"; fi\n",
+    )
+    record = tmp_path / "record"
+    record.touch()
+    home = tmp_path / "home"
+    home.mkdir()
+    env = dict(os.environ) | {
+        "PATH": f"{bin_dir}:/usr/bin:/bin",
+        "HOME": str(home),
+        "RECORD": str(record),
+    }
+    env.pop("CHEESE_REPOSITORY", None)
+
+    # pty.fork gives the child a controlling terminal, so /dev/tty resolves;
+    # stdin is then replaced with a spent pipe, which is what `curl … | sh` hands over.
+    pid, master = pty.fork()
+    if pid == 0:  # pragma: no cover - replaced by exec in the child
+        read_end, write_end = os.pipe()
+        os.close(write_end)
+        os.dup2(read_end, 0)
+        os.execve("/bin/sh", ["/bin/sh", str(SCRIPT_PATH)], env)
+    # Drain to EOF before reaping: closing the master first hangs up the child's
+    # terminal, killing it with SIGHUP before it can exec.
+    while True:
+        try:
+            if not os.read(master, 1024):
+                break
+        except OSError:
+            break
+    os.close(master)
+    _, status = os.waitpid(pid, 0)
+
+    assert os.waitstatus_to_exitcode(status) == 0
+    assert record.read_text(encoding="utf-8").splitlines() == ["stdin=tty"]
 
 
 def test_the_entry_point_is_executable_and_reaches_for_no_github_cli() -> None:
