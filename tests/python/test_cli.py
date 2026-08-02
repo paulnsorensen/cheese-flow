@@ -667,6 +667,78 @@ def test_failed_apply_exits_nonzero_and_still_emits_one_json_document(
     assert [entry["status"] for entry in document["results"]] == ["failed"]
 
 
+def test_version_resolution_failure_exits_cleanly_with_empty_stdout(
+    tmp_path: Path,
+    config_home: Path,
+    command_runner: RecordingRunner,
+    calls: dict,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A bare host without npm must fail like an invalid manifest, not crash.
+
+    Adapters raise RuntimeError when ``npm view`` cannot resolve a version;
+    unhandled, that is a traceback and a stdout no JSON consumer can parse.
+    """
+    manifest = write_manifest(tmp_path)
+
+    def exploding_plan(state: DesiredState, _adapters: object) -> InstallPlan:
+        raise RuntimeError("could not run npm: No such file or directory")
+
+    monkeypatch.setattr(cli, "build_install_plan", exploding_plan)
+
+    result = runner.invoke(app, ["install", "--config", str(manifest)])
+
+    assert result.exit_code == 1
+    assert isinstance(result.exception, SystemExit), "the failure must be a clean exit"
+    assert calls["apply"] == []
+    assert result.stdout == ""
+    assert "could not run npm" in result.stderr
+
+
+def test_version_resolution_failure_during_dry_run_exits_cleanly(
+    tmp_path: Path,
+    config_home: Path,
+    command_runner: RecordingRunner,
+    calls: dict,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    manifest = write_manifest(tmp_path)
+
+    def exploding_plan(state: DesiredState, _adapters: object) -> InstallPlan:
+        raise RuntimeError("could not resolve hallouminate@latest with npm view")
+
+    monkeypatch.setattr(cli, "build_install_plan", exploding_plan)
+
+    result = runner.invoke(app, ["install", "--config", str(manifest), "--dry-run"])
+
+    assert result.exit_code == 1
+    assert isinstance(result.exception, SystemExit)
+    assert result.stdout == ""
+    assert "could not resolve" in result.stderr
+
+
+def test_doctor_version_resolution_failure_exits_cleanly(
+    tmp_path: Path,
+    config_home: Path,
+    command_runner: RecordingRunner,
+    calls: dict,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    manifest = write_manifest(tmp_path)
+
+    def exploding_verify(state: DesiredState, _adapters: object, _runner: object) -> DoctorReport:
+        raise RuntimeError("could not run npm: No such file or directory")
+
+    monkeypatch.setattr(cli, "verify_desired_state", exploding_verify)
+
+    result = runner.invoke(app, ["doctor", "--config", str(manifest)])
+
+    assert result.exit_code == 1
+    assert isinstance(result.exception, SystemExit)
+    assert result.stdout == ""
+    assert "could not run npm" in result.stderr
+
+
 # ─── Interactive install: persistence and cancellation ───────────────────────
 
 

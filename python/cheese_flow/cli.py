@@ -13,7 +13,8 @@ from __future__ import annotations
 import json
 import sys
 import tempfile
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Annotated
 
@@ -125,7 +126,8 @@ def install(
         # spec:105 — resolve metadata against a throwaway npm cache, removed on exit.
         with tempfile.TemporaryDirectory(prefix="cheese-npm-cache-") as cache:
             runner = _default_runner({"npm_config_cache": cache}, timeout=timeout)
-            plan = build_install_plan(state, default_component_adapters(runner))
+            with _resolution_failure_reported(console):
+                plan = build_install_plan(state, default_component_adapters(runner))
         console.print("Dry run: emitting the plan without executing it.")
         _announce(console, plan)
         report = ApplyReport(status=ReportStatus.SUCCEEDED, manifest=state, plan=plan)
@@ -134,7 +136,8 @@ def install(
         # One adapter set for planning and apply: apply must reuse the versions
         # planning resolved (acceptance:150).
         adapters = default_component_adapters(runner)
-        plan = build_install_plan(state, adapters)
+        with _resolution_failure_reported(console):
+            plan = build_install_plan(state, adapters)
         if write_config or not headless:
             save_desired_state(state, default_config_path())
             console.print(f"Wrote {default_config_path()}")
@@ -164,8 +167,25 @@ def doctor(
     runner = _default_runner(timeout=timeout)
     adapters = default_component_adapters(runner)
     console.print("Verifying declared managed state.")
-    report = verify_desired_state(state, adapters, runner)
+    with _resolution_failure_reported(console):
+        report = verify_desired_state(state, adapters, runner)
     _emit(console, report, headless=True)
+
+
+@contextmanager
+def _resolution_failure_reported(console: Console) -> Iterator[None]:
+    """Report a version-resolution failure as a diagnostic, not a traceback.
+
+    Adapters raise RuntimeError while planning when ``npm view`` cannot answer —
+    npm missing on a bare host, or no route to the registry. Nothing has been
+    planned or mutated yet, so this fails like an invalid manifest does: one
+    message on stderr, nothing on stdout, and a nonzero exit.
+    """
+    try:
+        yield
+    except RuntimeError as error:
+        console.print(f"Planning failed: {error}")
+        raise typer.Exit(_FAILURE_EXIT_CODE) from error
 
 
 def _console() -> Console:
