@@ -67,6 +67,13 @@ class SubprocessRunner:
                 command,
                 cwd=cwd,
                 env=self._environment(),
+                # Nothing cheese-flow runs is interactive, and an inherited
+                # stdin makes that a hope rather than a fact: a child that
+                # decides to prompt — a plugin CLI asking to trust a source, an
+                # installer confirming a scope — sits on the terminal until the
+                # timeout kills it, once per step. Reading EOF instead, it
+                # fails immediately and the report names it.
+                stdin=subprocess.DEVNULL,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,

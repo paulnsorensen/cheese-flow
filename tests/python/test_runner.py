@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import contextlib
 import os
 import signal
 import subprocess
 import threading
 import time
+from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
@@ -65,6 +67,58 @@ def test_env_overlay_adds_variables_without_dropping_the_inherited_environment()
 
     assert outcome.exit_code == 0
     assert outcome.stdout == "brie|set"
+
+
+@contextlib.contextmanager
+def readable_stdin(content: bytes) -> Iterator[None]:
+    """Give this process a stdin holding ``content``, then hand it back.
+
+    Asserting a child cannot reach the parent's stdin needs a parent stdin
+    worth reaching. Under pytest fd 0 is already spent, so a child that
+    inherits it sees the same EOF the fix produces and the assertion proves
+    nothing. The write end closes before the child starts, so a leak shows up
+    as content rather than as a hung test.
+    """
+    read_fd, write_fd = os.pipe()
+    os.write(write_fd, content)
+    os.close(write_fd)
+    saved = os.dup(0)
+    try:
+        os.dup2(read_fd, 0)
+        os.close(read_fd)
+        yield
+    finally:
+        os.dup2(saved, 0)
+        os.close(saved)
+
+
+def test_a_child_cannot_read_the_parents_stdin() -> None:
+    """Nothing cheese-flow runs is interactive, and the runner must enforce that.
+
+    With stdin inherited, a plugin CLI asking to trust a source or an installer
+    confirming a scope holds the terminal until the timeout kills it — 15
+    minutes per step by default, with no progress output naming the step that
+    is stuck.
+    """
+    runner = SubprocessRunner(timeout=5.0)
+
+    with readable_stdin(b"leaked\n"):
+        outcome = runner.run(("cat",))
+
+    assert outcome.exit_code == 0
+    assert outcome.stdout == "", "the child read the parent's stdin"
+
+
+def test_a_child_prompting_for_input_fails_fast_instead_of_waiting() -> None:
+    """The shape of the real failure: the prompt gets EOF and the step reports it."""
+    runner = SubprocessRunner(timeout=5.0)
+
+    with readable_stdin(b"yes\n"):
+        outcome = runner.run(("sh", "-c", 'printf "trust this source? " >&2; read answer'))
+
+    assert outcome.exit_code != 0
+    assert outcome.exit_code != TIMEOUT_EXIT_CODE
+    assert "trust this source?" in outcome.stderr
 
 
 def test_forward_signal_without_an_active_child_is_a_no_op() -> None:

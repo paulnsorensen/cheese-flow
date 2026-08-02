@@ -13,7 +13,10 @@ REPOSITORY="git+https://github.com/paulnsorensen/cheese-flow"
 
 if ! command -v uvx >/dev/null 2>&1; then
     echo "cheese: installing uv" >&2
-    curl -fsSL https://astral.sh/uv/install.sh | sh
+    # Bounded on purpose: a box with no egress to astral.sh blocks in connect()
+    # with no timeout of its own, and this runs before the installer's own
+    # per-command timeout exists to catch it.
+    curl -fsSL --connect-timeout 10 --max-time 120 https://astral.sh/uv/install.sh | sh
     # The uv installer targets ~/.local/bin, which a non-login shell may not
     # already carry; without this, the exec below fails on the host we just
     # provisioned.
