@@ -105,7 +105,8 @@ def test_installs_uv_first_when_the_host_has_none_and_then_runs_it(tmp_path: Pat
     # `uvx` existed nowhere on PATH, so reaching it at all proves the script
     # both installed uv and put its target directory on PATH.
     assert ran == [
-        f"{bin_dir / 'curl'} -fsSL https://astral.sh/uv/install.sh",
+        f"{bin_dir / 'curl'} -fsSL --connect-timeout 10 --max-time 120 "
+        "https://astral.sh/uv/install.sh",
         f"installed-uvx {FROM} cheese install --harness codex",
     ]
 
@@ -124,7 +125,10 @@ def test_a_failed_uv_install_stops_the_run_and_names_the_real_failure(tmp_path: 
 
     assert completed.returncode == 1
     assert "uv install failed" in completed.stderr
-    assert ran == [f"{bin_dir / 'curl'} -fsSL https://astral.sh/uv/install.sh"]
+    assert ran == [
+        f"{bin_dir / 'curl'} -fsSL --connect-timeout 10 --max-time 120 "
+        "https://astral.sh/uv/install.sh"
+    ]
 
 
 def test_the_entry_point_is_executable_and_reaches_for_no_github_cli() -> None:
