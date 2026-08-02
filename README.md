@@ -47,6 +47,19 @@ just build
 just build-ci
 ```
 
+No checkout needed — `uvx` runs the CLI straight from the repository:
+
+```bash
+# Interactive wizard
+uvx --from git+https://github.com/paulnsorensen/cheese-flow cheese install
+
+# Headless, no manifest file: declare the state on the command line
+uvx --from git+https://github.com/paulnsorensen/cheese-flow cheese install \
+  --harness "claude-code codex" --component hallouminate,easy-cheese --repo . --json
+```
+
+Append `@main` or `@<sha>` to the URL to pin a revision. `--from` is required either way: the package is `cheese-flow`, the command is `cheese`.
+
 Once published to PyPI, install globally with:
 
 ```bash
@@ -63,11 +76,17 @@ Installs the selected components for the selected harnesses and repositories.
 | Option | Effect |
 |---|---|
 | `--config PATH` | Apply this manifest headlessly instead of running the wizard |
+| `--harness NAMES` | Harnesses to manage, comma- or space-separated. Repeatable. Runs headlessly |
+| `--component NAMES` | Components to install, comma- or space-separated. Defaults to all of them |
+| `--repo PATHS` | Repositories to index, comma- or space-separated. Relative paths are resolved |
+| `--write-config` | Persist the resolved manifest. Options are ephemeral without it |
 | `--dry-run` | Emit the plan without changing managed state |
 | `--json` | Write one JSON document to stdout (also runs headlessly) |
 | `--timeout FLOAT` | Seconds a single command may run before it is killed |
 
-With no `--config`/`--json`, `install` runs the interactive wizard and, on acceptance, persists the manifest to the default config path before applying it.
+With no `--config`/`--json` and no state options, `install` runs the interactive wizard and, on acceptance, persists the manifest to the default config path before applying it.
+
+`--harness`/`--component`/`--repo` declare the desired state without a manifest file, which is the CI and cloud path — nothing is persisted unless you pass `--write-config`. Each selected repository's parent becomes its search root. Two combinations are rejected: `--config` with any state option (two sources of state), and `--write-config` with `--dry-run` (a dry run persists nothing).
 
 ### `cheese doctor`
 

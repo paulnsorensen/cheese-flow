@@ -15,7 +15,9 @@ from pathlib import Path
 import pytest
 from cheese_flow import cli
 from cheese_flow.cli import app
+from cheese_flow.desired_state import load_desired_state
 from cheese_flow.models import (
+    COMPONENT_NAMES,
     ApplyReport,
     CommandOutcome,
     DesiredState,
@@ -203,13 +205,13 @@ def test_purged_commands_are_rejected() -> None:
         assert result.exit_code != 0, f"purged command still runs: {command!r}"
 
 
-def test_install_help_documents_its_three_options() -> None:
+def test_install_help_documents_its_options() -> None:
     result = runner.invoke(app, ["install", "--help"])
     assert result.exit_code == 0
     output = result.stdout
-    assert "--config" in output
-    assert "--dry-run" in output
-    assert "--json" in output
+    for option in ("--config", "--dry-run", "--json", "--harness", "--component", "--repo"):
+        assert option in output, f"install help omits {option}"
+    assert "--write-config" in output
 
 
 def test_doctor_help_documents_config_option() -> None:
@@ -294,6 +296,202 @@ def test_json_flag_without_config_runs_headless_from_the_default_manifest(
     assert result.exit_code == 0, result.stderr
     assert calls["wizard"] == []
     assert json.loads(result.stdout)["status"] == "succeeded"
+
+
+# ─── Option-driven headless install ──────────────────────────────────────────
+
+
+def test_options_build_the_desired_state_without_a_manifest(
+    tmp_path: Path, config_home: Path, command_runner: RecordingRunner, calls: dict
+) -> None:
+    project = tmp_path / "code" / "project"
+    project.mkdir(parents=True)
+
+    result = runner.invoke(
+        app,
+        [
+            "install",
+            "--harness",
+            "claude-code",
+            "--component",
+            "hallouminate,easy-cheese",
+            "--repo",
+            str(project),
+        ],
+    )
+
+    assert result.exit_code == 0, result.stderr
+    assert calls["wizard"] == []
+    assert calls["plan"] == [
+        DesiredState(
+            harnesses=("claude-code",),
+            components=("hallouminate", "easy-cheese"),
+            repositories=RepositorySelection(
+                search_roots=(project.parent.resolve(),),
+                selected=(project.resolve(),),
+            ),
+        )
+    ]
+
+
+@pytest.mark.parametrize(
+    ("name", "argv"),
+    [
+        ("comma-separated", ["--harness", "claude-code,codex"]),
+        ("space-separated", ["--harness", "claude-code codex"]),
+        ("repeated", ["--harness", "claude-code", "--harness", "codex"]),
+        ("mixed", ["--harness", "claude-code, codex"]),
+    ],
+)
+def test_list_options_accept_commas_whitespace_and_repetition(
+    name: str, argv: list[str], config_home: Path, command_runner: RecordingRunner, calls: dict
+) -> None:
+    result = runner.invoke(app, ["install", *argv, "--component", "hallouminate easy-cheese"])
+
+    assert result.exit_code == 0, f"{name}: {result.stderr}"
+    state = calls["plan"][0]
+    assert state.harnesses == ("claude-code", "codex"), name
+    assert state.components == ("hallouminate", "easy-cheese"), name
+
+
+def test_omitted_component_option_selects_every_component(
+    config_home: Path, command_runner: RecordingRunner, calls: dict
+) -> None:
+    result = runner.invoke(app, ["install", "--harness", "claude-code"])
+
+    assert result.exit_code == 0, result.stderr
+    assert calls["plan"][0].components == COMPONENT_NAMES
+
+
+def test_a_relative_repo_option_resolves_against_the_working_directory(
+    tmp_path: Path,
+    config_home: Path,
+    command_runner: RecordingRunner,
+    calls: dict,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project = tmp_path / "code" / "project"
+    project.mkdir(parents=True)
+    monkeypatch.chdir(project.parent)
+
+    result = runner.invoke(app, ["install", "--harness", "claude-code", "--repo", "project"])
+
+    assert result.exit_code == 0, result.stderr
+    assert calls["plan"][0].repositories.selected == (project.resolve(),)
+
+
+def test_options_are_ephemeral_unless_write_config_is_passed(
+    config_home: Path, command_runner: RecordingRunner, calls: dict
+) -> None:
+    result = runner.invoke(app, ["install", "--harness", "claude-code"])
+
+    assert result.exit_code == 0, result.stderr
+    assert not config_home.exists(), "options must not persist a manifest by default"
+
+
+def test_write_config_persists_the_option_built_manifest(
+    tmp_path: Path, config_home: Path, command_runner: RecordingRunner, calls: dict
+) -> None:
+    project = tmp_path / "code" / "project"
+    project.mkdir(parents=True)
+
+    result = runner.invoke(
+        app,
+        ["install", "--harness", "codex", "--repo", str(project), "--write-config"],
+    )
+
+    assert result.exit_code == 0, result.stderr
+    assert load_desired_state(config_home) == calls["plan"][0]
+
+
+def test_write_config_is_written_before_the_plan_is_applied(
+    config_home: Path,
+    command_runner: RecordingRunner,
+    calls: dict,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    written: list[bool] = []
+    faked = cli.apply_install_plan
+
+    def record(plan: InstallPlan, runner_: object, *, adapters: object) -> ApplyReport:
+        written.append(config_home.exists())
+        return faked(plan, runner_, adapters=adapters)
+
+    monkeypatch.setattr(cli, "apply_install_plan", record)
+
+    result = runner.invoke(app, ["install", "--harness", "codex", "--write-config"])
+
+    assert result.exit_code == 0, result.stderr
+    assert written == [True]
+
+
+def test_options_combined_with_config_are_rejected_before_planning(
+    tmp_path: Path, config_home: Path, command_runner: RecordingRunner, calls: dict
+) -> None:
+    manifest = write_manifest(tmp_path)
+
+    result = runner.invoke(app, ["install", "--config", str(manifest), "--harness", "claude-code"])
+
+    assert result.exit_code == 2
+    assert calls["plan"] == []
+    assert command_runner.commands == []
+    assert "two sources" in result.stderr
+
+
+def test_write_config_combined_with_dry_run_is_rejected(
+    config_home: Path, command_runner: RecordingRunner, calls: dict
+) -> None:
+    result = runner.invoke(
+        app, ["install", "--harness", "claude-code", "--write-config", "--dry-run"]
+    )
+
+    assert result.exit_code == 2
+    assert calls["plan"] == []
+    assert not config_home.exists()
+
+
+@pytest.mark.parametrize(
+    ("name", "argv", "expected"),
+    [
+        ("unknown harness", ["--harness", "pi"], "unknown harness names: pi"),
+        (
+            "missing required component",
+            ["--harness", "codex", "--component", "tilth"],
+            "components must include required components: hallouminate, easy-cheese",
+        ),
+        (
+            "duplicate harness",
+            ["--harness", "codex,codex"],
+            "harnesses must not contain duplicates: codex",
+        ),
+    ],
+)
+def test_invalid_options_exit_nonzero_before_planning_or_running_anything(
+    name: str,
+    argv: list[str],
+    expected: str,
+    config_home: Path,
+    command_runner: RecordingRunner,
+    calls: dict,
+) -> None:
+    result = runner.invoke(app, ["install", *argv])
+
+    assert result.exit_code == 2, name
+    assert expected in result.stderr, name
+    assert calls["plan"] == [], name
+    assert command_runner.commands == [], name
+    assert not config_home.exists(), name
+
+
+def test_options_with_dry_run_emit_the_plan_and_change_nothing(
+    config_home: Path, command_runner: RecordingRunner, calls: dict
+) -> None:
+    result = runner.invoke(app, ["install", "--harness", "claude-code", "--dry-run"])
+
+    assert result.exit_code == 0, result.stderr
+    assert calls["apply"] == []
+    assert not config_home.exists()
+    assert json.loads(result.stdout)["plan"]["steps"][0]["step_id"] == "hallouminate:install"
 
 
 # ─── Invalid manifests fail first (acceptance:145) ───────────────────────────
