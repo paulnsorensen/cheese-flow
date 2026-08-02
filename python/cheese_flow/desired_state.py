@@ -5,12 +5,19 @@ from __future__ import annotations
 import os
 import tempfile
 import tomllib
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
 from pydantic import ValidationError
 
-from cheese_flow.models import COMPONENT_NAMES, HARNESS_NAMES, DesiredState
+from cheese_flow.models import (
+    COMPONENT_NAMES,
+    HARNESS_NAMES,
+    DesiredState,
+    RepositorySelection,
+    canonicalize,
+)
 
 
 class ManifestError(Exception):
@@ -20,6 +27,10 @@ class ManifestError(Exception):
         super().__init__(f"{path}: {reason}")
         self.path = path
         self.reason = reason
+
+
+class OptionError(Exception):
+    """Command-line options do not describe a valid desired state."""
 
 
 def default_config_path() -> Path:
@@ -37,6 +48,29 @@ def load_desired_state(path: Path) -> DesiredState:
     document = _read_document(path)
     _reject_non_integer_max_depth(path, document)
     return _build_state(path, document)
+
+
+def state_from_options(
+    harnesses: Sequence[str],
+    components: Sequence[str],
+    repositories: Sequence[Path],
+) -> DesiredState:
+    """Build a validated desired state from command-line options, not a manifest.
+
+    Repository paths are resolved against the working directory, so a caller may
+    name one relatively; each selection's parent becomes its search root, which
+    is the narrowest root that satisfies the selection-under-a-root rule.
+    """
+    selected = tuple(dict.fromkeys(canonicalize(path) for path in repositories))
+    search_roots = tuple(dict.fromkeys(path.parent for path in selected))
+    try:
+        return DesiredState(
+            harnesses=tuple(harnesses),
+            components=tuple(components),
+            repositories=RepositorySelection(search_roots=search_roots, selected=selected),
+        )
+    except ValidationError as error:
+        raise OptionError(_describe(error)) from error
 
 
 def save_desired_state(state: DesiredState, path: Path) -> None:

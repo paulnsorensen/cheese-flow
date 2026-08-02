@@ -1,7 +1,8 @@
 """Typer CLI entry point for cheese-flow.
 
-``cheese install`` runs the wizard, or applies a manifest headlessly with
-``--config``. ``cheese doctor`` verifies declared managed state.
+``cheese install`` runs the wizard, or installs headlessly from a manifest
+(``--config``) or from options (``--harness``/``--component``/``--repo``).
+``cheese doctor`` verifies declared managed state.
 
 Output discipline: in headless mode stdout carries exactly one JSON document and
 nothing else. Every prompt, progress line, and diagnostic goes to stderr.
@@ -21,13 +22,16 @@ from rich.console import Console
 from cheese_flow.adapters import default_component_adapters
 from cheese_flow.desired_state import (
     ManifestError,
+    OptionError,
     default_config_path,
     load_desired_state,
     save_desired_state,
+    state_from_options,
 )
 from cheese_flow.doctor import verify_desired_state
 from cheese_flow.install import apply_install_plan, build_install_plan
 from cheese_flow.models import (
+    COMPONENT_NAMES,
     ApplyReport,
     CommandRunner,
     DesiredState,
@@ -58,6 +62,34 @@ def install(
             help="Apply this manifest headlessly instead of running the wizard.",
         ),
     ] = None,
+    harness: Annotated[
+        list[str] | None,
+        typer.Option(
+            "--harness",
+            help="Harnesses to manage, comma- or space-separated. Repeatable. Runs headlessly.",
+        ),
+    ] = None,
+    component: Annotated[
+        list[str] | None,
+        typer.Option(
+            "--component",
+            help="Components to install, comma- or space-separated. Defaults to all of them.",
+        ),
+    ] = None,
+    repo: Annotated[
+        list[str] | None,
+        typer.Option(
+            "--repo",
+            help="Repositories to index, comma- or space-separated. Relative paths are resolved.",
+        ),
+    ] = None,
+    write_config: Annotated[
+        bool,
+        typer.Option(
+            "--write-config",
+            help="Persist the resolved manifest. Options are ephemeral without it.",
+        ),
+    ] = False,
     dry_run: Annotated[
         bool,
         typer.Option("--dry-run", help="Emit the plan without changing managed state."),
@@ -76,12 +108,17 @@ def install(
 ) -> None:
     """Install the selected components for the selected harnesses and repositories."""
     console = _console()
-    headless = config is not None or json_output
-    state = (
-        _headless_state(console, config)
-        if headless
-        else _interactive_state(console, dry_run=dry_run)
+    declared = (_tokens(harness), _tokens(component), _tokens(repo))
+    _reject_conflicting_options(
+        console, config=config, declared=declared, write_config=write_config, dry_run=dry_run
     )
+    headless = config is not None or json_output or any(declared)
+    if any(declared):
+        state = _option_state(console, *declared)
+    elif headless:
+        state = _headless_state(console, config)
+    else:
+        state = _interactive_state(console, dry_run=dry_run)
 
     if dry_run:
         # spec:105 — resolve metadata against a throwaway npm cache, removed on exit.
@@ -97,7 +134,7 @@ def install(
         # planning resolved (acceptance:150).
         adapters = default_component_adapters(runner)
         plan = build_install_plan(state, adapters)
-        if not headless:
+        if write_config or not headless:
             save_desired_state(state, default_config_path())
             console.print(f"Wrote {default_config_path()}")
         _announce(console, plan)
@@ -141,6 +178,51 @@ def _default_runner(
     timeout: float = DEFAULT_TIMEOUT_SECONDS,
 ) -> CommandRunner:
     return SubprocessRunner(env=env, timeout=timeout)
+
+
+def _tokens(values: list[str] | None) -> tuple[str, ...]:
+    """Split option values on commas or whitespace, so both separators read alike."""
+    return tuple(token for value in values or () for token in value.replace(",", " ").split())
+
+
+def _reject_conflicting_options(
+    console: Console,
+    *,
+    config: Path | None,
+    declared: tuple[tuple[str, ...], ...],
+    write_config: bool,
+    dry_run: bool,
+) -> None:
+    """Refuse option sets that name two sources of state, or a write that cannot happen."""
+    if config is not None and any(declared):
+        console.print(
+            "Invalid options: --config and --harness/--component/--repo "
+            "name two sources of desired state."
+        )
+        raise typer.Exit(_MANIFEST_EXIT_CODE)
+    if write_config and dry_run:
+        console.print(
+            "Invalid options: --dry-run persists nothing, so --write-config cannot apply."
+        )
+        raise typer.Exit(_MANIFEST_EXIT_CODE)
+
+
+def _option_state(
+    console: Console,
+    harnesses: tuple[str, ...],
+    components: tuple[str, ...],
+    repositories: tuple[str, ...],
+) -> DesiredState:
+    """Build the desired state from options, failing before planning or mutation."""
+    try:
+        return state_from_options(
+            harnesses,
+            components or COMPONENT_NAMES,
+            tuple(Path(path) for path in repositories),
+        )
+    except OptionError as error:
+        console.print(f"Invalid options: {error}")
+        raise typer.Exit(_MANIFEST_EXIT_CODE) from error
 
 
 def _headless_state(console: Console, config: Path | None) -> DesiredState:
