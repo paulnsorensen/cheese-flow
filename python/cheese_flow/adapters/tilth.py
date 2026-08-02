@@ -115,7 +115,8 @@ def _launches_tilth(command: str) -> bool:
     ``tilth install`` writes the binary's own absolute path; a stale
     npm-era ``npx tilth`` entry no longer counts.
     """
-    return Path(command).name == PACKAGE
+    path = Path(command)
+    return path.is_absolute() and path.name == PACKAGE
 
 
 # Native user-scope MCP config per harness, relative to the home directory.

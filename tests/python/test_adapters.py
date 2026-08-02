@@ -1368,6 +1368,10 @@ def test_launches_tilth_rejects_a_staging_artifact_command() -> None:
     assert _launches_tilth("/home/paul/.local/bin/tilth.XXXXXX") is False
 
 
+def test_launches_tilth_rejects_a_bare_command() -> None:
+    assert _launches_tilth("tilth") is False
+
+
 def test_tilth_postcondition_accepts_a_globally_installed_absolute_command(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
