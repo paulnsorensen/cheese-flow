@@ -147,7 +147,14 @@ class HallouminateAdapter:
                 step_id=_CONFIG_STEP,
                 component=self.name,
                 phase=Phase.CONFIGURE,
-                argv=("hallouminate", "config", "init"),
+                # `--force` because this step runs only when validation already
+                # failed. Without it, `config init` exits 1 on an existing
+                # config — "pass --force to overwrite" — naming a flag the user
+                # has no way to supply, and it fails identically on every
+                # retry. The postcondition is what makes forcing safe: a config
+                # that validates skips the step, so this can only ever overwrite
+                # one that is already broken.
+                argv=("hallouminate", "config", "init", "--force"),
                 postcondition="`hallouminate config validate` succeeds",
                 depends_on=(_INSTALL_STEP,),
             )

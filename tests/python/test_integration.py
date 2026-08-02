@@ -109,6 +109,7 @@ class FakeWorld:
         self.marketplaces: set[str] = set()
         self.plugins: set[str] = set()
         self.config_initialized = False
+        self.config_exists = False
         self.initialized_repos: set[Path] = set()
         self.indexed_repos: set[Path] = set()
         self.skills: dict[str, list[str]] = {}
@@ -138,6 +139,7 @@ class FakeWorld:
         self.installed["hallouminate"] = version
         self.marketplaces.add(MARKETPLACE_SOURCE)
         self.plugins.add(PLUGIN_ID)
+        self.config_exists = True
         self.config_initialized = True
         for harness in harnesses:
             self.install_skills(harness)
@@ -199,9 +201,20 @@ class FakeWorld:
             return _ok(key)
         if key[1:] == ("plugin", "list", "--json"):
             return _ok(key, self._plugin_listing(key[0]))
-        if key == ("hallouminate", "config", "init"):
+        if key[:3] == ("hallouminate", "config", "init"):
             if "hallouminate-config" in self._refuse:
                 return _fail(key, "config init refused")
+            # The real CLI refuses to overwrite: `config init` on an existing
+            # config exits 1 with "pass --force to overwrite". A fake that
+            # always succeeds hides the one case where this step is reached
+            # with a config already on disk.
+            if self.config_exists and "--force" not in key:
+                return _fail(
+                    key,
+                    f"config already exists at {self.home}/.config/hallouminate/config.toml;"
+                    " pass --force to overwrite",
+                )
+            self.config_exists = True
             self.config_initialized = True
             return _ok(key)
         if key == ("hallouminate", "config", "validate"):
@@ -496,7 +509,7 @@ def test_dry_run_emits_the_exact_plan_without_executing_package_code(
         ["npm", "install", "-g", "hallouminate@1.0.0"],
         ["codex", "plugin", "marketplace", "add", MARKETPLACE_SOURCE],
         ["codex", "plugin", "add", PLUGIN_ID],
-        ["hallouminate", "config", "init"],
+        ["hallouminate", "config", "init", "--force"],
         [
             "npx",
             "-y",
@@ -885,6 +898,35 @@ def test_install_converges_every_easy_cheese_step_with_gh_absent(
     for name in EASY_CHEESE_SKILLS:
         assert (home / CANONICAL_SKILLS_DIR / name / "SKILL.md").is_file()
         assert (home / CLAUDE_SKILLS_DIR / name / "SKILL.md").is_file()
+
+
+def test_install_repairs_a_config_that_exists_but_does_not_validate(
+    tmp_path: Path, home: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A broken config must not leave an install that fails the same way forever.
+
+    The configure step runs only when `config validate` fails, and the real CLI
+    refuses to overwrite without `--force` — so planning it unforced turns a
+    stale config into a permanently stuck install whose error names a flag the
+    user cannot supply.
+    """
+    world = wire(monkeypatch, FakeWorld(home))
+    # On disk but not valid: exactly the state that reaches the mutation.
+    world.config_exists = True
+    manifest = write_manifest(
+        tmp_path,
+        manifest_text(harnesses=["claude-code"], components=["hallouminate", "easy-cheese"]),
+    )
+
+    result = cli_runner.invoke(app, ["install", "--config", str(manifest)])
+
+    assert result.exit_code == 0, result.stderr
+    document = json.loads(result.stdout)
+    config_step = next(
+        entry for entry in document["results"] if entry["step_id"] == "hallouminate:config-init"
+    )
+    assert config_step["status"] == "succeeded", config_step.get("stderr_tail")
+    assert world.config_initialized
 
 
 def test_a_repo_option_that_is_not_a_repository_exits_two_before_planning(
