@@ -499,6 +499,57 @@ def test_repository_is_revalidated_at_its_own_first_use_not_once_per_run(tmp_pat
     assert str(later) in (report.results[1].remediation or "")
 
 
+@pytest.mark.parametrize(
+    ("name", "drift", "expected"),
+    [
+        pytest.param(
+            "gone",
+            lambda repository: _rename(repository),
+            "is not present at its planned path",
+            id="path-disappeared",
+        ),
+        pytest.param(
+            "stranger",
+            lambda repository: (repository / ".git").rmdir(),
+            "is not a git repository",
+            id="directory-that-is-not-a-repository",
+        ),
+    ],
+)
+def test_blocked_repository_says_which_of_the_two_absences_it_hit(
+    name: str,
+    drift: Callable[[Path], None],
+    expected: str,
+    tmp_path: Path,
+) -> None:
+    """Discovery reports one absence; the remediation must not guess at the cause.
+
+    A directory that is simply not a repository — one a user may have named by
+    mistake and that was never a repository — must not be reported as one that
+    stopped being a repository at its planned path.
+    """
+    early = make_repository(tmp_path / "early")
+    later = make_repository(tmp_path / name)
+    steps = (
+        step("init-early", repository=early, phase=Phase.INITIALIZE),
+        step("init-later", repository=later, phase=Phase.INITIALIZE),
+    )
+    adapter = ScriptedAdapter("hallouminate", steps)
+    runner = MutatingRunner(("run", "init-early"), lambda: drift(later))
+
+    report = apply_install_plan(plan_of(*steps), runner, adapters={"hallouminate": adapter})
+
+    assert statuses(report) == [
+        ("init-early", StepStatus.SUCCEEDED),
+        ("init-later", StepStatus.BLOCKED),
+    ]
+    assert report.results[1].remediation == f"{later} {expected}"
+
+
+def _rename(repository: Path) -> None:
+    repository.rename(repository.with_name(f"{repository.name}-moved"))
+
+
 def test_per_repository_revalidation_still_sees_cross_repository_name_collisions(
     tmp_path: Path,
 ) -> None:

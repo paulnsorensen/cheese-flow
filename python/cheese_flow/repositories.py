@@ -74,7 +74,7 @@ def _scan(root: Path, max_depth: int, boundaries: tuple[Path, ...]) -> list[Path
             canonical = _resolve(directory)
             if canonical is None or not _within(canonical, boundaries):
                 continue
-            if _is_repository(canonical):
+            if is_repository(canonical):
                 repos.append(canonical)
                 continue
             if depth < max_depth:
@@ -98,7 +98,8 @@ def _child_directories(directory: Path) -> list[Path]:
     return children
 
 
-def _is_repository(directory: Path) -> bool:
+def is_repository(directory: Path) -> bool:
+    """Whether ``directory`` is a git repository — a checkout or a linked worktree."""
     try:
         return (directory / ".git").exists()
     except OSError:

@@ -304,7 +304,7 @@ class _RepositoryRevalidation:
             self._rediscover()
             cached = self._verdicts.get(canonical)
         if cached is None:
-            return f"{repository} is no longer a repository at its planned path"
+            return _absent_reason(repository)
         return cached[1]
 
     def _rediscover(self) -> None:
@@ -321,9 +321,22 @@ class _RepositoryRevalidation:
         }
 
 
+def _absent_reason(repository: Path) -> str:
+    """Why discovery no longer answers for a planned repository.
+
+    Discovery reports a single absence, but the two causes need different
+    fixes and only one of them is a path that moved. A directory that is still
+    there and simply is not a git repository must not be described as one that
+    stopped being a repository — it may never have been one.
+    """
+    if not repository.is_dir():
+        return f"{repository} is not present at its planned path"
+    return f"{repository} is not a git repository"
+
+
 def _drift_reason(candidate: RepositoryCandidate | None, repository: Path) -> str | None:
     if candidate is None:
-        return f"{repository} is no longer a repository at its planned path"
+        return _absent_reason(repository)
     if not candidate.writable:
         return f"{repository} is not writable"
     if candidate.collision is not CollisionClass.NONE:

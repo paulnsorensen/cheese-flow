@@ -55,15 +55,17 @@ DECOY_MARKETPLACE_ROOT = "/home/paul/Dev/paulnsorensen/hallouminate"
 # without this user ever having installed it.
 FOREIGN_PROJECT_PLUGIN = PLUGIN_ID
 
-# A skill the user wrote by hand that shares an easy-cheese name. `gh skill
-# install` never touched it, so gh reports no sourceURL for it.
-LOCAL_LOOKALIKE_SKILL = "cook"
-
-# What `gh skill install <repo> --all` puts on disk, and the repo gh records as
-# each skill's provenance. Spelled out rather than imported: dropping one of
-# these must fail the postcondition, not follow it.
+# What `skills add <repo> --skill '*' --global` puts on disk. Spelled out
+# rather than imported: dropping one of these must fail the postcondition, not
+# follow it.
 EASY_CHEESE_SOURCE = "paulnsorensen/easy-cheese"
 EASY_CHEESE_SKILLS = ("mold", "cook", "press", "age", "cure", "plate", "cheese")
+
+# Where the `skills` CLI writes a global install: one canonical store, plus a
+# per-skill symlink into the directory of every agent that does not read the
+# canonical layout already. Codex and Cursor do read it; Claude Code does not.
+CANONICAL_SKILLS_DIR = ".agents/skills"
+CLAUDE_SKILLS_DIR = ".claude/skills"
 
 # The harness-native MCP config files the adapters read. Spelled out here on
 # purpose: if production moves one of these, the fake writes the old path and
@@ -138,8 +140,23 @@ class FakeWorld:
         self.plugins.add(PLUGIN_ID)
         self.config_initialized = True
         for harness in harnesses:
-            self.skills[harness] = list(EASY_CHEESE_SKILLS)
+            self.install_skills(harness)
             self.write_tilth_entry(harness)
+
+    def install_skills(self, harness: str) -> None:
+        """What ``skills add <repo> --skill '*' --agent <harness> --global`` leaves on disk."""
+        self.skills[harness] = list(EASY_CHEESE_SKILLS)
+        canonical = self.home / CANONICAL_SKILLS_DIR
+        for name in EASY_CHEESE_SKILLS:
+            (canonical / name).mkdir(parents=True, exist_ok=True)
+            (canonical / name / "SKILL.md").write_text(f"# {name}\n", encoding="utf-8")
+        if harness == "claude-code":
+            linked = self.home / CLAUDE_SKILLS_DIR
+            linked.mkdir(parents=True, exist_ok=True)
+            for name in EASY_CHEESE_SKILLS:
+                link = linked / name
+                if not link.exists():
+                    link.symlink_to(canonical / name, target_is_directory=True)
 
     def write_tilth_entry(self, harness: str) -> None:
         """What ``npx tilth install <harness> --edit`` leaves in the native config."""
@@ -200,11 +217,9 @@ class FakeWorld:
             if cwd in self.indexed_repos:
                 return _ok(key, '[{"path": ".hallouminate/wiki/index.md"}]')
             return _fail(key, "no corpus")
-        if key[:3] == ("gh", "skill", "install"):
-            self.skills[_agent_of(key)] = list(EASY_CHEESE_SKILLS)
+        if key[:4] == ("npx", "-y", "skills@latest", "add"):
+            self.install_skills(_agent_of(key))
             return _ok(key)
-        if key[:3] == ("gh", "skill", "list"):
-            return _ok(key, json.dumps(self._skill_entries(_agent_of(key))))
         if key[:2] == ("npx", "--yes") and key[2].startswith("tilth@"):
             self.write_tilth_entry(key[4])
             return _ok(key)
@@ -283,34 +298,6 @@ class FakeWorld:
         if cwd in self.initialized_repos:
             return _ok(key, f"  - repo:{cwd.name}:wiki  → {cwd}/./.hallouminate/wiki")
         return _fail(key, f"{cwd} has no corpus")
-
-    def _skill_entries(self, harness: str) -> list[dict[str, object]]:
-        """Rows a real `gh skill list --json` returns.
-
-        ``gh skill install`` records provenance in the installed SKILL.md's
-        ``metadata.github-repo`` frontmatter, which gh surfaces as ``sourceURL``
-        — so only skills gh installed carry one. A hand-written skill sharing an
-        easy-cheese name is always present with an empty ``sourceURL``, and it
-        must never contribute to the quorum.
-        """
-        entries: list[dict[str, object]] = [
-            {
-                "skillName": LOCAL_LOOKALIKE_SKILL,
-                "scope": "user",
-                "agentHosts": [harness],
-                "sourceURL": "",
-            }
-        ]
-        entries += [
-            {
-                "skillName": name,
-                "scope": "user",
-                "agentHosts": [harness],
-                "sourceURL": f"https://github.com/{EASY_CHEESE_SOURCE}",
-            }
-            for name in self.skills.get(harness, [])
-        ]
-        return entries
 
     def _next_version(self, package: str) -> str:
         answers = self._versions.setdefault(package, ["1.0.0"])
@@ -511,15 +498,17 @@ def test_dry_run_emits_the_exact_plan_without_executing_package_code(
         ["codex", "plugin", "add", PLUGIN_ID],
         ["hallouminate", "config", "init"],
         [
-            "gh",
-            "skill",
-            "install",
-            "paulnsorensen/easy-cheese",
-            "--all",
+            "npx",
+            "-y",
+            "skills@latest",
+            "add",
+            EASY_CHEESE_SOURCE,
+            "--skill",
+            "*",
             "--agent",
             "codex",
-            "--scope",
-            "user",
+            "--global",
+            "--yes",
         ],
         ["npx", "--yes", "tilth@4.5.6", "install", "codex", "--edit"],
     ]
@@ -576,7 +565,10 @@ def test_complete_config_runs_headlessly_and_stdout_is_one_json_document(
         (f"hallouminate:init-repo:{key}", "succeeded"),
         (f"hallouminate:index:{key}", "succeeded"),
         ("easy-cheese:install:claude-code", "succeeded"),
-        ("easy-cheese:install:cursor", "succeeded"),
+        # Cursor reads the same canonical skills store Claude Code's install
+        # just filled, so its postcondition already holds and no second
+        # `skills add` runs.
+        ("easy-cheese:install:cursor", "skipped"),
         ("tilth:register:claude-code", "succeeded"),
         ("tilth:register:cursor", "succeeded"),
     ]
@@ -600,29 +592,13 @@ READ_ONLY_PROBES = [
     ("codex", "plugin", "marketplace", "list", "--json"),
     ("codex", "plugin", "list", "--json"),
     ("hallouminate", "config", "validate"),
-    (
-        "gh",
-        "skill",
-        "list",
-        "--agent",
-        "claude-code",
-        "--scope",
-        "user",
-        "--json",
-        "agentHosts,scope,skillName,sourceURL",
-    ),
-    (
-        "gh",
-        "skill",
-        "list",
-        "--agent",
-        "codex",
-        "--scope",
-        "user",
-        "--json",
-        "agentHosts,scope,skillName,sourceURL",
-    ),
 ]
+"""Every command a fully converged run may still run.
+
+easy-cheese contributes none: its postcondition reads the installed files
+directly, so a converged host needs no child process to prove the pack is
+there — and a host with no GitHub CLI reaches the same verdict.
+"""
 
 
 def test_already_satisfied_postconditions_skip_every_mutation(
@@ -857,6 +833,79 @@ def test_doctor_reports_every_unsatisfied_postcondition_independently(
     assert snapshot(home) == {}
 
 
+# ─── A bare cloud box: no `gh`, no repository at the named path ──────────────
+
+
+class GhlessWorld(FakeWorld):
+    """A host where ``gh`` is not installed, exactly as a cloud box answers.
+
+    Anything reaching for ``gh`` dies the way ``execvp`` does — exit 127 with
+    the kernel's message — so a step that still depends on it cannot converge
+    and cannot hide behind a modelled success.
+    """
+
+    def _dispatch(self, key: tuple[str, ...], cwd: Path | None) -> CommandOutcome:
+        if key[0] == "gh":
+            return CommandOutcome(
+                argv=key,
+                exit_code=127,
+                stdout="",
+                stderr="could not run gh: No such file or directory",
+                elapsed_ms=1,
+            )
+        return super()._dispatch(key, cwd)
+
+
+def test_install_converges_every_easy_cheese_step_with_gh_absent(
+    tmp_path: Path, home: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The failure this whole change exists for: `gh` was an ambient prerequisite."""
+    world = wire(monkeypatch, GhlessWorld(home))
+    manifest = write_manifest(
+        tmp_path,
+        manifest_text(
+            harnesses=["claude-code", "codex", "cursor"],
+            components=["hallouminate", "easy-cheese"],
+        ),
+    )
+
+    result = cli_runner.invoke(app, ["install", "--config", str(manifest)])
+
+    assert result.exit_code == 0, result.stderr
+    document = json.loads(result.stdout)
+    easy_cheese = [entry for entry in document["results"] if entry["component"] == "easy-cheese"]
+    assert [entry["step_id"] for entry in easy_cheese] == [
+        "easy-cheese:install:claude-code",
+        "easy-cheese:install:codex",
+        "easy-cheese:install:cursor",
+    ]
+    assert {entry["status"] for entry in easy_cheese} <= {"succeeded", "skipped"}
+    assert not any(argv[0] == "gh" for argv in world.argvs())
+    # The pack really is on disk for each harness, not merely reported so.
+    for name in EASY_CHEESE_SKILLS:
+        assert (home / CANONICAL_SKILLS_DIR / name / "SKILL.md").is_file()
+        assert (home / CLAUDE_SKILLS_DIR / name / "SKILL.md").is_file()
+
+
+def test_a_repo_option_that_is_not_a_repository_exits_two_before_planning(
+    tmp_path: Path, home: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """acceptance:25 — a stranger path fails at parse time, not as a blocked step mid-apply."""
+    stranger = tmp_path / "not-a-repository"
+    stranger.mkdir()
+    world = wire(monkeypatch, FakeWorld(home))
+
+    result = cli_runner.invoke(
+        app, ["install", "--harness", "claude-code", "--repo", str(stranger)]
+    )
+
+    assert result.exit_code == 2
+    assert str(stranger) in result.stderr
+    assert result.stdout == "", "nothing was planned, so there is no report to emit"
+    assert world.calls == []
+    assert snapshot(home) == {}
+
+
 # ─── acceptance:154 — discovered repositories start unchecked ────────────────
 
 
@@ -1045,9 +1094,14 @@ def test_wizard_state_round_trips_through_disk_to_an_identical_plan(
 
     report = apply_install_plan(from_disk, apply_world, adapters=adapters)
 
-    assert [result.status for result in report.results] == [StepStatus.SUCCEEDED] * len(
-        from_disk.steps
-    )
+    # Cursor's easy-cheese step is the one exception: Claude Code's install
+    # already filled the canonical skills store Cursor reads, so it converges
+    # without running.
+    reached = {StepStatus.SUCCEEDED, StepStatus.SKIPPED}
+    assert {result.status for result in report.results} <= reached
+    assert [result.step_id for result in report.results if result.status is StepStatus.SKIPPED] == [
+        "easy-cheese:install:cursor"
+    ]
     assert apply_world.initialized_repos == {repository}
 
 

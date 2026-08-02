@@ -1,9 +1,9 @@
-"""easy-cheese adapter: ``gh skill`` install and verification."""
+"""easy-cheese adapter: ``skills`` CLI install and on-disk verification."""
 
 from __future__ import annotations
 
-import json
-from typing import Any
+import os
+from pathlib import Path
 
 from cheese_flow.models import (
     HARNESS_NAMES,
@@ -16,31 +16,80 @@ from cheese_flow.models import (
 )
 
 SOURCE_REPOSITORY = "paulnsorensen/easy-cheese"
-SCOPE = "user"
+PACKAGE = "skills@latest"
 
-_LIST_FIELDS = "agentHosts,scope,skillName,sourceURL"
+AGENT_TOKENS: dict[HarnessName, str] = {
+    "claude-code": "claude-code",
+    "codex": "codex",
+    "cursor": "cursor",
+}
+"""``skills --agent`` tokens the CLI accepts, keyed by harness.
+
+Taken from the CLI's own agent registry. A harness that has no accepted token
+belongs nowhere in this table: it then contributes no step at all, rather than
+one that could only ever fail.
+"""
 
 CORE_SKILLS = frozenset({"mold", "cook", "press", "age", "cure", "plate", "cheese"})
 """The pipeline skills easy-cheese always ships; a full quorum identifies the pack."""
 
+SKILL_FILE = "SKILL.md"
+"""The file every installed skill directory carries."""
 
-def _normalize_source(raw: str) -> str:
-    """Reduce a ``gh skill list`` sourceURL to its ``owner/repo`` identity."""
-    trimmed = raw.strip().removesuffix(".git").rstrip("/")
-    parts = [part for part in trimmed.replace(":", "/").split("/") if part]
-    return "/".join(parts[-2:]) if len(parts) >= 2 else ""
+_CLAUDE_CONFIG_DIR = "CLAUDE_CONFIG_DIR"
+"""Claude Code's config-directory override, which the ``skills`` CLI honours."""
+
+_SKILLS_DIRS: dict[HarnessName, str] = {
+    "claude-code": ".claude/skills",
+    "codex": ".agents/skills",
+    "cursor": ".agents/skills",
+}
+"""Where a global ``skills add`` leaves each harness's pack, relative to home.
+
+``.agents/skills`` is the CLI's one canonical store; a harness that declares
+that shared layout as its own — Codex and Cursor — is served from it directly,
+with no second copy and no link. Claude Code declares a directory of its own
+and additionally receives a symlink per skill into it.
+
+Every harness needs an entry here and in :data:`AGENT_TOKENS`. Both lookups
+raise on a harness that has neither, which is the point: verifying the wrong
+directory would report an install that never reached the harness.
+"""
+
+
+def skills_directory(harness: HarnessName) -> Path:
+    """Where ``skills add --global`` leaves the pack for ``harness``.
+
+    Claude Code's location moves with ``CLAUDE_CONFIG_DIR``, exactly as the CLI
+    reads it.
+
+    Symlinking is the CLI's default and is kept deliberately: one copy of the
+    pack is updated in place, and a chezmoi-managed ``~/.claude/skills`` gains
+    links rather than eighteen duplicated skill trees.
+    """
+    if harness == "claude-code":
+        configured = os.environ.get(_CLAUDE_CONFIG_DIR, "").strip()
+        if configured:
+            return Path(configured) / "skills"
+    return Path.home() / _SKILLS_DIRS[harness]
 
 
 class EasyCheeseAdapter:
-    """Installs the easy-cheese skill pack per harness through ``gh skill``."""
+    """Installs the easy-cheese skill pack per harness through the ``skills`` CLI."""
 
     name: ComponentName = "easy-cheese"
 
     def __init__(self, runner: CommandRunner) -> None:
-        self._runner = runner
+        # Constructed uniformly with every other adapter, but this one resolves
+        # no versions and probes with no command, so the runner is not kept.
+        del runner
 
     def plan_steps(self, state: DesiredState) -> tuple[PlanStep, ...]:
-        """Emit one ``gh skill install`` step per selected harness."""
+        """Emit one ``skills add`` step per selected harness the CLI can target.
+
+        ``npx`` runs the CLI, so the only host prerequisite is the ``npm``
+        toolchain hallouminate's own install already requires.
+        """
         if self.name not in state.components:
             return ()
         return tuple(
@@ -50,74 +99,44 @@ class EasyCheeseAdapter:
                 harness=harness,
                 phase=Phase.REGISTER,
                 argv=(
-                    "gh",
-                    "skill",
-                    "install",
+                    "npx",
+                    "-y",
+                    PACKAGE,
+                    "add",
                     SOURCE_REPOSITORY,
-                    "--all",
+                    "--skill",
+                    "*",
                     "--agent",
-                    harness,
-                    "--scope",
-                    SCOPE,
+                    AGENT_TOKENS[harness],
+                    "--global",
+                    "--yes",
                 ),
                 postcondition=(
-                    f"`gh skill list` reports {SOURCE_REPOSITORY} skills for {harness} at "
-                    f"{SCOPE} scope"
+                    f"the easy-cheese core skills are installed under {skills_directory(harness)}"
                 ),
             )
             for harness in HARNESS_NAMES
-            if harness in state.harnesses
+            if harness in state.harnesses and harness in AGENT_TOKENS
         )
 
     def check_postcondition(self, step: PlanStep, runner: CommandRunner) -> bool:
-        """Confirm the pack is installed for the harness at the expected scope.
+        """Confirm the whole core quorum is on disk for the harness.
 
-        ``gh skill install`` records provenance in the installed ``SKILL.md``'s
-        ``metadata.github-repo`` frontmatter, which ``gh skill list`` surfaces
-        as ``sourceURL``. The field is empty exactly when gh did not install the
-        skill, so it is authoritative identity: locally authored skills that
-        merely share easy-cheese's names never count. The step installs
-        ``--all``, so convergence needs the whole core quorum from our source.
+        The ``skills`` CLI records no provenance any listing could report, so
+        identity is the pack's own layout: every core skill present as
+        ``<skills dir>/<name>/SKILL.md``. That is a name-based check — a
+        machine whose author keeps hand-written skills under all seven names
+        reads as installed — and it is knowingly weaker than the provenance
+        field the previous listing-based check read, which issue #86 found
+        empty in practice anyway. It spawns no child process, so a host with no
+        GitHub CLI verifies exactly as well as one that has it.
         """
-        if step.harness is None:
-            raise ValueError(f"step {step.step_id!r} has no harness")
-        outcome = runner.run(
-            (
-                "gh",
-                "skill",
-                "list",
-                "--agent",
-                step.harness,
-                "--scope",
-                SCOPE,
-                "--json",
-                _LIST_FIELDS,
-            )
-        )
-        if outcome.exit_code != 0:
-            return False
-        try:
-            entries = json.loads(outcome.stdout)
-        except json.JSONDecodeError:
-            return False
-        if not isinstance(entries, list):
-            return False
-        ours = {
-            str(entry["skillName"]).strip()
-            for entry in entries
-            if _is_skill_for(entry, step.harness)
-            and _normalize_source(str(entry.get("sourceURL", ""))) == SOURCE_REPOSITORY
-        }
-        return ours >= CORE_SKILLS
+        del runner  # The end state is on disk; no command can report it better.
+        directory = skills_directory(_harness_of(step))
+        return all((directory / name / SKILL_FILE).is_file() for name in CORE_SKILLS)
 
 
-def _is_skill_for(entry: Any, harness: HarnessName) -> bool:
-    """Whether a listing entry is a named skill installed for this harness and scope."""
-    if not isinstance(entry, dict):
-        return False
-    if entry.get("scope") != SCOPE:
-        return False
-    hosts = entry.get("agentHosts")
-    if not isinstance(hosts, list) or harness not in hosts:
-        return False
-    return bool(str(entry.get("skillName", "")).strip())
+def _harness_of(step: PlanStep) -> HarnessName:
+    if step.harness is None:
+        raise ValueError(f"step {step.step_id!r} has no harness")
+    return step.harness
