@@ -171,6 +171,38 @@ def test_hallouminate_registers_cursor_mcp_entry_declaratively(
     )
 
 
+def test_hallouminate_plans_a_claude_code_mcp_permission_after_the_plugin(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path))
+    steps = steps_by_id(HallouminateAdapter(FakeRunner(npm_script())).plan_steps(state()))
+
+    permission = steps["hallouminate:permission:claude-code"]
+    assert permission.depends_on == ("hallouminate:plugin:claude-code",)
+    assert permission.config_edit == ConfigEdit(
+        target=tmp_path / ".claude/settings.json",
+        pointer="permissions.allow",
+        value="mcp__hallouminate",
+        mode="append_unique",
+    )
+
+
+def test_hallouminate_permission_postcondition_requires_its_allow_rule(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path))
+    adapter = HallouminateAdapter(FakeRunner(npm_script()))
+    permission = steps_by_id(adapter.plan_steps(state()))["hallouminate:permission:claude-code"]
+    settings = tmp_path / ".claude/settings.json"
+    settings.parent.mkdir()
+    settings.write_text(json.dumps({"permissions": {"allow": ["mcp__tilth"]}}))
+
+    assert adapter.check_postcondition(permission, FakeRunner()) is False
+
+    settings.write_text(json.dumps({"permissions": {"allow": ["mcp__hallouminate"]}}))
+    assert adapter.check_postcondition(permission, FakeRunner()) is True
+
+
 def test_hallouminate_omits_the_cursor_mcp_step_when_cursor_is_not_selected() -> None:
     runner = FakeRunner(npm_script())
     steps = HallouminateAdapter(runner).plan_steps(state(harnesses=("claude-code", "codex")))
@@ -1085,7 +1117,7 @@ def test_target_triple_rejects_an_unsupported_platform(monkeypatch: pytest.Monke
         _target_triple()
 
 
-def test_tilth_plans_one_install_step_and_a_register_step_per_harness(
+def test_tilth_plans_registration_and_claude_code_permission(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(platform, "system", lambda: "Darwin")
@@ -1098,6 +1130,7 @@ def test_tilth_plans_one_install_step_and_a_register_step_per_harness(
         "tilth:register:claude-code",
         "tilth:register:codex",
         "tilth:register:cursor",
+        "tilth:permission:claude-code",
     ]
     install = steps[0]
     assert install.phase is Phase.INSTALL
@@ -1105,11 +1138,15 @@ def test_tilth_plans_one_install_step_and_a_register_step_per_harness(
     assert install.depends_on == ()
 
     binary = str(_bin_dir() / "tilth")
-    for register in steps[1:]:
+    for register in steps[1:4]:
         assert register.phase is Phase.REGISTER
         assert register.depends_on == ("tilth:install",)
     assert steps[1].argv == (binary, "install", "claude-code", "--edit")
     assert steps[3].argv == (binary, "install", "cursor", "--edit")
+    assert steps[4].depends_on == ("tilth:register:claude-code",)
+    assert steps[4].config_edit is not None
+    assert steps[4].config_edit.value == "mcp__tilth"
+    assert steps[4].config_edit.mode == "append_unique"
 
 
 def test_tilth_plans_nothing_when_component_not_selected() -> None:
@@ -1349,6 +1386,22 @@ def test_tilth_install_postcondition_checks_the_installed_binary_version() -> No
 
 def tilth_step(harness: str) -> PlanStep:
     return steps_by_id(TilthAdapter(FakeRunner()).plan_steps(state()))[f"tilth:register:{harness}"]
+
+
+def test_tilth_permission_postcondition_requires_its_allow_rule(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path))
+    adapter = TilthAdapter(FakeRunner())
+    permission = steps_by_id(adapter.plan_steps(state()))["tilth:permission:claude-code"]
+    settings = tmp_path / ".claude/settings.json"
+    settings.parent.mkdir()
+    settings.write_text(json.dumps({"permissions": {"allow": ["mcp__hallouminate"]}}))
+
+    assert adapter.check_postcondition(permission, FakeRunner()) is False
+
+    settings.write_text(json.dumps({"permissions": {"allow": ["mcp__tilth"]}}))
+    assert adapter.check_postcondition(permission, FakeRunner()) is True
 
 
 EDIT_ENTRY = {"command": "npx", "args": ["tilth", "--mcp", "--edit"], "env": {}}

@@ -289,24 +289,23 @@ class RepositoryCandidate(_Frozen):
 
 
 class ConfigEdit(_Frozen):
-    """A declarative write of ``value`` at ``pointer`` in a config file.
-
-    Some registrations have no native command to run: the harness's only user
-    surface is a config file. Such a step declares the edit instead of argv.
-    """
+    """A declarative JSON config mutation for a harness without a native CLI."""
 
     target: Path
     """Absolute path of the config file to edit."""
 
     pointer: str
-    """Dotted path to the entry inside the document, e.g. ``mcpServers.tilth``."""
+    """Dotted path inside the document, such as permissions.allow."""
 
-    value: dict[str, Any]
-    """The object that must sit at ``pointer``."""
+    value: dict[str, Any] | str
+    """The object to set, or the string to append uniquely."""
+
+    mode: Literal["set", "append_unique"] = "set"
+    """Whether to replace the pointer value or add one rule to its string list."""
 
     @field_serializer("value")
-    def _serialize_value(self, value: dict[str, Any]) -> dict[str, Any]:
-        return _redact_config_value(value)
+    def _serialize_value(self, value: dict[str, Any] | str) -> dict[str, Any] | str:
+        return _redact_config_value(value) if isinstance(value, dict) else value
 
     @field_validator("target")
     @classmethod
@@ -320,6 +319,16 @@ class ConfigEdit(_Frozen):
         if not value.strip():
             raise ValueError("pointer must not be empty")
         return value
+
+    @model_validator(mode="after")
+    def _value_matches_mode(self) -> ConfigEdit:
+        if self.mode == "set" and isinstance(self.value, dict):
+            return self
+        if self.mode == "append_unique" and isinstance(self.value, str):
+            return self
+        raise ValueError(
+            f"config edit mode {self.mode!r} does not accept {type(self.value).__name__}"
+        )
 
 
 class ConfigEditSummary(_Frozen):

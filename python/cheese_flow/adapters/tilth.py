@@ -8,11 +8,12 @@ import platform
 import shlex
 from pathlib import Path
 
-from cheese_flow.adapters.native_config import read_mcp_entry
+from cheese_flow.adapters.native_config import has_allowed_mcp_server, read_mcp_entry
 from cheese_flow.models import (
     HARNESS_NAMES,
     CommandRunner,
     ComponentName,
+    ConfigEdit,
     DesiredState,
     HarnessName,
     Phase,
@@ -126,6 +127,9 @@ _CONFIG_PATHS: dict[HarnessName, str] = {
     "cursor": ".cursor/mcp.json",
 }
 
+_CLAUDE_SETTINGS_CONFIG = ".claude/settings.json"
+_PERMISSION_STEP = "tilth:permission:claude-code"
+
 
 class TilthAdapter:
     """Installs Tilth from the nightly GitHub release, then registers its MCP
@@ -165,6 +169,23 @@ class TilthAdapter:
             for harness in HARNESS_NAMES
             if harness in state.harnesses
         )
+        if "claude-code" in state.harnesses:
+            steps.append(
+                PlanStep(
+                    step_id=_PERMISSION_STEP,
+                    component=self.name,
+                    harness="claude-code",
+                    phase=Phase.REGISTER,
+                    config_edit=ConfigEdit(
+                        target=Path.home() / _CLAUDE_SETTINGS_CONFIG,
+                        pointer="permissions.allow",
+                        value=f"mcp__{PACKAGE}",
+                        mode="append_unique",
+                    ),
+                    postcondition=f"~/{_CLAUDE_SETTINGS_CONFIG} allows mcp__{PACKAGE}",
+                    depends_on=("tilth:register:claude-code",),
+                )
+            )
         return tuple(steps)
 
     def check_postcondition(self, step: PlanStep, runner: CommandRunner) -> bool:
@@ -172,6 +193,8 @@ class TilthAdapter:
         if step.step_id == INSTALL_STEP:
             binary = _bin_dir() / PACKAGE
             return runner.run((str(binary), "--version")).exit_code == 0
+        if step.step_id == _PERMISSION_STEP:
+            return has_allowed_mcp_server(Path.home() / _CLAUDE_SETTINGS_CONFIG, PACKAGE)
         if step.harness is None:
             raise ValueError(f"step {step.step_id!r} has no harness")
         entry = read_mcp_entry(Path.home() / _CONFIG_PATHS[step.harness], step.harness, PACKAGE)

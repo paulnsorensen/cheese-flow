@@ -120,11 +120,7 @@ def report_status(results: Sequence[StepResult]) -> ReportStatus:
 
 
 def apply_config_edit(edit: ConfigEdit) -> None:
-    """Write ``edit.value`` at ``edit.pointer``, preserving the rest of the document.
-
-    Raises rather than writing anything when the target exists but cannot be
-    parsed, so a hand-edited config is never clobbered.
-    """
+    """Apply a declarative JSON config mutation without clobbering other settings."""
     if edit.target.suffix != ".json":
         raise ValueError(f"{edit.target}: only JSON config edits are supported")
     document = _read_json_document(edit.target)
@@ -138,8 +134,21 @@ def apply_config_edit(edit: ConfigEdit) -> None:
         elif not isinstance(nested, dict):
             raise ValueError(f"{edit.target}: {key!r} in {edit.pointer!r} is not a table")
         table = nested
-    table[keys[-1]] = edit.value
+    if edit.mode == "set":
+        table[keys[-1]] = edit.value
+    else:
+        _append_unique(table, keys[-1], edit.value)
     _write_atomically(edit.target, json.dumps(document, indent=2) + "\n")
+
+
+def _append_unique(table: dict[str, Any], key: str, value: dict[str, Any] | str) -> None:
+    if not isinstance(value, str):
+        raise ValueError("append_unique requires a string value")
+    existing = table.get(key, [])
+    if not isinstance(existing, list) or not all(isinstance(item, str) for item in existing):
+        raise ValueError(f"{key!r} must be a list of strings")
+    if value not in existing:
+        table[key] = [*existing, value]
 
 
 @dataclass

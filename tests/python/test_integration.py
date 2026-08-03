@@ -150,6 +150,14 @@ class FakeWorld:
         for harness in harnesses:
             self.install_skills(harness)
             self.write_tilth_entry(harness)
+        if "claude-code" in harnesses:
+            settings = self.home / ".claude/settings.json"
+            settings.parent.mkdir(parents=True, exist_ok=True)
+            document = _read_json(settings)
+            document.setdefault("permissions", {}).setdefault("allow", []).extend(
+                ["mcp__hallouminate", "mcp__tilth"]
+            )
+            settings.write_text(json.dumps(document, indent=2) + "\n", encoding="utf-8")
 
     def install_skills(self, harness: str) -> None:
         """What ``skills add <repo> --skill '*' --agent <harness> --global`` leaves on disk."""
@@ -593,6 +601,7 @@ def test_complete_config_runs_headlessly_and_stdout_is_one_json_document(
         ("hallouminate:marketplace:claude-code", "succeeded"),
         ("hallouminate:plugin:claude-code", "succeeded"),
         ("hallouminate:mcp:cursor", "succeeded"),
+        ("hallouminate:permission:claude-code", "succeeded"),
         ("hallouminate:config-init", "succeeded"),
         (f"hallouminate:init-repo:{key}", "succeeded"),
         (f"hallouminate:index:{key}", "succeeded"),
@@ -604,6 +613,7 @@ def test_complete_config_runs_headlessly_and_stdout_is_one_json_document(
         ("tilth:install", "succeeded"),
         ("tilth:register:claude-code", "succeeded"),
         ("tilth:register:cursor", "succeeded"),
+        ("tilth:permission:claude-code", "succeeded"),
     ]
     # Every reported "succeeded" corresponds to a real mutation of the world.
     assert world.installed == {"hallouminate": "1.0.0", "tilth": "nightly"}
@@ -654,7 +664,7 @@ def test_already_satisfied_postconditions_skip_every_mutation(
     assert result.exit_code == 0, result.stderr
     document = json.loads(result.stdout)
     assert {status for _, status in statuses(document)} == {"skipped"}
-    assert len(document["results"]) == 11
+    assert len(document["results"]) == 13
     assert world.argvs() == read_only_probes(home)
     assert snapshot(home) == before
 
@@ -706,10 +716,12 @@ def test_apply_installs_exactly_the_version_planning_resolved(
         ("hallouminate:npm-install", "succeeded"),
         ("hallouminate:marketplace:claude-code", "succeeded"),
         ("hallouminate:plugin:claude-code", "succeeded"),
+        ("hallouminate:permission:claude-code", "succeeded"),
         ("hallouminate:config-init", "succeeded"),
         ("easy-cheese:install:claude-code", "succeeded"),
         ("tilth:install", "succeeded"),
         ("tilth:register:claude-code", "succeeded"),
+        ("tilth:permission:claude-code", "succeeded"),
     ]
 
 
@@ -763,12 +775,14 @@ def test_failed_step_blocks_adapter_wired_dependents_and_lets_others_run(
         ("hallouminate:npm-install", "succeeded"),
         ("hallouminate:marketplace:claude-code", "succeeded"),
         ("hallouminate:plugin:claude-code", "succeeded"),
+        ("hallouminate:permission:claude-code", "succeeded"),
         ("hallouminate:config-init", "failed"),
         (f"hallouminate:init-repo:{key}", "blocked"),
         (f"hallouminate:index:{key}", "blocked"),
         ("easy-cheese:install:claude-code", "succeeded"),
         ("tilth:install", "succeeded"),
         ("tilth:register:claude-code", "succeeded"),
+        ("tilth:permission:claude-code", "succeeded"),
     ]
     blocked = {entry["step_id"]: entry["remediation"] for entry in document["results"]}
     assert blocked[f"hallouminate:init-repo:{key}"] == (
@@ -808,6 +822,7 @@ def test_interrupt_forwards_the_signal_and_reports_the_remaining_steps(
         ("hallouminate:npm-install", "succeeded"),
         ("hallouminate:marketplace:claude-code", "succeeded"),
         ("hallouminate:plugin:claude-code", "interrupted"),
+        ("hallouminate:permission:claude-code", "interrupted"),
         ("hallouminate:config-init", "interrupted"),
         ("easy-cheese:install:claude-code", "interrupted"),
     ]

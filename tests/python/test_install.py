@@ -249,6 +249,44 @@ def test_config_edit_sets_the_pointer_and_preserves_surrounding_config(tmp_path:
     }
 
 
+def test_config_edit_appends_a_unique_permission_without_clobbering_rules(tmp_path: Path) -> None:
+    target = tmp_path / "settings.json"
+    target.write_text(
+        json.dumps({"permissions": {"allow": ["Read", "mcp__other"]}, "keep": True}),
+        encoding="utf-8",
+    )
+    edit = ConfigEdit(
+        target=target,
+        pointer="permissions.allow",
+        value="mcp__tilth",
+        mode="append_unique",
+    )
+
+    install.apply_config_edit(edit)
+    install.apply_config_edit(edit)
+
+    assert json.loads(target.read_text(encoding="utf-8")) == {
+        "permissions": {"allow": ["Read", "mcp__other", "mcp__tilth"]},
+        "keep": True,
+    }
+
+
+def test_config_edit_rejects_a_non_list_permission_target(tmp_path: Path) -> None:
+    target = tmp_path / "settings.json"
+    target.write_text(json.dumps({"permissions": {"allow": "Read"}}), encoding="utf-8")
+    edit = ConfigEdit(
+        target=target,
+        pointer="permissions.allow",
+        value="mcp__tilth",
+        mode="append_unique",
+    )
+
+    with pytest.raises(ValueError, match="list of strings"):
+        install.apply_config_edit(edit)
+
+    assert json.loads(target.read_text(encoding="utf-8")) == {"permissions": {"allow": "Read"}}
+
+
 def test_config_edit_creates_a_missing_target_without_touching_other_steps(tmp_path: Path) -> None:
     target = tmp_path / "cursor" / "mcp.json"
     edit = ConfigEdit(target=target, pointer="mcpServers.tilth", value={"command": "npx"})

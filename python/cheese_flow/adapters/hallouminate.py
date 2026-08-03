@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from cheese_flow.adapters.native_config import read_mcp_entry
+from cheese_flow.adapters.native_config import has_allowed_mcp_server, read_mcp_entry
 from cheese_flow.models import (
     HARNESS_NAMES,
     CommandRunner,
@@ -40,6 +40,8 @@ CURSOR_MCP_ENTRY: dict[str, object] = {"command": PACKAGE, "args": ["serve"]}
 _INSTALL_STEP = "hallouminate:npm-install"
 _CONFIG_STEP = "hallouminate:config-init"
 _CURSOR_MCP_STEP = "hallouminate:mcp:cursor"
+_CLAUDE_PERMISSION_STEP = "hallouminate:permission:claude-code"
+_CLAUDE_SETTINGS_CONFIG = ".claude/settings.json"
 
 
 def _corpus_name(repository: Path) -> str:
@@ -142,6 +144,23 @@ class HallouminateAdapter:
                 )
             )
 
+        if "claude-code" in harnesses:
+            steps.append(
+                PlanStep(
+                    step_id=_CLAUDE_PERMISSION_STEP,
+                    component=self.name,
+                    harness="claude-code",
+                    phase=Phase.REGISTER,
+                    config_edit=ConfigEdit(
+                        target=Path.home() / _CLAUDE_SETTINGS_CONFIG,
+                        pointer="permissions.allow",
+                        value=f"mcp__{PACKAGE}",
+                        mode="append_unique",
+                    ),
+                    postcondition=f"~/{_CLAUDE_SETTINGS_CONFIG} allows mcp__{PACKAGE}",
+                    depends_on=("hallouminate:plugin:claude-code",),
+                )
+            )
         steps.append(
             PlanStep(
                 step_id=_CONFIG_STEP,
@@ -214,6 +233,8 @@ class HallouminateAdapter:
             return self._check_plugin(step, runner)
         if step.step_id == _CURSOR_MCP_STEP:
             return _check_cursor_mcp(step)
+        if step.step_id == _CLAUDE_PERMISSION_STEP:
+            return has_allowed_mcp_server(Path.home() / _CLAUDE_SETTINGS_CONFIG, PACKAGE)
         if step.step_id == _CONFIG_STEP:
             return runner.run(("hallouminate", "config", "validate")).exit_code == 0
         if step.step_id.startswith("hallouminate:init-repo:"):
@@ -269,10 +290,10 @@ class HallouminateAdapter:
 
 
 def _check_cursor_mcp(step: PlanStep) -> bool:
-    """Confirm Cursor's MCP config declares the entry the step's edit specifies."""
+    """Confirm Cursor MCP config declares the entry the step specifies."""
     edit = step.config_edit
-    if edit is None:
-        raise ValueError(f"step {step.step_id!r} has no config edit")
+    if edit is None or not isinstance(edit.value, dict):
+        raise ValueError(f"step {step.step_id!r} has no MCP config entry")
     entry = read_mcp_entry(edit.target, "cursor", PACKAGE)
     if not isinstance(entry, dict):
         return False

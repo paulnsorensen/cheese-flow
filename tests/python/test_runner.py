@@ -245,6 +245,7 @@ def test_forward_signal_kills_the_grandchildren_too() -> None:
     assert _group_is_gone(pgid), "the backgrounded grandchild outlived the forwarded signal"
 
 
+@pytest.mark.skipif(not Path("/proc/self/fd").is_dir(), reason="requires Linux procfs")
 def test_every_child_is_reaped_leaving_no_zombie_and_no_leaked_descriptors(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

@@ -32,3 +32,18 @@ def read_mcp_entry(path: Path, harness: HarnessName, server: str) -> Any:
         return None
     servers = document.get("mcpServers")
     return servers.get(server) if isinstance(servers, dict) else None
+
+
+def has_allowed_mcp_server(path: Path, server: str) -> bool:
+    """Return whether Claude Code may invoke every tool exposed by a server."""
+    try:
+        document = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+        return False
+    if not isinstance(document, dict):
+        return False
+    permissions = document.get("permissions")
+    if not isinstance(permissions, dict):
+        return False
+    allow = permissions.get("allow")
+    return isinstance(allow, list) and f"mcp__{server}" in allow

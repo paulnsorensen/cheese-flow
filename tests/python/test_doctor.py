@@ -166,6 +166,12 @@ def test_doctor_with_real_adapters_runs_only_read_only_commands(
         ),
         encoding="utf-8",
     )
+    claude_settings = tmp_path / ".claude" / "settings.json"
+    claude_settings.parent.mkdir(exist_ok=True)
+    claude_settings.write_text(
+        json.dumps({"permissions": {"allow": ["mcp__hallouminate"]}}),
+        encoding="utf-8",
+    )
     before = cursor_config.read_bytes()
     state = DesiredState(
         harnesses=("claude-code", "cursor"), components=("hallouminate", "easy-cheese")
@@ -188,6 +194,7 @@ def test_doctor_with_real_adapters_runs_only_read_only_commands(
         "hallouminate:marketplace:claude-code",
         "hallouminate:plugin:claude-code",
         "hallouminate:mcp:cursor",
+        "hallouminate:permission:claude-code",
         "hallouminate:config-init",
         "easy-cheese:install:claude-code",
         "easy-cheese:install:cursor",
