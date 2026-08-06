@@ -24,5 +24,5 @@ jobs:
         with:
           enable-cache: true
 
-      - name: Run CI build
+      - name: Run CI build, including Gherkin scenarios
         run: just build-ci
