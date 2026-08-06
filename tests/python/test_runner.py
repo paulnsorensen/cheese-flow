@@ -262,6 +262,8 @@ def test_every_child_is_reaped_leaving_no_zombie_and_no_leaked_descriptors(
     monkeypatch.setattr(runner_module.subprocess, "Popen", spy)
     runner = SubprocessRunner()
     open_fds = Path("/proc/self/fd")
+    if not open_fds.is_dir():
+        pytest.skip("requires Linux /proc file-descriptor inspection")
     before = len(list(open_fds.iterdir()))
 
     for _ in range(25):

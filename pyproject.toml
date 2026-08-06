@@ -16,6 +16,7 @@ cheese = "cheese_flow.cli:app"
 [dependency-groups]
 dev = [
   "pytest==9.0.3",
+  "pytest-bdd==8.1.0",
   "ruff==0.14.5",
 ]
 
