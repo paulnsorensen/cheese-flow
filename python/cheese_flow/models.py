@@ -289,7 +289,7 @@ class RepositoryCandidate(_Frozen):
 
 
 class ConfigEdit(_Frozen):
-    """A declarative JSON config mutation for a harness without a native CLI."""
+    """A declarative JSON or TOML config mutation for a harness."""
 
     target: Path
     """Absolute path of the config file to edit."""
@@ -298,10 +298,10 @@ class ConfigEdit(_Frozen):
     """Dotted path inside the document, such as permissions.allow."""
 
     value: dict[str, Any] | str
-    """The object to set, or the string to append uniquely."""
+    """The object or string to set, or the string to append uniquely."""
 
-    mode: Literal["set", "append_unique"] = "set"
-    """Whether to replace the pointer value or add one rule to its string list."""
+    mode: Literal["set", "append_unique", "toml_set"] = "set"
+    """Whether to set a JSON/TOML value or append one JSON string rule."""
 
     @field_serializer("value")
     def _serialize_value(self, value: dict[str, Any] | str) -> dict[str, Any] | str:
@@ -324,7 +324,7 @@ class ConfigEdit(_Frozen):
     def _value_matches_mode(self) -> ConfigEdit:
         if self.mode == "set" and isinstance(self.value, dict):
             return self
-        if self.mode == "append_unique" and isinstance(self.value, str):
+        if self.mode in ("append_unique", "toml_set") and isinstance(self.value, str):
             return self
         raise ValueError(
             f"config edit mode {self.mode!r} does not accept {type(self.value).__name__}"

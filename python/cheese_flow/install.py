@@ -8,11 +8,14 @@ import signal
 import sys
 import tempfile
 import time
-from collections.abc import Iterator, Sequence
+from collections.abc import Iterator, MutableMapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+
+import tomlkit
+from tomlkit.exceptions import ParseError
 
 from cheese_flow.models import (
     COMPONENT_NAMES,
@@ -120,28 +123,30 @@ def report_status(results: Sequence[StepResult]) -> ReportStatus:
 
 
 def apply_config_edit(edit: ConfigEdit) -> None:
-    """Apply a declarative JSON config mutation without clobbering other settings."""
-    if edit.target.suffix != ".json":
-        raise ValueError(f"{edit.target}: only JSON config edits are supported")
-    document = _read_json_document(edit.target)
-    table = document
+    """Apply a declarative config mutation without clobbering other settings."""
+    target = edit.target.resolve(strict=False) if edit.target.is_symlink() else edit.target
     keys = edit.pointer.split(".")
-    for key in keys[:-1]:
-        nested = table.get(key)
-        if nested is None:
-            nested = {}
-            table[key] = nested
-        elif not isinstance(nested, dict):
-            raise ValueError(f"{edit.target}: {key!r} in {edit.pointer!r} is not a table")
-        table = nested
+    if edit.mode == "toml_set":
+        if edit.target.suffix != ".toml":
+            raise ValueError(f"{edit.target}: toml_set requires a TOML target")
+        document = _read_toml_document(target)
+        table = _table_at(document, keys, edit, toml=True)
+        table[keys[-1]] = edit.value
+        _write_atomically(target, document.as_string())
+        return
+
+    if edit.target.suffix != ".json":
+        raise ValueError(f"{edit.target}: JSON config edits require a JSON target")
+    document = _read_json_document(target)
+    table = _table_at(document, keys, edit, toml=False)
     if edit.mode == "set":
         table[keys[-1]] = edit.value
     else:
         _append_unique(table, keys[-1], edit.value)
-    _write_atomically(edit.target, json.dumps(document, indent=2) + "\n")
+    _write_atomically(target, json.dumps(document, indent=2) + "\n")
 
 
-def _append_unique(table: dict[str, Any], key: str, value: dict[str, Any] | str) -> None:
+def _append_unique(table: MutableMapping[str, Any], key: str, value: dict[str, Any] | str) -> None:
     if not isinstance(value, str):
         raise ValueError("append_unique requires a string value")
     existing = table.get(key, [])
@@ -376,6 +381,36 @@ def _read_json_document(target: Path) -> dict[str, Any]:
     if not isinstance(document, dict):
         raise ValueError(f"{target}: existing config is not a JSON object")
     return document
+
+
+def _read_toml_document(target: Path) -> tomlkit.TOMLDocument:
+    try:
+        raw = target.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return tomlkit.document()
+    try:
+        return tomlkit.parse(raw) if raw.strip() else tomlkit.document()
+    except ParseError as error:
+        raise ValueError(f"{target}: existing config is not valid TOML: {error}") from error
+
+
+def _table_at(
+    document: MutableMapping[str, Any],
+    keys: Sequence[str],
+    edit: ConfigEdit,
+    *,
+    toml: bool,
+) -> MutableMapping[str, Any]:
+    current = document
+    for key in keys[:-1]:
+        nested = current.get(key)
+        if nested is None:
+            nested = tomlkit.table() if toml else {}
+            current[key] = nested
+        elif not isinstance(nested, MutableMapping):
+            raise ValueError(f"{edit.target}: {key!r} in {edit.pointer!r} is not a table")
+        current = nested
+    return current
 
 
 def _write_atomically(target: Path, text: str) -> None:

@@ -157,9 +157,29 @@ class FakeWorld:
             settings.parent.mkdir(parents=True, exist_ok=True)
             document = _read_json(settings)
             document.setdefault("permissions", {}).setdefault("allow", []).extend(
-                ["mcp__hallouminate", "mcp__tilth"]
+                ["mcp__plugin_hallouminate_hallouminate__*", "mcp__tilth__*"]
             )
             settings.write_text(json.dumps(document, indent=2) + "\n", encoding="utf-8")
+        if "codex" in harnesses:
+            config = self.home / CODEX_MCP_CONFIG
+            config.write_text(
+                config.read_text(encoding="utf-8")
+                + '\ndefault_tools_approval_mode = "approve"\n'
+                + "\n[plugins.hallouminate.mcp_servers.hallouminate]\n"
+                + 'default_tools_approval_mode = "approve"\n',
+                encoding="utf-8",
+            )
+        if "cursor" in harnesses:
+            config = self.home / ".cursor/cli-config.json"
+            config.parent.mkdir(parents=True, exist_ok=True)
+            config.write_text(
+                json.dumps(
+                    {"permissions": {"allow": ["Mcp(hallouminate:*)", "Mcp(tilth:*)"]}},
+                    indent=2,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
 
     def install_skills(self, harness: str) -> None:
         """What ``skills add <repo> --skill '*' --agent <harness> --global`` leaves on disk."""
@@ -376,6 +396,8 @@ def home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     monkeypatch.setenv("XDG_CONFIG_HOME", str(root / ".config"))
     monkeypatch.setenv("PATH", str(empty_bin))
     monkeypatch.delenv("XDG_BIN_HOME", raising=False)
+    monkeypatch.delenv("CLAUDE_CONFIG_DIR", raising=False)
+    monkeypatch.delenv("CODEX_HOME", raising=False)
     return root
 
 
@@ -528,16 +550,19 @@ def test_dry_run_emits_the_exact_plan_without_executing_package_code(
         "hallouminate:npm-install",
         "hallouminate:marketplace:codex",
         "hallouminate:plugin:codex",
+        "hallouminate:permission:codex",
         "hallouminate:config-init",
         "easy-cheese:install:codex",
         "tilth:install",
         "tilth:register:codex",
+        "tilth:permission:codex",
     ]
     tilth_binary = str(_bin_dir() / "tilth")
     assert [entry["argv"] for entry in document["plan"]["steps"]] == [
         ["npm", "install", "-g", "hallouminate@1.0.0"],
         ["codex", "plugin", "marketplace", "add", MARKETPLACE_SOURCE],
         ["codex", "plugin", "add", PLUGIN_ID],
+        [],
         ["hallouminate", "config", "init", "--force"],
         [
             "npx",
@@ -554,6 +579,7 @@ def test_dry_run_emits_the_exact_plan_without_executing_package_code(
         ],
         ["sh", "-c", _install_script(_target_triple(), _bin_dir())],
         [tilth_binary, "install", "codex", "--edit"],
+        [],
     ]
     # Metadata resolution is the only thing a dry run is allowed to do.
     assert world.argvs() == [
@@ -604,6 +630,7 @@ def test_complete_config_runs_headlessly_and_stdout_is_one_json_document(
         ("hallouminate:plugin:claude-code", "succeeded"),
         ("hallouminate:mcp:cursor", "succeeded"),
         ("hallouminate:permission:claude-code", "succeeded"),
+        ("hallouminate:permission:cursor", "succeeded"),
         ("hallouminate:config-init", "succeeded"),
         (f"hallouminate:init-repo:{key}", "succeeded"),
         (f"hallouminate:index:{key}", "succeeded"),
@@ -616,6 +643,7 @@ def test_complete_config_runs_headlessly_and_stdout_is_one_json_document(
         ("tilth:register:claude-code", "succeeded"),
         ("tilth:register:cursor", "succeeded"),
         ("tilth:permission:claude-code", "succeeded"),
+        ("tilth:permission:cursor", "succeeded"),
     ]
     # Every reported "succeeded" corresponds to a real mutation of the world.
     assert world.installed == {"hallouminate": "1.0.0", "tilth": "nightly"}
@@ -666,7 +694,7 @@ def test_already_satisfied_postconditions_skip_every_mutation(
     assert result.exit_code == 0, result.stderr
     document = json.loads(result.stdout)
     assert {status for _, status in statuses(document)} == {"skipped"}
-    assert len(document["results"]) == 13
+    assert len(document["results"]) == 15
     assert world.argvs() == read_only_probes(home)
     assert snapshot(home) == before
 
@@ -877,6 +905,7 @@ def test_doctor_reports_every_unsatisfied_postcondition_independently(
         ("hallouminate:npm-install", "succeeded"),
         ("hallouminate:marketplace:codex", "failed"),
         ("hallouminate:plugin:codex", "failed"),
+        ("hallouminate:permission:codex", "failed"),
         ("hallouminate:config-init", "failed"),
         ("easy-cheese:install:codex", "failed"),
     ]
@@ -1111,6 +1140,11 @@ def test_cursor_selection_writes_both_mcp_entries_and_preserves_the_rest(
         ),
         encoding="utf-8",
     )
+    cursor_cli_config = home / ".cursor/cli-config.json"
+    cursor_cli_config.write_text(
+        json.dumps({"permissions": {"allow": ["Shell(ls)"]}, "keep": True}),
+        encoding="utf-8",
+    )
     world = wire(monkeypatch, FakeWorld(home))
     manifest = write_manifest(
         tmp_path,
@@ -1124,10 +1158,12 @@ def test_cursor_selection_writes_both_mcp_entries_and_preserves_the_rest(
     assert statuses(document) == [
         ("hallouminate:npm-install", "succeeded"),
         ("hallouminate:mcp:cursor", "succeeded"),
+        ("hallouminate:permission:cursor", "succeeded"),
         ("hallouminate:config-init", "succeeded"),
         ("easy-cheese:install:cursor", "succeeded"),
         ("tilth:install", "succeeded"),
         ("tilth:register:cursor", "succeeded"),
+        ("tilth:permission:cursor", "succeeded"),
     ]
     assert json.loads(cursor_config.read_text(encoding="utf-8")) == {
         "someOtherSetting": {"keep": True},
@@ -1136,6 +1172,10 @@ def test_cursor_selection_writes_both_mcp_entries_and_preserves_the_rest(
             "hallouminate": HALLOUMINATE_CURSOR_ENTRY,
             "tilth": tilth_entry(),
         },
+    }
+    assert json.loads(cursor_cli_config.read_text(encoding="utf-8")) == {
+        "permissions": {"allow": ["Shell(ls)", "Mcp(hallouminate:*)", "Mcp(tilth:*)"]},
+        "keep": True,
     }
     assert not any(argv[:2] == ("cursor", "plugin") for argv in world.argvs())
 
@@ -1168,7 +1208,7 @@ def test_built_package_declares_no_milknado_dependency_or_extra_entry_point() ->
         for requirement in project["dependencies"]
     )
 
-    assert names == ["pydantic", "rich", "typer"]
+    assert names == ["pydantic", "rich", "tomlkit", "typer"]
     assert project["scripts"] == {"cheese": "cheese_flow.cli:app"}
     assert "entry-points" not in project
     assert "optional-dependencies" not in project

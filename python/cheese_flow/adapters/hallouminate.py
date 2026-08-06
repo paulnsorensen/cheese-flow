@@ -5,7 +5,11 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from cheese_flow.adapters.native_config import has_allowed_mcp_server, read_mcp_entry
+from cheese_flow.adapters.native_config import (
+    config_edit_holds,
+    mcp_permission_edit,
+    read_mcp_entry,
+)
 from cheese_flow.models import (
     HARNESS_NAMES,
     CommandRunner,
@@ -40,8 +44,6 @@ CURSOR_MCP_ENTRY: dict[str, object] = {"command": PACKAGE, "args": ["serve"]}
 _INSTALL_STEP = "hallouminate:npm-install"
 _CONFIG_STEP = "hallouminate:config-init"
 _CURSOR_MCP_STEP = "hallouminate:mcp:cursor"
-_CLAUDE_PERMISSION_STEP = "hallouminate:permission:claude-code"
-_CLAUDE_SETTINGS_CONFIG = ".claude/settings.json"
 
 
 def _corpus_name(repository: Path) -> str:
@@ -144,21 +146,25 @@ class HallouminateAdapter:
                 )
             )
 
-        if "claude-code" in harnesses:
+        for harness in harnesses:
+            dependency = (
+                _CURSOR_MCP_STEP if harness == "cursor" else f"hallouminate:plugin:{harness}"
+            )
+            edit = mcp_permission_edit(
+                harness,
+                PACKAGE,
+                claude_server="plugin_hallouminate_hallouminate",
+                codex_plugin=PACKAGE,
+            )
             steps.append(
                 PlanStep(
-                    step_id=_CLAUDE_PERMISSION_STEP,
+                    step_id=f"hallouminate:permission:{harness}",
                     component=self.name,
-                    harness="claude-code",
+                    harness=harness,
                     phase=Phase.REGISTER,
-                    config_edit=ConfigEdit(
-                        target=Path.home() / _CLAUDE_SETTINGS_CONFIG,
-                        pointer="permissions.allow",
-                        value=f"mcp__{PACKAGE}",
-                        mode="append_unique",
-                    ),
-                    postcondition=f"~/{_CLAUDE_SETTINGS_CONFIG} allows mcp__{PACKAGE}",
-                    depends_on=("hallouminate:plugin:claude-code",),
+                    config_edit=edit,
+                    postcondition=f"{edit.target} configures {edit.pointer} as {edit.value!r}",
+                    depends_on=(dependency,),
                 )
             )
         steps.append(
@@ -233,8 +239,8 @@ class HallouminateAdapter:
             return self._check_plugin(step, runner)
         if step.step_id == _CURSOR_MCP_STEP:
             return _check_cursor_mcp(step)
-        if step.step_id == _CLAUDE_PERMISSION_STEP:
-            return has_allowed_mcp_server(Path.home() / _CLAUDE_SETTINGS_CONFIG, PACKAGE)
+        if step.step_id.startswith("hallouminate:permission:"):
+            return step.config_edit is not None and config_edit_holds(step.config_edit)
         if step.step_id == _CONFIG_STEP:
             return runner.run(("hallouminate", "config", "validate")).exit_code == 0
         if step.step_id.startswith("hallouminate:init-repo:"):

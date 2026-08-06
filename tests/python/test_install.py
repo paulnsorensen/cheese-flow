@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import signal
+import tomllib
 from collections.abc import Callable, Sequence
 from pathlib import Path
 
@@ -258,7 +259,7 @@ def test_config_edit_appends_a_unique_permission_without_clobbering_rules(tmp_pa
     edit = ConfigEdit(
         target=target,
         pointer="permissions.allow",
-        value="mcp__tilth",
+        value="mcp__tilth__*",
         mode="append_unique",
     )
 
@@ -266,8 +267,99 @@ def test_config_edit_appends_a_unique_permission_without_clobbering_rules(tmp_pa
     install.apply_config_edit(edit)
 
     assert json.loads(target.read_text(encoding="utf-8")) == {
-        "permissions": {"allow": ["Read", "mcp__other", "mcp__tilth"]},
+        "permissions": {"allow": ["Read", "mcp__other", "mcp__tilth__*"]},
         "keep": True,
+    }
+
+
+def test_config_edit_sets_toml_without_clobbering_comments_or_tables(tmp_path: Path) -> None:
+    target = tmp_path / "config.toml"
+    target.write_text("# keep this comment\n[unrelated]\nvalue = 1\n", encoding="utf-8")
+    edit = ConfigEdit(
+        target=target,
+        pointer="plugins.hallouminate.mcp_servers.hallouminate.default_tools_approval_mode",
+        value="approve",
+        mode="toml_set",
+    )
+
+    install.apply_config_edit(edit)
+    install.apply_config_edit(edit)
+
+    raw = target.read_text(encoding="utf-8")
+    assert raw.count("# keep this comment") == 1
+    assert tomllib.loads(raw) == {
+        "unrelated": {"value": 1},
+        "plugins": {
+            "hallouminate": {
+                "mcp_servers": {"hallouminate": {"default_tools_approval_mode": "approve"}}
+            }
+        },
+    }
+
+
+def test_config_edit_never_clobbers_unparseable_toml(tmp_path: Path) -> None:
+    target = tmp_path / "config.toml"
+    before = b"[broken\n"
+    target.write_bytes(before)
+    edit = ConfigEdit(
+        target=target,
+        pointer="mcp_servers.tilth.default_tools_approval_mode",
+        value="approve",
+        mode="toml_set",
+    )
+
+    with pytest.raises(ValueError, match="not valid TOML"):
+        install.apply_config_edit(edit)
+
+    assert target.read_bytes() == before
+
+
+def test_config_edit_preserves_a_symlink_and_updates_its_referent(tmp_path: Path) -> None:
+    managed = tmp_path / "dotfiles/settings-managed"
+    managed.parent.mkdir()
+    managed.write_text(json.dumps({"permissions": {"allow": ["Read"]}}), encoding="utf-8")
+    target = tmp_path / ".claude/settings.json"
+    target.parent.mkdir()
+    target.symlink_to(managed)
+    edit = ConfigEdit(
+        target=target,
+        pointer="permissions.allow",
+        value="mcp__tilth__*",
+        mode="append_unique",
+    )
+
+    install.apply_config_edit(edit)
+
+    assert target.is_symlink()
+    assert target.resolve() == managed.resolve()
+    assert json.loads(managed.read_text(encoding="utf-8")) == {
+        "permissions": {"allow": ["Read", "mcp__tilth__*"]}
+    }
+
+
+def test_toml_config_edit_preserves_a_symlink_to_an_extensionless_referent(
+    tmp_path: Path,
+) -> None:
+    managed = tmp_path / "dotfiles/codex-managed"
+    managed.parent.mkdir()
+    managed.write_text("[keep]\nvalue = 1\n", encoding="utf-8")
+    target = tmp_path / ".codex/config.toml"
+    target.parent.mkdir()
+    target.symlink_to(managed)
+    edit = ConfigEdit(
+        target=target,
+        pointer="mcp_servers.tilth.default_tools_approval_mode",
+        value="approve",
+        mode="toml_set",
+    )
+
+    install.apply_config_edit(edit)
+
+    assert target.is_symlink()
+    assert target.resolve() == managed.resolve()
+    assert tomllib.loads(managed.read_text(encoding="utf-8")) == {
+        "keep": {"value": 1},
+        "mcp_servers": {"tilth": {"default_tools_approval_mode": "approve"}},
     }
 
 

@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 
+from cheese_flow.adapters.native_config import claude_config_dir
 from cheese_flow.models import (
     HARNESS_NAMES,
     CommandRunner,
@@ -36,8 +36,6 @@ CORE_SKILLS = frozenset({"mold", "cook", "press", "age", "cure", "plate", "chees
 SKILL_FILE = "SKILL.md"
 """The file every installed skill directory carries."""
 
-_CLAUDE_CONFIG_DIR = "CLAUDE_CONFIG_DIR"
-"""Claude Code's config-directory override, which the ``skills`` CLI honours."""
 
 _SKILLS_DIRS: dict[HarnessName, str] = {
     "claude-code": ".claude/skills",
@@ -68,9 +66,7 @@ def skills_directory(harness: HarnessName) -> Path:
     links rather than eighteen duplicated skill trees.
     """
     if harness == "claude-code":
-        configured = os.environ.get(_CLAUDE_CONFIG_DIR, "").strip()
-        if configured:
-            return Path(configured) / "skills"
+        return claude_config_dir() / "skills"
     return Path.home() / _SKILLS_DIRS[harness]
 
 
