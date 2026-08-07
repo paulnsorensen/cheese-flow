@@ -8,7 +8,11 @@ import platform
 import shlex
 from pathlib import Path
 
-from cheese_flow.adapters.native_config import read_mcp_entry
+from cheese_flow.adapters.native_config import (
+    config_edit_holds,
+    mcp_permission_edit,
+    read_mcp_entry,
+)
 from cheese_flow.models import (
     HARNESS_NAMES,
     CommandRunner,
@@ -165,6 +169,21 @@ class TilthAdapter:
             for harness in HARNESS_NAMES
             if harness in state.harnesses
         )
+        for harness in HARNESS_NAMES:
+            if harness not in state.harnesses:
+                continue
+            edit = mcp_permission_edit(harness, PACKAGE)
+            steps.append(
+                PlanStep(
+                    step_id=f"tilth:permission:{harness}",
+                    component=self.name,
+                    harness=harness,
+                    phase=Phase.REGISTER,
+                    config_edit=edit,
+                    postcondition=f"{edit.target} configures {edit.pointer} as {edit.value!r}",
+                    depends_on=(f"tilth:register:{harness}",),
+                )
+            )
         return tuple(steps)
 
     def check_postcondition(self, step: PlanStep, runner: CommandRunner) -> bool:
@@ -172,6 +191,8 @@ class TilthAdapter:
         if step.step_id == INSTALL_STEP:
             binary = _bin_dir() / PACKAGE
             return runner.run((str(binary), "--version")).exit_code == 0
+        if step.step_id.startswith("tilth:permission:"):
+            return step.config_edit is not None and config_edit_holds(step.config_edit)
         if step.harness is None:
             raise ValueError(f"step {step.step_id!r} has no harness")
         entry = read_mcp_entry(Path.home() / _CONFIG_PATHS[step.harness], step.harness, PACKAGE)

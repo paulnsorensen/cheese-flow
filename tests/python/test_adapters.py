@@ -150,7 +150,10 @@ def test_hallouminate_gives_cursor_no_plugin_steps() -> None:
 
     assert "hallouminate:plugin:cursor" not in steps_by_id(steps)
     assert "hallouminate:marketplace:cursor" not in steps_by_id(steps)
-    assert [s.step_id for s in steps if s.harness == "cursor"] == ["hallouminate:mcp:cursor"]
+    assert [s.step_id for s in steps if s.harness == "cursor"] == [
+        "hallouminate:mcp:cursor",
+        "hallouminate:permission:cursor",
+    ]
 
 
 def test_hallouminate_registers_cursor_mcp_entry_declaratively(
@@ -168,6 +171,97 @@ def test_hallouminate_registers_cursor_mcp_entry_declaratively(
         target=tmp_path / ".cursor/mcp.json",
         pointer="mcpServers.hallouminate",
         value={"command": "hallouminate", "args": ["serve"]},
+    )
+
+
+def test_hallouminate_plans_native_mcp_permissions(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    claude_home = tmp_path / "claude"
+    codex_home = tmp_path / "codex"
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(claude_home))
+    monkeypatch.setenv("CODEX_HOME", str(codex_home))
+    steps = steps_by_id(HallouminateAdapter(FakeRunner(npm_script())).plan_steps(state()))
+
+    expected = {
+        "claude-code": (
+            "hallouminate:plugin:claude-code",
+            ConfigEdit(
+                target=claude_home / "settings.json",
+                pointer="permissions.allow",
+                value="mcp__plugin_hallouminate_hallouminate__*",
+                mode="append_unique",
+            ),
+        ),
+        "codex": (
+            "hallouminate:plugin:codex",
+            ConfigEdit(
+                target=codex_home / "config.toml",
+                pointer=(
+                    "plugins.hallouminate.mcp_servers.hallouminate.default_tools_approval_mode"
+                ),
+                value="approve",
+                mode="toml_set",
+            ),
+        ),
+        "cursor": (
+            "hallouminate:mcp:cursor",
+            ConfigEdit(
+                target=tmp_path / ".cursor/cli-config.json",
+                pointer="permissions.allow",
+                value="Mcp(hallouminate:*)",
+                mode="append_unique",
+            ),
+        ),
+    }
+    for harness, (dependency, edit) in expected.items():
+        permission = steps[f"hallouminate:permission:{harness}"]
+        assert permission.depends_on == (dependency,)
+        assert permission.config_edit == edit
+        assert "configures" in permission.postcondition
+
+
+def test_hallouminate_permission_postconditions_require_each_native_rule(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.delenv("CLAUDE_CONFIG_DIR", raising=False)
+    monkeypatch.delenv("CODEX_HOME", raising=False)
+    adapter = HallouminateAdapter(FakeRunner(npm_script()))
+    permissions = {
+        harness: steps_by_id(adapter.plan_steps(state()))[f"hallouminate:permission:{harness}"]
+        for harness in ALL_HARNESSES
+    }
+
+    assert all(
+        adapter.check_postcondition(permission, FakeRunner()) is False
+        for permission in permissions.values()
+    )
+
+    claude = tmp_path / ".claude/settings.json"
+    claude.parent.mkdir()
+    claude.write_text(
+        json.dumps({"permissions": {"allow": ["mcp__plugin_hallouminate_hallouminate__*"]}}),
+        encoding="utf-8",
+    )
+    codex = tmp_path / ".codex/config.toml"
+    codex.parent.mkdir()
+    codex.write_text(
+        "[plugins.hallouminate.mcp_servers.hallouminate]\n"
+        'default_tools_approval_mode = "approve"\n',
+        encoding="utf-8",
+    )
+    cursor = tmp_path / ".cursor/cli-config.json"
+    cursor.parent.mkdir()
+    cursor.write_text(
+        json.dumps({"permissions": {"allow": ["Mcp(hallouminate:*)"]}}),
+        encoding="utf-8",
+    )
+
+    assert all(
+        adapter.check_postcondition(permission, FakeRunner()) is True
+        for permission in permissions.values()
     )
 
 
@@ -1085,11 +1179,14 @@ def test_target_triple_rejects_an_unsupported_platform(monkeypatch: pytest.Monke
         _target_triple()
 
 
-def test_tilth_plans_one_install_step_and_a_register_step_per_harness(
-    monkeypatch: pytest.MonkeyPatch,
+def test_tilth_plans_registration_and_native_permissions(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(platform, "system", lambda: "Darwin")
     monkeypatch.setattr(platform, "machine", lambda: "arm64")
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(tmp_path / "claude"))
+    monkeypatch.setenv("CODEX_HOME", str(tmp_path / "codex"))
     runner = FakeRunner()
     steps = TilthAdapter(runner).plan_steps(state())
 
@@ -1098,6 +1195,9 @@ def test_tilth_plans_one_install_step_and_a_register_step_per_harness(
         "tilth:register:claude-code",
         "tilth:register:codex",
         "tilth:register:cursor",
+        "tilth:permission:claude-code",
+        "tilth:permission:codex",
+        "tilth:permission:cursor",
     ]
     install = steps[0]
     assert install.phase is Phase.INSTALL
@@ -1105,11 +1205,38 @@ def test_tilth_plans_one_install_step_and_a_register_step_per_harness(
     assert install.depends_on == ()
 
     binary = str(_bin_dir() / "tilth")
-    for register in steps[1:]:
+    for register in steps[1:4]:
         assert register.phase is Phase.REGISTER
         assert register.depends_on == ("tilth:install",)
     assert steps[1].argv == (binary, "install", "claude-code", "--edit")
     assert steps[3].argv == (binary, "install", "cursor", "--edit")
+
+    expected = {
+        "claude-code": ConfigEdit(
+            target=tmp_path / "claude/settings.json",
+            pointer="permissions.allow",
+            value="mcp__tilth__*",
+            mode="append_unique",
+        ),
+        "codex": ConfigEdit(
+            target=tmp_path / "codex/config.toml",
+            pointer="mcp_servers.tilth.default_tools_approval_mode",
+            value="approve",
+            mode="toml_set",
+        ),
+        "cursor": ConfigEdit(
+            target=tmp_path / ".cursor/cli-config.json",
+            pointer="permissions.allow",
+            value="Mcp(tilth:*)",
+            mode="append_unique",
+        ),
+    }
+    planned = steps_by_id(steps)
+    for harness, edit in expected.items():
+        permission = planned[f"tilth:permission:{harness}"]
+        assert permission.depends_on == (f"tilth:register:{harness}",)
+        assert permission.config_edit == edit
+        assert "configures" in permission.postcondition
 
 
 def test_tilth_plans_nothing_when_component_not_selected() -> None:
@@ -1349,6 +1476,23 @@ def test_tilth_install_postcondition_checks_the_installed_binary_version() -> No
 
 def tilth_step(harness: str) -> PlanStep:
     return steps_by_id(TilthAdapter(FakeRunner()).plan_steps(state()))[f"tilth:register:{harness}"]
+
+
+def test_tilth_permission_postcondition_requires_the_canonical_claude_rule(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.delenv("CLAUDE_CONFIG_DIR", raising=False)
+    adapter = TilthAdapter(FakeRunner())
+    permission = steps_by_id(adapter.plan_steps(state()))["tilth:permission:claude-code"]
+    settings = tmp_path / ".claude/settings.json"
+    settings.parent.mkdir()
+    settings.write_text(json.dumps({"permissions": {"allow": ["mcp__tilth"]}}), encoding="utf-8")
+
+    assert adapter.check_postcondition(permission, FakeRunner()) is False
+
+    settings.write_text(json.dumps({"permissions": {"allow": ["mcp__tilth__*"]}}), encoding="utf-8")
+    assert adapter.check_postcondition(permission, FakeRunner()) is True
 
 
 EDIT_ENTRY = {"command": "npx", "args": ["tilth", "--mcp", "--edit"], "env": {}}

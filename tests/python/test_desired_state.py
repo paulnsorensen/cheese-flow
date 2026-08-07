@@ -14,7 +14,7 @@ from cheese_flow.desired_state import (
     save_desired_state,
     state_from_options,
 )
-from cheese_flow.models import DEFAULT_MAX_DEPTH, DesiredState, RepositorySelection
+from cheese_flow.models import DEFAULT_MAX_DEPTH, DesiredState, RepositorySelection, canonicalize
 from pydantic import ValidationError
 
 VALID = """\
@@ -121,7 +121,7 @@ def test_selected_path_equal_to_search_root_is_consistent(tmp_path: Path) -> Non
             'selected = ["/home/me/Dev"]\n',
         )
     )
-    assert state.repositories.selected == (Path("/home/me/Dev").resolve(),)
+    assert state.repositories.selected == (canonicalize(Path("/home/me/Dev")),)
 
 
 # --- file and syntax errors ------------------------------------------------
@@ -294,14 +294,18 @@ def test_selected_without_search_roots(tmp_path: Path) -> None:
         "[repositories]\n"
         'selected = ["/home/me/Dev/project"]\n',
     )
-    selected = Path("/home/me/Dev/project").resolve()
-    assert error.reason == f"selected repositories are not under any search root: {selected}"
+    assert error.reason == (
+        "selected repositories are not under any search root: "
+        + str(canonicalize(Path("/home/me/Dev/project")))
+    )
 
 
 def test_sibling_prefix_is_not_under_a_search_root(tmp_path: Path) -> None:
     error = load_error(tmp_path, VALID.replace('"/home/me/Dev/project"', '"/home/me/Development"'))
-    selected = Path("/home/me/Development").resolve()
-    assert error.reason == f"selected repositories are not under any search root: {selected}"
+    assert error.reason == (
+        "selected repositories are not under any search root: "
+        + str(canonicalize(Path("/home/me/Development")))
+    )
 
 
 # --- persistence -----------------------------------------------------------
@@ -374,8 +378,9 @@ def test_saved_manifest_matches_the_documented_shape(tmp_path: Path) -> None:
     )
     path = tmp_path / "config.toml"
     save_desired_state(state, path)
-    expected = VALID.replace("/home/me/Dev", str(Path("/home/me/Dev").resolve()))
-    assert path.read_text(encoding="utf-8") == expected
+    assert path.read_text(encoding="utf-8") == VALID.replace(
+        "/home/me/Dev", str(canonicalize(Path("/home/me/Dev")))
+    )
 
 
 # --- default config path ---------------------------------------------------

@@ -5,7 +5,11 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from cheese_flow.adapters.native_config import read_mcp_entry
+from cheese_flow.adapters.native_config import (
+    config_edit_holds,
+    mcp_permission_edit,
+    read_mcp_entry,
+)
 from cheese_flow.models import (
     HARNESS_NAMES,
     CommandRunner,
@@ -142,6 +146,27 @@ class HallouminateAdapter:
                 )
             )
 
+        for harness in harnesses:
+            dependency = (
+                _CURSOR_MCP_STEP if harness == "cursor" else f"hallouminate:plugin:{harness}"
+            )
+            edit = mcp_permission_edit(
+                harness,
+                PACKAGE,
+                claude_server="plugin_hallouminate_hallouminate",
+                codex_plugin=PACKAGE,
+            )
+            steps.append(
+                PlanStep(
+                    step_id=f"hallouminate:permission:{harness}",
+                    component=self.name,
+                    harness=harness,
+                    phase=Phase.REGISTER,
+                    config_edit=edit,
+                    postcondition=f"{edit.target} configures {edit.pointer} as {edit.value!r}",
+                    depends_on=(dependency,),
+                )
+            )
         steps.append(
             PlanStep(
                 step_id=_CONFIG_STEP,
@@ -214,6 +239,8 @@ class HallouminateAdapter:
             return self._check_plugin(step, runner)
         if step.step_id == _CURSOR_MCP_STEP:
             return _check_cursor_mcp(step)
+        if step.step_id.startswith("hallouminate:permission:"):
+            return step.config_edit is not None and config_edit_holds(step.config_edit)
         if step.step_id == _CONFIG_STEP:
             return runner.run(("hallouminate", "config", "validate")).exit_code == 0
         if step.step_id.startswith("hallouminate:init-repo:"):
@@ -269,10 +296,10 @@ class HallouminateAdapter:
 
 
 def _check_cursor_mcp(step: PlanStep) -> bool:
-    """Confirm Cursor's MCP config declares the entry the step's edit specifies."""
+    """Confirm Cursor MCP config declares the entry the step specifies."""
     edit = step.config_edit
-    if edit is None:
-        raise ValueError(f"step {step.step_id!r} has no config edit")
+    if edit is None or not isinstance(edit.value, dict):
+        raise ValueError(f"step {step.step_id!r} has no MCP config entry")
     entry = read_mcp_entry(edit.target, "cursor", PACKAGE)
     if not isinstance(entry, dict):
         return False

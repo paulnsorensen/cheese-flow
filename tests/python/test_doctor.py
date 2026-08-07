@@ -152,6 +152,7 @@ def test_doctor_with_real_adapters_runs_only_read_only_commands(
 ) -> None:
     monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path))
     monkeypatch.delenv("CLAUDE_CONFIG_DIR", raising=False)
+    monkeypatch.delenv("CODEX_HOME", raising=False)
     install_core_skills(tmp_path)
     cursor_config = tmp_path / ".cursor" / "mcp.json"
     cursor_config.parent.mkdir()
@@ -166,7 +167,18 @@ def test_doctor_with_real_adapters_runs_only_read_only_commands(
         ),
         encoding="utf-8",
     )
-    before = cursor_config.read_bytes()
+    claude_settings = tmp_path / ".claude" / "settings.json"
+    claude_settings.parent.mkdir(exist_ok=True)
+    claude_settings.write_text(
+        json.dumps({"permissions": {"allow": ["mcp__plugin_hallouminate_hallouminate__*"]}}),
+        encoding="utf-8",
+    )
+    cursor_cli_config = tmp_path / ".cursor/cli-config.json"
+    cursor_cli_config.write_text(
+        json.dumps({"permissions": {"allow": ["Mcp(hallouminate:*)"]}}),
+        encoding="utf-8",
+    )
+    before = {path: path.read_bytes() for path in (cursor_config, cursor_cli_config)}
     state = DesiredState(
         harnesses=("claude-code", "cursor"), components=("hallouminate", "easy-cheese")
     )
@@ -182,12 +194,14 @@ def test_doctor_with_real_adapters_runs_only_read_only_commands(
         ("claude", "plugin", "list", "--json"),
         ("hallouminate", "config", "validate"),
     ]
-    assert cursor_config.read_bytes() == before
+    assert {path: path.read_bytes() for path in before} == before
     assert [result.step_id for result in report.results] == [
         "hallouminate:npm-install",
         "hallouminate:marketplace:claude-code",
         "hallouminate:plugin:claude-code",
         "hallouminate:mcp:cursor",
+        "hallouminate:permission:claude-code",
+        "hallouminate:permission:cursor",
         "hallouminate:config-init",
         "easy-cheese:install:claude-code",
         "easy-cheese:install:cursor",
