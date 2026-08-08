@@ -1208,7 +1208,7 @@ def test_built_package_declares_no_milknado_dependency_or_extra_entry_point() ->
         for requirement in project["dependencies"]
     )
 
-    assert names == ["pydantic", "rich", "tomlkit", "typer"]
+    assert names == ["PyYAML", "pydantic", "rich", "tomlkit", "typer"]
     assert project["scripts"] == {"cheese": "cheese_flow.cli:app"}
     assert "entry-points" not in project
     assert "optional-dependencies" not in project
@@ -1218,10 +1218,10 @@ def test_importable_surface_holds_no_compiler_milknado_or_unified_mcp_module() -
     assert [name for name in PURGED_MODULES if _importable(name)] == []
 
 
-def test_cli_exposes_exactly_install_and_doctor() -> None:
+def test_cli_exposes_exactly_install_doctor_and_profile() -> None:
     command = typer.main.get_command(app)
 
-    assert sorted(command.commands) == ["doctor", "install"]  # type: ignore[attr-defined]
+    assert sorted(command.commands) == ["doctor", "install", "profile"]  # type: ignore[attr-defined]
 
 
 # ─── Round trip: wizard → save → load → plan → apply ─────────────────────────
