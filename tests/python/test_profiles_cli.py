@@ -15,6 +15,17 @@ from typer.testing import CliRunner
 runner = CliRunner()
 
 
+def _assert_secret_absent(result: Any, secret: str) -> None:
+    for text in (
+        result.output,
+        result.stdout,
+        result.stderr,
+        str(result.exception),
+        repr(result.exception),
+    ):
+        assert secret not in text
+
+
 class _Document(BaseModel):
     value: str
 
@@ -156,6 +167,45 @@ def test_launch_exec_seam_receives_only_a_validated_launch_spec(
     assert request_seen["environment"]["PROFILE_TEST"] == "present"
 
 
+def test_launch_wrapper_arguments_parse_without_separator(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    request_seen: dict[str, Any] = {}
+    spec = LaunchSpec(
+        executable="codex",
+        argv=("codex", "--resume"),
+        environment={"PROFILE_TEST": "present"},
+    )
+
+    def fake_build(request: Any, *, environment: dict[str, str]) -> tuple[LaunchSpec, None]:
+        request_seen["request"] = request
+        request_seen["environment"] = environment
+        return spec, None
+
+    executed: list[LaunchSpec] = []
+    monkeypatch.setattr(cli, "_build_launch_with_workspace", fake_build)
+    monkeypatch.setattr(cli, "_exec_launch", executed.append)
+
+    source_root = tmp_path / "source"
+    result = runner.invoke(
+        cli.app,
+        [
+            "launch",
+            "codex",
+            "demo",
+            "--resume",
+            "--source-root",
+            str(source_root),
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert executed == [spec]
+    assert request_seen["request"].source_root == source_root
+    assert request_seen["request"].harness == "codex"
+    assert request_seen["request"].arguments == ("--resume",)
+
+
 def test_launch_exec_rejects_unvalidated_values() -> None:
     with pytest.raises(ProfileLaunchError, match="validated LaunchSpec"):
         cli._exec_launch(object())  # type: ignore[arg-type]
@@ -245,7 +295,34 @@ def test_launch_reports_exec_and_cleanup_failures_without_environment_values(
     assert result.exit_code == 1
     assert "could not exec harness 'claude'" in result.output
     assert "workspace cleanup failed" in result.output
-    assert secret not in result.output
+    assert "cleanup failed for <redacted>" in result.output
+    _assert_secret_absent(result, secret)
+
+
+def test_launch_cli_redacts_build_environment_diagnostics(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    secret = "profile-launch-secret-unique-9f3d"
+
+    def fail_build(request: Any, *, environment: dict[str, str]) -> tuple[LaunchSpec, None]:
+        raise ProfileLaunchError(f"launch build received {environment['PROFILE_LAUNCH_SECRET']}")
+
+    monkeypatch.setattr(cli, "_build_launch_with_workspace", fail_build)
+    result = runner.invoke(
+        cli.app,
+        [
+            "launch",
+            "codex",
+            "demo",
+            "--source-root",
+            str(tmp_path),
+        ],
+        env={"PROFILE_LAUNCH_SECRET": secret},
+    )
+
+    assert result.exit_code == 1
+    assert "launch build received <redacted>" in result.output
+    _assert_secret_absent(result, secret)
 
 
 def test_permissions_builds_the_closed_request(

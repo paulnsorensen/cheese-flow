@@ -257,3 +257,65 @@ def test_interrupted_generation_publication_cleans_staging_and_retries(
         == ()
     )
     publish_generation(output_root, manifest, {"home/claude/settings.json": payload})
+
+
+@pytest.mark.parametrize("failure_seam", ("generation_replace", "manifest_replace"))
+def test_late_publication_failures_preserve_prior_generation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, failure_seam: str
+) -> None:
+    prior_descriptor, prior_payload = _descriptor(payload=b'{"generation":"prior"}\n')
+    prior_manifest = bind_generation(prior_descriptor)
+    output_root = tmp_path / "compiled"
+    manifest_path = publish_generation(
+        output_root,
+        prior_manifest,
+        {"home/claude/settings.json": prior_payload},
+    )
+    prior_manifest_bytes = manifest_path.read_bytes()
+    prior_generation_root = output_root / "generations" / prior_manifest.generation
+
+    def snapshot(root: Path) -> tuple[tuple[str, int, bytes], ...]:
+        return tuple(
+            (
+                path.relative_to(root).as_posix(),
+                stat.S_IMODE(path.stat().st_mode),
+                path.read_bytes(),
+            )
+            for path in sorted(root.rglob("*"), key=lambda item: item.as_posix())
+            if path.is_file()
+        )
+
+    prior_generation_snapshot = snapshot(prior_generation_root)
+    next_descriptor, next_payload = _descriptor(payload=b'{"generation":"next"}\n')
+    next_manifest = bind_generation(next_descriptor)
+    next_generation_root = output_root / "generations" / next_manifest.generation
+    original_replace = generation_module.os.replace
+
+    def fail_replace(source: str | Path, destination: str | Path) -> None:
+        if failure_seam == "generation_replace" and Path(destination) == next_generation_root:
+            raise OSError("generation publication interrupted")
+        if failure_seam == "manifest_replace" and Path(destination) == manifest_path:
+            raise OSError("manifest publication interrupted")
+        original_replace(source, destination)
+
+    with monkeypatch.context() as patch:
+        patch.setattr(generation_module.os, "replace", fail_replace)
+        with pytest.raises(OSError, match="publication interrupted"):
+            publish_generation(
+                output_root,
+                next_manifest,
+                {"home/claude/settings.json": next_payload},
+            )
+
+    assert manifest_path.read_bytes() == prior_manifest_bytes
+    assert load_manifest(manifest_path) == prior_manifest
+    assert load_manifest(prior_generation_root / "manifest.json") == prior_manifest
+    assert snapshot(prior_generation_root) == prior_generation_snapshot
+    assert (
+        tuple(
+            path
+            for path in (output_root / "generations").iterdir()
+            if path.name.startswith(f".{next_manifest.generation}.")
+        )
+        == ()
+    )

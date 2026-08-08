@@ -127,8 +127,11 @@ class CursorRenderer:
         for item in _items(profile, "skills"):
             if not _selected(item, _DEFAULT_SKILLS):
                 continue
+            relative_path = item.get("path") or ""
+            if not relative_path:
+                continue
             name = _component(item.get("name"), label="skill name")
-            source_rel = _relative_path(item.get("path"), label="skill path")
+            source_rel = _relative_path(relative_path, label="skill path")
             source_root = _source_root(item)
             source = source_root.joinpath(*source_rel.parts)
             if not source.is_dir():

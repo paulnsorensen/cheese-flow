@@ -153,6 +153,29 @@ def test_cursor_launch_spec_is_a_plain_explicit_exec_projection() -> None:
     assert dict(spec.environment) == {"TOKEN": "secret"}
 
 
+def test_cursor_ignores_external_source_records_without_local_paths(tmp_path: Path) -> None:
+    source = tmp_path / "source"
+    source.mkdir()
+    _write_source(source)
+    profile = _profile(source).model_copy(
+        update={
+            "skills": (
+                {
+                    "source": "owner/repository",
+                    "harnesses": ["cursor"],
+                    "_source_dir": str(source),
+                },
+            )
+        }
+    )
+    target = tmp_path / "target"
+
+    written = CursorRenderer().render(profile, target, logical_root=tmp_path / "logical")
+
+    assert not any(path.parts[:2] == (".agents", "skills") for path in written)
+    assert not (target / ".agents" / "skills").exists()
+
+
 def test_cursor_rejects_scalar_item_harnesses(tmp_path: Path) -> None:
     source = tmp_path / "source"
     source.mkdir()

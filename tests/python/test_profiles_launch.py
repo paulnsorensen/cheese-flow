@@ -53,6 +53,9 @@ def test_non_isolated_launch_builds_argv_and_secret_safe_environment_snapshot(
         "executable": "copilot",
         "argv": ("copilot", "--version"),
     }
+    serialized = spec.model_dump_json()
+    assert "caller-secret" not in serialized
+    assert "profile-secret" not in serialized
     with pytest.raises(TypeError):
         spec.environment["TOKEN"] = "changed"  # type: ignore[index]
 

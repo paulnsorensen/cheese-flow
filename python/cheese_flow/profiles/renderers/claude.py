@@ -11,7 +11,7 @@ from __future__ import annotations
 import json
 import shutil
 import stat
-from collections.abc import Mapping, MutableSequence, MutableSet, Sequence
+from collections.abc import Mapping, MutableMapping, MutableSequence, Sequence
 from pathlib import Path, PurePosixPath
 from typing import Any
 
@@ -32,6 +32,8 @@ from ..rendering.permissions import (
     validate_permission_rules,
 )
 from ..rendering.template import mcp_entry_for_harness
+
+ClaimRegistry = MutableMapping[str, tuple[bytes, int]]
 
 _MCP_DEFAULT = ("claude", "codex", "opencode")
 _ITEM_DEFAULT = ("claude", "codex", "copilot", "crush", "cursor", "opencode")
@@ -77,7 +79,7 @@ def _write_json(
     value: Mapping[str, Any],
     *,
     target: Path,
-    claims: MutableSet[str],
+    claims: ClaimRegistry,
 ) -> None:
     payload = json.dumps(value, indent=2, ensure_ascii=False) + "\n"
     claim_destination(claims, target, path)
@@ -89,7 +91,7 @@ def _write_local_settings(
     profile: ResolvedProfile,
     target: Path,
     out: MutableSequence[str],
-    claims: MutableSet[str],
+    claims: ClaimRegistry,
 ) -> None:
     """Project explicit Claude marketplace and enabled-plugin declarations."""
 
@@ -156,12 +158,12 @@ def _copy_skill(
     item: Mapping[str, Any],
     out: MutableSequence[str],
     server_plugins: Mapping[str, str],
-    claims: MutableSet[str],
+    claims: ClaimRegistry,
 ) -> None:
-    name = _safe_name(item.get("name"), kind="skill")
     relative = item.get("path") or ""
     if not relative:
         return
+    name = _safe_name(item.get("name"), kind="skill")
     source = _source_path(item, relative, label="skill path")
     if not source.is_dir():
         return
@@ -188,7 +190,7 @@ def _write_commands(
     plugin_dir: Path,
     target: Path,
     out: MutableSequence[str],
-    claims: MutableSet[str],
+    claims: ClaimRegistry,
 ) -> None:
     for item in profile.commands:
         if item.get("_from_native_plugin") or not _selected(item, _ITEM_DEFAULT):
@@ -222,7 +224,7 @@ def _write_hooks(
     plugin_dir: Path,
     target: Path,
     out: MutableSequence[str],
-    claims: MutableSet[str],
+    claims: ClaimRegistry,
 ) -> dict[str, list[dict[str, Any]]]:
     entries: dict[str, list[dict[str, Any]]] = {}
     for item in profile.hooks:
@@ -241,12 +243,12 @@ def _write_hooks(
                 raise FileNotFoundError(f"Claude hook script not found: {source}")
             basename = _safe_name(Path(script).name, kind="hook script")
             destination = plugin_dir / "hooks" / basename
-            claim_destination(claims, target, destination)
-            destination.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copyfile(source, destination)
-            destination.chmod(
-                destination.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH
-            )
+            content = source.read_bytes()
+            mode = stat.S_IMODE(source.stat().st_mode) | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH
+            if claim_destination(claims, target, destination, content=content, mode=mode):
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                destination.write_bytes(content)
+                destination.chmod(mode)
             _track_path(out, target, destination)
             copy_hook_shared_assets(item, plugin_dir, target, out, claims=claims)
             command_value = f"${{CLAUDE_PLUGIN_ROOT}}/hooks/{basename}"
@@ -294,7 +296,7 @@ class ClaudeRenderer:
         )
         plugin_dir.mkdir(parents=True, exist_ok=True)
         out: list[str] = []
-        claims: set[str] = set()
+        claims: dict[str, tuple[bytes, int]] = {}
         _write_local_settings(profile, target, out, claims)
 
         server_plugins = native_mcp_server_plugins(profile.native_plugins, "claude")

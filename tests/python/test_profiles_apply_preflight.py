@@ -5,9 +5,11 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import shutil
 import socket
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
+import cheese_flow.profiles.compile as compile_module
 import pytest
 from cheese_flow.profiles.apply import apply_profile
 from cheese_flow.profiles.errors import ProfileApplyError
@@ -19,6 +21,7 @@ from cheese_flow.profiles.generation import (
 from cheese_flow.profiles.models import (
     CompiledFile,
     CompiledProfileManifest,
+    CompileRequest,
     CompileTarget,
     DriftRecord,
     ProfileApplyState,
@@ -509,3 +512,96 @@ def test_apply_rejects_special_existing_lock_before_open(tmp_path: Path, special
         if listener is not None:
             listener.close()
         lock_path.unlink(missing_ok=True)
+
+
+def test_public_apply_works_after_source_and_baseline_removal(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source_root = tmp_path / "source"
+    profile_dir = source_root / "profiles" / "live"
+    profile_dir.mkdir(parents=True)
+    baseline_root = tmp_path / "baseline"
+    baseline_root.mkdir()
+    target_root = tmp_path / "target"
+    target_root.mkdir()
+    output_root = tmp_path / "compiled"
+    (profile_dir / "profile.yaml").write_text(
+        "name: live\ncompile_targets:\n  home:\n    target_root: $HOME\n    harnesses: [claude]\n",
+        encoding="utf-8",
+    )
+
+    class _Renderer:
+        def render(self, profile, target: Path, *, logical_root: Path):
+            del profile, logical_root
+            destination = target / ".generated" / "profile.json"
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            destination.write_bytes(b'{"compiled":true}\n')
+            return (PurePosixPath(".generated/profile.json"),)
+
+    monkeypatch.setattr(compile_module, "renderer", lambda harness: _Renderer())
+    manifest = compile_module.compile_profile(
+        CompileRequest(
+            profile_name="live",
+            source_root=source_root,
+            baseline_root=baseline_root,
+            output_root=output_root,
+        ),
+        environment={"HOME": str(target_root)},
+    )
+    manifest_path = output_root / "manifest.json"
+    assert manifest.generation
+
+    shutil.rmtree(source_root)
+    shutil.rmtree(baseline_root)
+    assert not source_root.exists()
+    assert not baseline_root.exists()
+    state_path = tmp_path / "state" / "apply-state.json"
+
+    report = apply_profile(manifest_path, state_path=state_path)
+
+    destination = target_root / ".generated" / "profile.json"
+    assert report.copied == (destination,)
+    assert destination.read_bytes() == b'{"compiled":true}\n'
+    assert state_path.is_file()
+    assert not Path(f"{state_path}.journal").exists()
+
+
+def test_public_apply_rejects_a_later_invalid_fragment_before_mutation(tmp_path: Path) -> None:
+    manifest_path, target_root, _, manifest = _published(
+        tmp_path,
+        files=(
+            ("home", "claude", "first.json", b"first"),
+            ("home", "claude", "second.json", b"second"),
+        ),
+    )
+    second_fragment = manifest_path.parent / manifest.files[1].fragment_path
+    second_fragment.write_bytes(b"tampered")
+    first_destination = target_root / "first.json"
+    first_destination.write_bytes(b"existing")
+    stale_destination = target_root / "stale.json"
+    stale_destination.write_bytes(b"stale")
+    state_path = tmp_path / "state" / "apply-state.json"
+    state_path.parent.mkdir()
+    state_payload = {
+        "schema_version": 1,
+        "managed_files": [str(first_destination), str(stale_destination)],
+    }
+    state_path.write_text(json.dumps(state_payload, separators=(",", ":")) + "\n", encoding="utf-8")
+    lock_path = Path(f"{state_path}.lock")
+    lock_path.write_bytes(b"")
+    lock_path.chmod(0o600)
+    lock_mode = lock_path.stat().st_mode
+    state_bytes = state_path.read_bytes()
+    lock_bytes = lock_path.read_bytes()
+    journal_path = Path(f"{state_path}.journal")
+
+    with pytest.raises(ProfileApplyError, match="hash mismatch"):
+        apply_profile(manifest_path, state_path=state_path)
+
+    assert first_destination.read_bytes() == b"existing"
+    assert stale_destination.read_bytes() == b"stale"
+    assert not (target_root / "second.json").exists()
+    assert state_path.read_bytes() == state_bytes
+    assert lock_path.read_bytes() == lock_bytes
+    assert lock_path.stat().st_mode == lock_mode
+    assert not journal_path.exists()
