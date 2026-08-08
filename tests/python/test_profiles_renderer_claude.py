@@ -208,6 +208,55 @@ def test_claude_projects_explicit_local_marketplaces_and_plugins(tmp_path: Path)
     }
 
 
+def test_claude_ignores_external_source_records_without_local_paths(tmp_path: Path) -> None:
+    source = tmp_path / "source"
+    source.mkdir()
+    _write_source(source)
+    profile = _profile(source).model_copy(
+        update={"skills": ({"source": "owner/repository", "_source_dir": str(source)},)}
+    )
+    target = tmp_path / "target"
+
+    written = ClaudeRenderer().render(profile, target, logical_root=tmp_path / "logical")
+
+    assert not any(path.parts[:2] == (".claude", "skills") for path in written)
+    assert not (target / ".claude" / "skills").exists()
+
+
+def test_claude_reuses_identical_hook_script_across_events(tmp_path: Path) -> None:
+    source = tmp_path / "source"
+    source.mkdir()
+    _write_source(source)
+    profile = _profile(source).model_copy(
+        update={
+            "hooks": tuple(
+                {
+                    "event": event,
+                    "script": "hooks/a.sh",
+                    "harnesses": ["claude"],
+                    "_source_dir": str(source),
+                }
+                for event in ("PreToolUse", "PostToolUse")
+            )
+        }
+    )
+    target = tmp_path / "target"
+
+    written = ClaudeRenderer().render(profile, target, logical_root=tmp_path / "logical")
+    hook_path = PurePosixPath(".claude/plugins/local/demo/hooks/a.sh")
+    manifest = json.loads(
+        (target / ".claude" / "plugins" / "local" / "demo" / "plugin.json").read_text(
+            encoding="utf-8"
+        )
+    )
+
+    assert written.count(hook_path) == 1
+    assert set(manifest["hooks"]) == {"PreToolUse", "PostToolUse"}
+    assert {entries[0]["hooks"][0]["command"] for entries in manifest["hooks"].values()} == {
+        "${CLAUDE_PLUGIN_ROOT}/hooks/a.sh"
+    }
+
+
 def test_claude_rejects_scalar_item_harnesses(tmp_path: Path) -> None:
     source = tmp_path / "source"
     source.mkdir()

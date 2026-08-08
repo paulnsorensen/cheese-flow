@@ -6,6 +6,8 @@ import importlib
 import json
 import os
 import stat
+import subprocess
+import sys
 from pathlib import Path, PurePosixPath
 
 import pytest
@@ -859,3 +861,222 @@ compile_targets:
             request,
             environment={"HOME": str(live_root), "TOKEN": "secret"},
         )
+
+
+def test_compile_uses_only_explicit_source_root_when_ambient_channels_are_poisoned(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source_root = tmp_path / "explicit-source"
+    baseline_root = tmp_path / "baseline"
+    output_root = tmp_path / "compiled"
+    explicit_target = tmp_path / "explicit-target"
+    baseline_root.mkdir()
+
+    def write_profile(root: Path, description: str, target: Path) -> None:
+        profile_dir = root / "profiles" / "live"
+        profile_dir.mkdir(parents=True)
+        (profile_dir / "profile.yaml").write_text(
+            (
+                f"name: live\ndescription: {description}\ncompile_targets:\n"
+                f"  home:\n    target_root: {target}\n    harnesses: [claude]\n"
+            ),
+            encoding="utf-8",
+        )
+
+    write_profile(source_root, "explicit", explicit_target)
+    ambient_roots = {
+        "DOTFILES_DIR": tmp_path / "dotfiles-decoy",
+        "HOME": tmp_path / "home-decoy",
+        "XDG_CONFIG_HOME": tmp_path / "xdg-config-decoy",
+        "XDG_CACHE_HOME": tmp_path / "xdg-cache-decoy",
+        "XDG_DATA_HOME": tmp_path / "xdg-data-decoy",
+        "XDG_STATE_HOME": tmp_path / "xdg-state-decoy",
+    }
+    decoy_targets: list[Path] = []
+    for variable, root in ambient_roots.items():
+        decoy_target = tmp_path / f"{variable.lower()}-target"
+        decoy_targets.append(decoy_target)
+        write_profile(root, f"{variable.lower()} decoy", decoy_target)
+        monkeypatch.setenv(variable, str(root))
+
+    cwd = tmp_path / "cwd-decoy"
+    cwd.mkdir()
+    cwd_target = tmp_path / "cwd-target"
+    write_profile(cwd, "cwd decoy", cwd_target)
+    (cwd / ".env").write_text("DOTFILES_DIR=/wrong/source\n", encoding="utf-8")
+    for directory in (".cache", ".vault"):
+        write_profile(cwd / directory, f"{directory} decoy", tmp_path / f"{directory[1:]}-target")
+    monkeypatch.chdir(cwd)
+
+    class _DescriptionRenderer(_Renderer):
+        def render(self, profile, target: Path, *, logical_root: Path):
+            self.payload = f"{profile.description}\n"
+            return super().render(profile, target, logical_root=logical_root)
+
+    monkeypatch.setattr(compile_module, "renderer", lambda harness: _DescriptionRenderer())
+    request = CompileRequest(
+        profile_name="live",
+        source_root=source_root,
+        baseline_root=baseline_root,
+        output_root=output_root,
+    )
+
+    manifest = compile_module.compile_profile(
+        request,
+        environment={"HOME": str(ambient_roots["HOME"])},
+    )
+
+    assert manifest.compile_targets[0].resolved_root == explicit_target.resolve()
+    fragment = output_root / manifest.files[0].fragment_path
+    assert fragment.read_bytes() == b"explicit\n"
+    assert all(not any(target.rglob("*")) for target in (*decoy_targets, cwd_target))
+
+
+def test_compile_changes_only_output_root(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    shared_parent = tmp_path / "shared"
+    source_root = shared_parent / "source"
+    baseline_root = shared_parent / "baseline"
+    live_root = shared_parent / "live"
+    output_root = shared_parent / "compiled"
+    shared_parent.mkdir()
+    (source_root / "profiles" / "live").mkdir(parents=True)
+    (source_root / "source-only.txt").write_text("source must stay unchanged\n", encoding="utf-8")
+    (source_root / "profiles" / "live" / "profile.yaml").write_text(
+        (
+            "name: live\ncompile_targets:\n"
+            f"  home:\n    target_root: {live_root}\n    harnesses: [claude]\n"
+        ),
+        encoding="utf-8",
+    )
+    baseline_root.mkdir()
+    (baseline_root / "baseline-only.txt").write_text(
+        "baseline must stay unchanged\n", encoding="utf-8"
+    )
+    live_root.mkdir()
+    (live_root / "user-owned.txt").write_text("live must stay unchanged\n", encoding="utf-8")
+    (shared_parent / "sibling.txt").write_text("sibling must stay unchanged\n", encoding="utf-8")
+    monkeypatch.setattr(compile_module, "renderer", lambda harness: _Renderer())
+
+    def snapshot(root: Path, *, excluded: Path | None = None) -> tuple[tuple[object, ...], ...]:
+        entries: list[tuple[object, ...]] = []
+        for path in sorted(root.rglob("*"), key=lambda item: item.as_posix()):
+            if excluded is not None and (path == excluded or excluded in path.parents):
+                continue
+            relative = path.relative_to(root).as_posix()
+            mode = stat.S_IMODE(path.lstat().st_mode)
+            if path.is_symlink():
+                entries.append((relative, "symlink", mode, os.readlink(path)))
+            elif path.is_dir():
+                entries.append((relative, "directory", mode, None))
+            elif path.is_file():
+                entries.append((relative, "file", mode, path.read_bytes()))
+            else:
+                entries.append((relative, "special", mode, None))
+        return tuple(entries)
+
+    before = {
+        "source": snapshot(source_root),
+        "baseline": snapshot(baseline_root),
+        "live": snapshot(live_root),
+        "shared": snapshot(shared_parent, excluded=output_root),
+    }
+    request = CompileRequest(
+        profile_name="live",
+        source_root=source_root,
+        baseline_root=baseline_root,
+        output_root=output_root,
+    )
+
+    manifest = compile_module.compile_profile(request, environment={})
+
+    after = {
+        "source": snapshot(source_root),
+        "baseline": snapshot(baseline_root),
+        "live": snapshot(live_root),
+        "shared": snapshot(shared_parent, excluded=output_root),
+    }
+    assert after == before
+    assert (output_root / "manifest.json").is_file()
+    assert manifest.files
+    assert all(output_root in path.parents for path in output_root.rglob("*"))
+
+
+def test_compile_is_byte_deterministic_across_hash_seeds(tmp_path: Path) -> None:
+    source_root = tmp_path / "source"
+    profile_dir = source_root / "profiles" / "live"
+    profile_dir.mkdir(parents=True)
+    baseline_root = tmp_path / "baseline"
+    baseline_root.mkdir()
+    target_root = tmp_path / "target"
+    target_root.mkdir()
+    (profile_dir / "profile.yaml").write_text(
+        (
+            "name: live\ncompile_targets:\n"
+            "  home:\n    target_root: $HOME/home\n    harnesses: [claude]\n"
+            "  project:\n    target_root: $HOME/project\n    harnesses: [codex]\n"
+        ),
+        encoding="utf-8",
+    )
+    output_roots = (tmp_path / "compiled-a", tmp_path / "compiled-b")
+    child = """
+from pathlib import Path, PurePosixPath
+import sys
+
+import cheese_flow.profiles.compile as compile_module
+from cheese_flow.profiles.models import CompileRequest
+
+
+class Renderer:
+    def render(self, profile, target: Path, *, logical_root: Path):
+        del profile, logical_root
+        files = (
+            (PurePosixPath(".generated/profile.json"), b'{"compiled":true}\\n'),
+            (PurePosixPath(".generated/profile.json.bak"), b'{"backup":true}\\n'),
+        )
+        for relative, payload in files:
+            destination = target.joinpath(*relative.parts)
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            destination.write_bytes(payload)
+        return tuple(relative for relative, _ in files)
+
+
+source_root, baseline_root, target_root, output_root = map(Path, sys.argv[1:])
+compile_module.renderer = lambda harness: Renderer()
+compile_module.compile_profile(
+    CompileRequest(
+        profile_name="live",
+        source_root=source_root,
+        baseline_root=baseline_root,
+        output_root=output_root,
+    ),
+    environment={"HOME": str(target_root)},
+)
+"""
+    environment = os.environ.copy()
+    environment["PYTHONPATH"] = str(Path(__file__).resolve().parents[2] / "python")
+    for seed, output_root in zip(("1", "2"), output_roots, strict=True):
+        child_environment = environment.copy()
+        child_environment["PYTHONHASHSEED"] = seed
+        subprocess.run(
+            [
+                sys.executable,
+                "-c",
+                child,
+                str(source_root),
+                str(baseline_root),
+                str(target_root),
+                str(output_root),
+            ],
+            check=True,
+            cwd=tmp_path,
+            env=child_environment,
+        )
+
+    def output_bytes(root: Path) -> tuple[tuple[str, bytes], ...]:
+        return tuple(
+            (path.relative_to(root).as_posix(), path.read_bytes())
+            for path in sorted(root.rglob("*"), key=lambda item: item.as_posix())
+            if path.is_file()
+        )
+
+    assert output_bytes(output_roots[0]) == output_bytes(output_roots[1])

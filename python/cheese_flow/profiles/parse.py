@@ -11,7 +11,15 @@ from types import MappingProxyType
 from typing import Any, Literal
 
 import yaml
-from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, ValidationError, field_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    PrivateAttr,
+    ValidationError,
+    field_serializer,
+    field_validator,
+)
 
 from .errors import ProfileSourceError
 from .models import CompileTarget
@@ -31,6 +39,7 @@ _PATH_FIELDS = ("body_path", "path", "script")
 _ENV_REF_RE = re.compile(r"\$(?:\{([A-Za-z_][A-Za-z0-9_]*)\}|([A-Za-z_][A-Za-z0-9_]*))")
 _COMPILE_HARNESSES = {"claude", "codex", "copilot", "crush", "cursor", "opencode"}
 _DRIVABLE_HARNESSES = {"claude", "codex", "copilot"}
+_NATIVE_PLUGIN_HARNESSES = {"claude", "copilot"}
 _STRING_ITEM_FIELDS = (
     "args",
     "disabled_tools",
@@ -82,6 +91,8 @@ _PLUGIN_KEYS = frozenset(
     {
         "name",
         "path",
+        "git",
+        "branch",
         "harnesses",
         "native",
         "claude_native",
@@ -114,6 +125,14 @@ def _freeze(value: Any) -> Any:
         return tuple(_freeze(item) for item in value)
     if isinstance(value, set):
         return frozenset(_freeze(item) for item in value)
+    return value
+
+
+def _json_value(value: Any) -> Any:
+    if isinstance(value, Mapping):
+        return {key: _json_value(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple, set, frozenset)):
+        return [_json_value(item) for item in value]
     return value
 
 
@@ -168,6 +187,21 @@ class ResolvedProfile(BaseModel):
     def template_environment(self) -> Mapping[str, str]:
         """Caller/source values available only to renderer templates."""
         return self._template_environment
+
+    @field_serializer(
+        "mcps",
+        "agents",
+        "skills",
+        "commands",
+        "hooks",
+        "settings",
+        "enabled_plugins",
+        "env",
+        "marketplaces",
+        "native_plugins",
+    )
+    def _serialize_frozen_values(self, value: Any) -> Any:
+        return _json_value(value)
 
     @field_validator("source_id")
     @classmethod
@@ -529,7 +563,7 @@ def _plugin_native_harnesses(body: Mapping[str, Any], *, name: str, where: str) 
     native_value = body.get("native", False)
     if isinstance(native_value, bool):
         native = (
-            ((_DRIVABLE_HARNESSES & requested) if requested else set(_DRIVABLE_HARNESSES))
+            ((_NATIVE_PLUGIN_HARNESSES & requested) if requested else set(_NATIVE_PLUGIN_HARNESSES))
             if native_value
             else set()
         )
@@ -857,21 +891,43 @@ def _plugin_items(
             raise ProfileSourceError(
                 f"plugins registry {path} entry {name!r} has conflicting item name {body['name']!r}"
             )
+        for key in ("path", "git", "branch"):
+            if key in body and (not isinstance(body[key], str) or not body[key]):
+                raise ProfileSourceError(
+                    f"plugins registry {path} entry {name!r} field {key!r} "
+                    "must be a non-empty string"
+                )
         local_path = body.get("path")
-        if not isinstance(local_path, str) or not local_path:
-            raise ProfileSourceError(
-                f"plugins registry {path} entry {name!r} requires an explicit local path"
+        git_source = body.get("git")
+        if local_path is not None:
+            marketplace_root = resolve_declared_path(
+                source_root, local_path, kind=f"plugin {name!r} path"
             )
-        marketplace_root = resolve_declared_path(
-            source_root, local_path, kind=f"plugin {name!r} path"
-        )
+            plugin_boundary = source_root
+        elif git_source is not None:
+            home = environment.get("HOME")
+            if not isinstance(home, str) or not home:
+                raise ProfileSourceError(
+                    f"git plugin {name!r} requires HOME in the supplied environment"
+                )
+            home_path = Path(home)
+            if not home_path.is_absolute():
+                raise ProfileSourceError(f"git plugin {name!r} requires an absolute HOME path")
+            marketplace_root = (home_path / ".cache" / "cheese-flow" / "plugins" / name).resolve(
+                strict=False
+            )
+            plugin_boundary = marketplace_root
+        else:
+            raise ProfileSourceError(
+                f"plugins registry {path} entry {name!r} requires a local path or git source"
+            )
         if not marketplace_root.is_dir():
             raise ProfileSourceError(f"plugin {name!r} path is not a directory: {marketplace_root}")
         native = _plugin_native_harnesses(
             body, name=name, where=f"plugins registry {path} entry {name!r}"
         )
         marketplace_json = resolve_within(
-            source_root,
+            plugin_boundary,
             marketplace_root / ".claude-plugin" / "marketplace.json",
             kind=f"plugin {name!r} marketplace",
         )
@@ -898,7 +954,7 @@ def _plugin_items(
             payload_base = _resolve_plugin_relative(
                 marketplace_root,
                 metadata["pluginRoot"],
-                source_root=source_root,
+                source_root=plugin_boundary,
                 kind="metadata.pluginRoot",
                 plugin=name,
             )
@@ -921,7 +977,7 @@ def _plugin_items(
             payload_root = _resolve_plugin_relative(
                 payload_base,
                 entry.get("source", ""),
-                source_root=source_root,
+                source_root=plugin_boundary,
                 kind="source",
                 plugin=name,
             )
@@ -930,7 +986,9 @@ def _plugin_items(
                     f"plugin {name!r} payload is not a directory: {payload_root}"
                 )
             mcp_path = resolve_within(
-                source_root, payload_root / ".mcp.json", kind=f"plugin {name!r} MCP manifest"
+                plugin_boundary,
+                payload_root / ".mcp.json",
+                kind=f"plugin {name!r} MCP manifest",
             )
             if mcp_path.is_file():
                 try:
@@ -985,13 +1043,13 @@ def _plugin_items(
                     out["mcps"].append(item)
                     servers.append(server_name)
             out["skills"].extend(
-                _plugin_skills(name, payload_root, source_root, requested, native, str(path))
+                _plugin_skills(name, payload_root, plugin_boundary, requested, native, str(path))
             )
             out["agents"].extend(
-                _plugin_agents(name, payload_root, source_root, requested, native, str(path))
+                _plugin_agents(name, payload_root, plugin_boundary, requested, native, str(path))
             )
             out["hooks"].extend(
-                _plugin_hooks(name, payload_root, source_root, requested, native, str(path))
+                _plugin_hooks(name, payload_root, plugin_boundary, requested, native, str(path))
             )
         if not matched:
             raise ProfileSourceError(

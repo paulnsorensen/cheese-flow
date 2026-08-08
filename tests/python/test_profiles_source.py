@@ -83,7 +83,14 @@ def _plugin_fixture(
     )
     registry = source_root / "plugins" / "registry.yaml"
     registry.write_text(
-        "plugins:\n  demo:\n    path: plugins/marketplace\n    native: [claude]\n",
+        (
+            "plugins:\n"
+            "  demo:\n"
+            "    git: https://example.com/demo.git\n"
+            "    branch: main\n"
+            "    path: plugins/marketplace\n"
+            "    native: [claude]\n"
+        ),
         encoding="utf-8",
     )
     return registry
@@ -545,6 +552,45 @@ def test_declared_plugins_decompose_native_and_non_native_primitives(tmp_path: P
     }
 
 
+def test_git_plugins_use_prepared_cheese_flow_cache(tmp_path: Path) -> None:
+    source_root = tmp_path / "source"
+    registry = _plugin_fixture(source_root)
+    home = tmp_path / "home"
+    cached_plugin = home / ".cache" / "cheese-flow" / "plugins" / "demo"
+    cached_plugin.parent.mkdir(parents=True)
+    (source_root / "plugins" / "marketplace").rename(cached_plugin)
+    registry.write_text(
+        (
+            "plugins:\n"
+            "  demo:\n"
+            "    git: https://example.com/demo.git\n"
+            "    branch: main\n"
+            "    native: true\n"
+        ),
+        encoding="utf-8",
+    )
+    _profile(
+        source_root,
+        "live",
+        "name: live\nregistries:\n  plugins: plugins/registry.yaml\n",
+    )
+
+    profile = load_profile(
+        source_root,
+        "live",
+        environment={"HOME": str(home), "TOKEN": "caller-secret"},
+    )
+
+    assert profile.native_plugins[0]["marketplace_root"] == str(cached_plugin.resolve())
+    assert profile.native_plugins[0]["claude_native"] is True
+    assert profile.native_plugins[0]["codex_native"] is False
+    assert profile.native_plugins[0]["copilot_native"] is True
+    assert [item["name"] for item in profile.skills] == ["demo-skill"]
+    assert profile.model_dump(mode="json")["native_plugins"][0]["marketplace_root"] == str(
+        cached_plugin.resolve()
+    )
+
+
 def test_plugin_payload_traversal_is_rejected(tmp_path: Path) -> None:
     source_root = tmp_path / "source"
     _plugin_fixture(source_root, source="../outside")
@@ -580,3 +626,39 @@ def test_plugin_primitives_collide_with_explicit_items(tmp_path: Path) -> None:
 
     with pytest.raises(ProfileSourceError, match="duplicate mcps item name 'shared'"):
         load_profile(source_root, "live", environment={"TOKEN": "caller-secret"})
+
+
+def test_source_apis_ignore_legacy_ambient_discovery_channels(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source_root = tmp_path / "explicit-source"
+    _profile(source_root, "live", "name: live\ndescription: explicit\n")
+
+    ambient_roots = {
+        "DOTFILES_DIR": tmp_path / "dotfiles-decoy",
+        "HOME": tmp_path / "home-decoy",
+        "XDG_CONFIG_HOME": tmp_path / "xdg-config-decoy",
+        "XDG_CACHE_HOME": tmp_path / "xdg-cache-decoy",
+        "XDG_DATA_HOME": tmp_path / "xdg-data-decoy",
+        "XDG_STATE_HOME": tmp_path / "xdg-state-decoy",
+    }
+    for root in ambient_roots.values():
+        _profile(root, "live", "name: live\ndescription: ambient decoy\n")
+
+    cwd = tmp_path / "cwd-decoy"
+    cwd.mkdir()
+    _profile(cwd, "live", "name: live\ndescription: cwd decoy\n")
+    (cwd / ".env").write_text("DOTFILES_DIR=/wrong/source\n", encoding="utf-8")
+    for directory in (".cache", ".vault"):
+        _profile(cwd / directory, "live", "name: live\ndescription: hidden decoy\n")
+    monkeypatch.chdir(cwd)
+    for variable, root in ambient_roots.items():
+        monkeypatch.setenv(variable, str(root))
+
+    summaries = list_profiles(source_root)
+    assert [(summary.name, summary.description, summary.source_id) for summary in summaries] == [
+        ("live", "explicit", "profiles/live")
+    ]
+
+    profile = load_profile(source_root, "live", environment={})
+    assert profile.description == "explicit"
