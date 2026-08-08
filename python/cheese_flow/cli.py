@@ -42,6 +42,7 @@ from cheese_flow.models import (
     InstallPlan,
     ReportStatus,
 )
+from cheese_flow.profiles.cli import app as profile_app
 from cheese_flow.runner import DEFAULT_TIMEOUT_SECONDS, SubprocessRunner
 from cheese_flow.tui import run_wizard
 
@@ -59,6 +60,8 @@ app = typer.Typer(
     no_args_is_help=True,
     add_completion=False,
 )
+
+app.add_typer(profile_app, name="profile")
 
 
 @app.command()

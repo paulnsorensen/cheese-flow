@@ -18,7 +18,7 @@ A composition installer for the cheese ecosystem: it installs and verifies `hall
 
 ## Repository layout
 
-- `python/cheese_flow/` — the `cheese` CLI, desired-state manifest handling, install planner, doctor, and the interactive wizard TUI
+- `python/cheese_flow/` — the `cheese` CLI, profile engine, desired-state manifest handling, install planner, doctor, and the interactive wizard TUI
 - `python/cheese_flow/adapters/` — one adapter per component (`hallouminate`, `easy-cheese`, `tilth`)
 - `tests/python/` — pytest suite
 - `agents/`, `skills/`, `commands/` — this repo's own agent-authoring assets (prompts, skills, slash commands), used to develop cheese-flow itself
@@ -59,6 +59,29 @@ uv run cheese install
 # Verify already-declared managed state
 uv run cheese doctor
 ```
+
+### Agent profiles
+
+Profile commands are explicit and machine-readable; every source-consuming command
+requires an explicit source root:
+
+```bash
+uv run cheese profile list --source-root /path/to/dotfiles
+uv run cheese profile describe global --source-root /path/to/dotfiles
+uv run cheese profile compile global \
+  --source-root /path/to/dotfiles \
+  --baseline /path/to/baseline \
+  --output /path/to/publication
+uv run cheese profile apply /path/to/publication/manifest.json
+uv run cheese profile launch claude global \
+  --source-root /path/to/dotfiles -- --resume
+uv run cheese profile permissions --project-root /path/to/project
+```
+
+`profile launch` validates the complete launch specification before replacing
+the process. `profile permissions` renders the fixed project-local permission
+fragment; pass `--local` for Claude's gitignored personal settings or repeat
+`--harness` to select a subset.
 
 Or use the repository automation entrypoints:
 

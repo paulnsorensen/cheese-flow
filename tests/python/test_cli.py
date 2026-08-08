@@ -1,9 +1,9 @@
 """Tests for the Typer ``cheese`` CLI surface (``cheese_flow.cli``).
 
-The v1 surface is exactly two commands: ``install`` and ``doctor``. These tests
-own routing, headless output discipline, and persistence rules; planning,
-apply, and verification belong to ``install.py`` / ``doctor.py`` and are faked
-at their seams.
+The v1 top-level surface is ``install``, ``doctor``, and the nested ``profile``
+engine. These tests own routing, headless output discipline, and persistence
+rules; planning, apply, and verification belong to ``install.py`` /
+``doctor.py`` and are faked at their seams.
 """
 
 from __future__ import annotations
@@ -14,6 +14,7 @@ from collections.abc import Sequence
 from pathlib import Path
 
 import pytest
+import typer
 from cheese_flow import cli
 from cheese_flow.cli import app
 from cheese_flow.desired_state import load_desired_state
@@ -194,19 +195,22 @@ def write_manifest(tmp_path: Path, text: str = MANIFEST_TOML) -> Path:
 # ─── Command surface ─────────────────────────────────────────────────────────
 
 
-def test_root_help_lists_exactly_install_and_doctor() -> None:
+def test_root_help_lists_install_doctor_and_profile() -> None:
     result = runner.invoke(app, ["--help"])
     assert result.exit_code == 0
     output = result.stdout
     assert "install" in output
     assert "doctor" in output
+    assert "profile" in output
 
 
 def test_root_help_omits_the_purged_v0_commands() -> None:
     result = runner.invoke(app, ["--help"])
     assert result.exit_code == 0
-    for command in REMOVED_COMMANDS:
-        assert command not in result.stdout, f"purged command still exposed: {command!r}"
+    command = typer.main.get_command(app)
+    exposed = command.commands  # type: ignore[attr-defined]
+    for name in REMOVED_COMMANDS:
+        assert name not in exposed, f"purged command still exposed: {name!r}"
 
 
 def test_purged_commands_are_rejected() -> None:
