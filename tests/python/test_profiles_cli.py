@@ -305,7 +305,7 @@ def test_launch_cli_redacts_build_environment_diagnostics(
     secret = "profile-launch-secret-unique-9f3d"
 
     def fail_build(request: Any, *, environment: dict[str, str]) -> tuple[LaunchSpec, None]:
-        raise ProfileLaunchError(f"launch build received {environment['PROFILE_LAUNCH_SECRET']}")
+        raise ProfileLaunchError(f"diagnostic-prefix-56aa {environment['PROFILE_LAUNCH_SECRET']}")
 
     monkeypatch.setattr(cli, "_build_launch_with_workspace", fail_build)
     result = runner.invoke(
@@ -321,7 +321,7 @@ def test_launch_cli_redacts_build_environment_diagnostics(
     )
 
     assert result.exit_code == 1
-    assert "launch build received <redacted>" in result.output
+    assert "diagnostic-prefix-56aa <redacted>" in result.output
     _assert_secret_absent(result, secret)
 
 
