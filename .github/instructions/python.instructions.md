@@ -1,0 +1,11 @@
+---
+applyTo: "**/*.py"
+---
+- Use type hints on all function signatures and return types; omit obvious local annotations.
+- Use `uv` for dependency management, never pip directly.
+- Use pytest (plus pytest-bdd for Gherkin features), not unittest.
+- Validate untrusted boundary data (manifest TOML, harness config files, CLI input) with pydantic v2 models; internal code passes validated objects, not raw dicts.
+- Raise specific exceptions; never bare `except`, `raise Exception`, or `contextlib.suppress(Exception)`.
+- Route every filesystem path through `pathlib.Path`; this installer targets macOS and Linux home directories — never hardcode a harness's config location outside the detection/adapters layer.
+- Prefer comprehensions and generators for pure transforms; keep a loop when it carries state, side effects, or clearer early exits.
+- Fix the underlying lint issue instead of adding a suppression.
