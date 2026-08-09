@@ -1,6 +1,6 @@
 ---
-applyTo: "tests/**/*.py"
-excludeAgent: "coding-agent"
+applyTo: "tests/**/*.py,tests/**/*.feature"
+excludeAgent: "cloud-agent"
 ---
 
 ## pytest / pytest-bdd test review
