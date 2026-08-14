@@ -116,21 +116,11 @@ def _readonly_script(version: str) -> dict[tuple[str, ...], CommandOutcome]:
     def ok(argv: tuple[str, ...], stdout: str) -> CommandOutcome:
         return CommandOutcome(argv=argv, exit_code=0, stdout=stdout, stderr="", elapsed_ms=1)
 
-    marketplaces = json.dumps(
-        [{"name": "hallouminate", "source": "github", "repo": "paulnsorensen/hallouminate"}]
-    )
     return {
         ("npm", "view", "hallouminate@latest", "version"): ok(
             ("npm", "view", "hallouminate@latest", "version"), version
         ),
         ("hallouminate", "--version"): ok(("hallouminate", "--version"), f"hallouminate {version}"),
-        ("claude", "plugin", "marketplace", "list", "--json"): ok(
-            ("claude", "plugin", "marketplace", "list", "--json"), marketplaces
-        ),
-        ("claude", "plugin", "list", "--json"): ok(
-            ("claude", "plugin", "list", "--json"),
-            json.dumps([{"id": "hallouminate@hallouminate", "scope": "user", "enabled": True}]),
-        ),
         ("hallouminate", "config", "validate"): ok(("hallouminate", "config", "validate"), "ok"),
     }
 
@@ -170,7 +160,17 @@ def test_doctor_with_real_adapters_runs_only_read_only_commands(
     claude_settings = tmp_path / ".claude" / "settings.json"
     claude_settings.parent.mkdir(exist_ok=True)
     claude_settings.write_text(
-        json.dumps({"permissions": {"allow": ["mcp__plugin_hallouminate_hallouminate__*"]}}),
+        json.dumps(
+            {
+                "permissions": {"allow": ["mcp__plugin_hallouminate_hallouminate__*"]},
+                "extraKnownMarketplaces": {
+                    "hallouminate": {
+                        "source": {"source": "github", "repo": "paulnsorensen/hallouminate"}
+                    }
+                },
+                "enabledPlugins": {"hallouminate@hallouminate": True},
+            }
+        ),
         encoding="utf-8",
     )
     cursor_cli_config = tmp_path / ".cursor/cli-config.json"
@@ -190,8 +190,6 @@ def test_doctor_with_real_adapters_runs_only_read_only_commands(
     assert runner.argvs() == [
         ("npm", "view", "hallouminate@latest", "version"),
         ("hallouminate", "--version"),
-        ("claude", "plugin", "marketplace", "list", "--json"),
-        ("claude", "plugin", "list", "--json"),
         ("hallouminate", "config", "validate"),
     ]
     assert {path: path.read_bytes() for path in before} == before

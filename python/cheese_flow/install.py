@@ -146,7 +146,9 @@ def apply_config_edit(edit: ConfigEdit) -> None:
     _write_atomically(target, json.dumps(document, indent=2) + "\n")
 
 
-def _append_unique(table: MutableMapping[str, Any], key: str, value: dict[str, Any] | str) -> None:
+def _append_unique(
+    table: MutableMapping[str, Any], key: str, value: dict[str, Any] | str | bool
+) -> None:
     if not isinstance(value, str):
         raise ValueError("append_unique requires a string value")
     existing = table.get(key, [])

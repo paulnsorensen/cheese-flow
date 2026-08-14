@@ -297,14 +297,14 @@ class ConfigEdit(_Frozen):
     pointer: str
     """Dotted path inside the document, such as permissions.allow."""
 
-    value: dict[str, Any] | str
-    """The object or string to set, or the string to append uniquely."""
+    value: dict[str, Any] | str | bool
+    """The object, flag, or string to set, or the string to append uniquely."""
 
     mode: Literal["set", "append_unique", "toml_set"] = "set"
     """Whether to set a JSON/TOML value or append one JSON string rule."""
 
     @field_serializer("value")
-    def _serialize_value(self, value: dict[str, Any] | str) -> dict[str, Any] | str:
+    def _serialize_value(self, value: dict[str, Any] | str | bool) -> dict[str, Any] | str | bool:
         return _redact_config_value(value) if isinstance(value, dict) else value
 
     @field_validator("target")
@@ -322,7 +322,7 @@ class ConfigEdit(_Frozen):
 
     @model_validator(mode="after")
     def _value_matches_mode(self) -> ConfigEdit:
-        if self.mode == "set" and isinstance(self.value, dict):
+        if self.mode == "set" and isinstance(self.value, dict | bool):
             return self
         if self.mode in ("append_unique", "toml_set") and isinstance(self.value, str):
             return self
