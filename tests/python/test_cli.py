@@ -975,7 +975,7 @@ def test_default_runner_bounds_a_stalled_git_clone_for_every_child(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """bootstrap.sh only bounds the uvx clone it execs; every child the runner
-    itself spawns (``npx skills add``, ``claude plugin marketplace add``, and
+    itself spawns (``npx skills add``, ``codex plugin marketplace add``, and
     the checkout / uvx entry points bootstrap.sh cannot reach) must inherit the
     same stall guard."""
     monkeypatch.delenv("GIT_HTTP_LOW_SPEED_LIMIT", raising=False)

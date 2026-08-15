@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 
 from cheese_flow.adapters.native_config import (
+    claude_config_dir,
     config_edit_holds,
     mcp_permission_edit,
     read_mcp_entry,
@@ -23,13 +24,22 @@ from cheese_flow.models import (
 
 PACKAGE = "hallouminate"
 MARKETPLACE_SOURCE = "paulnsorensen/hallouminate"
+MARKETPLACE_NAME = "hallouminate"
 PLUGIN_ID = "hallouminate@hallouminate"
 
+CLAUDE_MARKETPLACE_ENTRY: dict[str, object] = {
+    "source": {"source": "github", "repo": MARKETPLACE_SOURCE}
+}
+"""The ``extraKnownMarketplaces`` entry Claude Code fetches the catalog from at startup."""
+
 # Harness-native plugin CLIs, keyed by harness: (executable, install verb).
-# Cursor is absent on purpose — it receives MCP and CLI integration, never
-# Hallouminate plugin workflows.
+# Claude Code is absent on purpose — its registration is declared in user
+# settings (see _claude_registration_steps), because the headless host this
+# installer must converge on, a Claude Cloud setup script, has no `claude` on
+# PATH and sits behind a GitHub proxy that refuses clones of repositories not
+# attached to the session. Cursor is absent because it receives MCP and CLI
+# integration, never Hallouminate plugin workflows.
 PLUGIN_CLIS: dict[HarnessName, tuple[str, str]] = {
-    "claude-code": ("claude", "install"),
     "codex": ("codex", "add"),
 }
 
@@ -114,6 +124,9 @@ class HallouminateAdapter:
                         depends_on=(_INSTALL_STEP,),
                     )
                 )
+                continue
+            if harness == "claude-code":
+                steps.extend(_claude_registration_steps(self.name))
                 continue
             if harness not in PLUGIN_CLIS:
                 continue
@@ -234,8 +247,12 @@ class HallouminateAdapter:
         if step.step_id == _INSTALL_STEP:
             return self._check_version(runner)
         if step.step_id.startswith("hallouminate:marketplace:"):
+            if step.config_edit is not None:
+                return config_edit_holds(step.config_edit)
             return self._check_marketplace(step, runner)
         if step.step_id.startswith("hallouminate:plugin:"):
+            if step.config_edit is not None:
+                return config_edit_holds(step.config_edit)
             return self._check_plugin(step, runner)
         if step.step_id == _CURSOR_MCP_STEP:
             return _check_cursor_mcp(step)
@@ -295,6 +312,48 @@ class HallouminateAdapter:
         return outcome.exit_code == 0 and _has_corpus_result(outcome.stdout)
 
 
+def _claude_registration_steps(component: ComponentName) -> tuple[PlanStep, PlanStep]:
+    """Registration declared in Claude Code's user settings, never through its CLI.
+
+    Claude Code reads ``extraKnownMarketplaces`` and ``enabledPlugins`` from
+    user settings at startup and fetches the marketplace itself. Shelling out
+    to ``claude plugin`` cannot converge on the headless host this installer
+    exists for: a Claude Cloud setup script runs with no ``claude`` on PATH,
+    behind a GitHub proxy that refuses clones of repositories not attached to
+    the session. Declaring the entries defers the fetch to session start,
+    which the cloud blesses, and works identically on a developer machine.
+    """
+    settings = claude_config_dir() / "settings.json"
+    marketplace = ConfigEdit(
+        target=settings,
+        pointer=f"extraKnownMarketplaces.{MARKETPLACE_NAME}",
+        value=CLAUDE_MARKETPLACE_ENTRY,
+    )
+    plugin = ConfigEdit(target=settings, pointer=f"enabledPlugins.{PLUGIN_ID}", value=True)
+    return (
+        PlanStep(
+            step_id="hallouminate:marketplace:claude-code",
+            component=component,
+            harness="claude-code",
+            phase=Phase.REGISTER,
+            config_edit=marketplace,
+            postcondition=(
+                f"{settings} declares the {MARKETPLACE_SOURCE} marketplace at {marketplace.pointer}"
+            ),
+            depends_on=(_INSTALL_STEP,),
+        ),
+        PlanStep(
+            step_id="hallouminate:plugin:claude-code",
+            component=component,
+            harness="claude-code",
+            phase=Phase.REGISTER,
+            config_edit=plugin,
+            postcondition=f"{settings} enables {PLUGIN_ID} at {plugin.pointer}",
+            depends_on=("hallouminate:marketplace:claude-code",),
+        ),
+    )
+
+
 def _check_cursor_mcp(step: PlanStep) -> bool:
     """Confirm Cursor MCP config declares the entry the step specifies."""
     edit = step.config_edit
@@ -317,20 +376,20 @@ def _owner_repo(raw: str) -> str:
 
 
 def _marketplace_sources(stdout: str) -> set[str]:
-    """Remote ``owner/repo`` identities from ``plugin marketplace list --json``.
+    """Remote ``owner/repo`` identities from ``codex plugin marketplace list --json``.
 
     Marketplace names collide: a directory-sourced ``hallouminate`` marketplace
     is already registered on developer machines, and it does not satisfy a step
     that added ``paulnsorensen/hallouminate``. Only entries the CLI reports as
     remotely sourced contribute, so a local root can never normalize into a
-    false match. Codex answers ``{"marketplaces": [...]}`` with a nested
-    ``marketplaceSource``; Claude answers a flat list keyed ``source``/``repo``.
+    false match. Codex answers ``{'marketplaces': [...]}`` with a nested
+    ``marketplaceSource``.
     """
     try:
         document = json.loads(stdout)
     except json.JSONDecodeError:
         return set()
-    entries = document.get("marketplaces") if isinstance(document, dict) else document
+    entries = document.get("marketplaces") if isinstance(document, dict) else None
     if not isinstance(entries, list):
         return set()
     sources: set[str] = set()
@@ -338,37 +397,26 @@ def _marketplace_sources(stdout: str) -> set[str]:
         if not isinstance(entry, dict):
             continue
         nested = entry.get("marketplaceSource")
-        if isinstance(nested, dict):
-            if nested.get("sourceType") == "git":
-                sources.add(_owner_repo(str(nested.get("source", ""))))
-        elif entry.get("source") == "github":
-            sources.add(_owner_repo(str(entry.get("repo", ""))))
+        if isinstance(nested, dict) and nested.get("sourceType") == "git":
+            sources.add(_owner_repo(str(nested.get("source", ""))))
     return sources - {""}
 
 
 def _installed_plugin_ids(stdout: str) -> set[str]:
-    """Installed plugin ids from a ``plugin list --json`` document.
+    """Installed plugin ids from a ``codex plugin list --json`` document.
 
-    Codex answers ``{"installed": [...], "available": [...]}`` with entries
-    keyed ``pluginId``; Claude answers a flat list keyed ``id``. Codex lists
-    plugins its marketplaces merely offer, so ``installed: false`` entries are
-    excluded — that distinction is the whole point of the check.
-
-    Claude reports OTHER projects' project-scoped plugins in this global
-    listing, so a flat entry must additionally be ``scope: "user"``. Its
-    ``enabled`` flag is deliberately ignored: claude reports ``enabled: false``
-    for active plugins too, so reading it would reject correct installs.
+    Codex answers ``{'installed': [...], 'available': [...]}`` with entries
+    keyed ``pluginId``, and lists plugins its marketplaces merely offer, so
+    ``installed: false`` entries are excluded — that distinction is the whole
+    point of the check.
     """
     try:
         document = json.loads(stdout)
     except json.JSONDecodeError:
         return set()
-    if isinstance(document, dict):
-        return _codex_plugin_ids(document.get("installed"))
-    return _claude_plugin_ids(document)
-
-
-def _codex_plugin_ids(entries: object) -> set[str]:
+    if not isinstance(document, dict):
+        return set()
+    entries = document.get("installed")
     if not isinstance(entries, list):
         return set()
     ids: set[str] = set()
@@ -376,19 +424,6 @@ def _codex_plugin_ids(entries: object) -> set[str]:
         if not isinstance(entry, dict) or entry.get("installed") is False:
             continue
         identifier = entry.get("pluginId")
-        if isinstance(identifier, str) and identifier:
-            ids.add(identifier)
-    return ids
-
-
-def _claude_plugin_ids(entries: object) -> set[str]:
-    if not isinstance(entries, list):
-        return set()
-    ids: set[str] = set()
-    for entry in entries:
-        if not isinstance(entry, dict) or entry.get("scope") != "user":
-            continue
-        identifier = entry.get("id")
         if isinstance(identifier, str) and identifier:
             ids.add(identifier)
     return ids

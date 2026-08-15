@@ -112,23 +112,36 @@ def test_hallouminate_plans_versioned_global_npm_install() -> None:
     assert install.depends_on == ()
 
 
-def test_hallouminate_plugin_argv_per_native_harness() -> None:
+def test_hallouminate_declares_claude_registration_in_settings(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # No `claude` argv anywhere: the Claude Cloud setup shell has no CLI on
+    # PATH, so registration is declared in user settings and Claude Code
+    # fetches the marketplace itself at session start.
+    monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(tmp_path / "claude"))
     runner = FakeRunner(npm_script())
     steps = steps_by_id(HallouminateAdapter(runner).plan_steps(state()))
 
-    assert steps["hallouminate:marketplace:claude-code"].argv == (
-        "claude",
-        "plugin",
-        "marketplace",
-        "add",
-        "paulnsorensen/hallouminate",
+    marketplace = steps["hallouminate:marketplace:claude-code"]
+    assert marketplace.argv == ()
+    assert marketplace.config_edit == ConfigEdit(
+        target=tmp_path / "claude" / "settings.json",
+        pointer="extraKnownMarketplaces.hallouminate",
+        value={"source": {"source": "github", "repo": "paulnsorensen/hallouminate"}},
     )
-    assert steps["hallouminate:plugin:claude-code"].argv == (
-        "claude",
-        "plugin",
-        "install",
-        "hallouminate@hallouminate",
+    plugin = steps["hallouminate:plugin:claude-code"]
+    assert plugin.argv == ()
+    assert plugin.config_edit == ConfigEdit(
+        target=tmp_path / "claude" / "settings.json",
+        pointer="enabledPlugins.hallouminate@hallouminate",
+        value=True,
     )
+
+
+def test_hallouminate_plugin_argv_for_codex() -> None:
+    runner = FakeRunner(npm_script())
+    steps = steps_by_id(HallouminateAdapter(runner).plan_steps(state()))
+
     assert steps["hallouminate:marketplace:codex"].argv == (
         "codex",
         "plugin",
@@ -296,6 +309,10 @@ def test_hallouminate_registration_depends_on_install_and_plugin_on_marketplace(
 
     assert steps["hallouminate:marketplace:codex"].depends_on == ("hallouminate:npm-install",)
     assert steps["hallouminate:plugin:codex"].depends_on == ("hallouminate:marketplace:codex",)
+    assert steps["hallouminate:marketplace:claude-code"].depends_on == ("hallouminate:npm-install",)
+    assert steps["hallouminate:plugin:claude-code"].depends_on == (
+        "hallouminate:marketplace:claude-code",
+    )
 
 
 def test_hallouminate_emits_independent_steps_per_selected_repository() -> None:
@@ -440,32 +457,6 @@ CODEX_MARKETPLACE_JSON_LOCAL = json.dumps(
         ]
     }
 )
-CLAUDE_MARKETPLACE_JSON = json.dumps(
-    [
-        {
-            "name": "hallouminate",
-            "source": "github",
-            "repo": "paulnsorensen/hallouminate",
-            "installLocation": "/home/paul/.claude/plugins/marketplaces/hallouminate",
-        }
-    ]
-)
-CLAUDE_MARKETPLACE_JSON_DIRECTORY = json.dumps(
-    [
-        {
-            "name": "hallouminate",
-            "source": "directory",
-            "path": "/home/paul/.cache/ap/plugins/hallouminate",
-            "installLocation": "/home/paul/.cache/ap/plugins/hallouminate",
-        },
-        {
-            "name": "claude-plugins-official",
-            "source": "github",
-            "repo": "anthropics/claude-plugins-official",
-            "installLocation": "/home/paul/.claude/plugins/marketplaces/official",
-        },
-    ]
-)
 
 
 def test_hallouminate_marketplace_postcondition_reads_the_native_listing() -> None:
@@ -484,14 +475,37 @@ def test_hallouminate_marketplace_postcondition_reads_the_native_listing() -> No
     assert adapter.check_postcondition(step, garbage) is False
 
 
-def test_hallouminate_marketplace_postcondition_reads_the_claude_listing() -> None:
+def test_hallouminate_claude_registration_postconditions_read_settings(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # No child process on either probe: the Claude Cloud setup shell has no
+    # `claude` CLI, so the postcondition is the settings file itself.
+    monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(tmp_path))
     adapter = HallouminateAdapter(FakeRunner(npm_script()))
-    step = hallouminate_steps(FakeRunner(npm_script()))["hallouminate:marketplace:claude-code"]
+    steps = hallouminate_steps(FakeRunner(npm_script()))
+    marketplace = steps["hallouminate:marketplace:claude-code"]
+    plugin = steps["hallouminate:plugin:claude-code"]
 
-    list_argv = ("claude", "plugin", "marketplace", "list", "--json")
-    ok = FakeRunner({list_argv: outcome(list_argv, stdout=CLAUDE_MARKETPLACE_JSON)})
-    assert adapter.check_postcondition(step, ok) is True
-    assert ok.argvs() == [list_argv]
+    probe = FakeRunner()
+    assert adapter.check_postcondition(marketplace, probe) is False
+    assert adapter.check_postcondition(plugin, probe) is False
+
+    (tmp_path / "settings.json").write_text(
+        json.dumps(
+            {
+                "extraKnownMarketplaces": {
+                    "hallouminate": {
+                        "source": {"source": "github", "repo": "paulnsorensen/hallouminate"}
+                    }
+                },
+                "enabledPlugins": {"hallouminate@hallouminate": True},
+            }
+        ),
+        encoding="utf-8",
+    )
+    assert adapter.check_postcondition(marketplace, probe) is True
+    assert adapter.check_postcondition(plugin, probe) is True
+    assert probe.argvs() == []
 
 
 def test_hallouminate_marketplace_postcondition_rejects_a_same_named_local_marketplace() -> None:
@@ -504,13 +518,6 @@ def test_hallouminate_marketplace_postcondition_rejects_a_same_named_local_marke
     codex_argv = ("codex", "plugin", "marketplace", "list", "--json")
     codex = FakeRunner({codex_argv: outcome(codex_argv, stdout=CODEX_MARKETPLACE_JSON_LOCAL)})
     assert adapter.check_postcondition(steps["hallouminate:marketplace:codex"], codex) is False
-
-    claude_argv = ("claude", "plugin", "marketplace", "list", "--json")
-    claude = FakeRunner(
-        {claude_argv: outcome(claude_argv, stdout=CLAUDE_MARKETPLACE_JSON_DIRECTORY)}
-    )
-    step = steps["hallouminate:marketplace:claude-code"]
-    assert adapter.check_postcondition(step, claude) is False
 
 
 def test_hallouminate_marketplace_postcondition_names_the_json_listing() -> None:
@@ -528,32 +535,6 @@ def test_owner_repo_normalizes_scp_https_and_git_suffix_forms() -> None:
     assert _owner_repo("https://github.com/owner/repo") == "owner/repo"
 
 
-# Verbatim `claude plugin list --json` rows. Every plugin on a real machine
-# reports `enabled: false`, so the check reads `scope` and never `enabled`.
-CLAUDE_PLUGIN_LIST_JSON = json.dumps(
-    [
-        {
-            "id": "hallouminate@hallouminate",
-            "version": "0.3.2",
-            "scope": "user",
-            "enabled": False,
-            "installPath": "/home/paul/.claude/plugins/cache/hallouminate/hallouminate/0.3.2",
-        }
-    ]
-)
-# `claude plugin list` reports OTHER projects' project-scoped plugins globally.
-CLAUDE_PLUGIN_LIST_JSON_FOREIGN_PROJECT = json.dumps(
-    [
-        {
-            "id": "hallouminate@hallouminate",
-            "version": "ad8a4253ce7d",
-            "scope": "project",
-            "enabled": False,
-            "installPath": "/home/paul/.claude/plugins/cache/hallouminate/hallouminate/ad8a",
-            "projectPath": "/home/paul/Dev/easy-cheese/.worktrees/dogfood",
-        }
-    ]
-)
 CODEX_PLUGIN_LIST_JSON = json.dumps(
     {
         "installed": [
@@ -587,49 +568,6 @@ CODEX_PLUGIN_LIST_PLAIN = (
     "agent-sdk-dev@claude-code-plugins  not installed\n"
     "hallouminate@hallouminate          not installed\n"
 )
-
-
-def test_hallouminate_plugin_postcondition_requires_the_plugin_id() -> None:
-    adapter = HallouminateAdapter(FakeRunner(npm_script()))
-    step = hallouminate_steps(FakeRunner(npm_script()))["hallouminate:plugin:claude-code"]
-
-    # `claude plugin list --json` returns a flat list keyed `id`.
-    list_argv = ("claude", "plugin", "list", "--json")
-    ok = FakeRunner({list_argv: outcome(list_argv, stdout=CLAUDE_PLUGIN_LIST_JSON)})
-    assert adapter.check_postcondition(step, ok) is True
-    assert ok.argvs() == [list_argv]
-
-    # `claude plugin list` exits 0 with nothing installed.
-    empty = FakeRunner({list_argv: outcome(list_argv, stdout="[]")})
-    assert adapter.check_postcondition(step, empty) is False
-
-    garbage = FakeRunner({list_argv: outcome(list_argv, stdout="not json")})
-    assert adapter.check_postcondition(step, garbage) is False
-
-
-def test_hallouminate_plugin_postcondition_rejects_another_projects_plugin() -> None:
-    # H-A1: `claude plugin list` reports project-scoped plugins belonging to
-    # unrelated checkouts. A user-scope registration is not satisfied by one.
-    adapter = HallouminateAdapter(FakeRunner(npm_script()))
-    step = hallouminate_steps(FakeRunner(npm_script()))["hallouminate:plugin:claude-code"]
-
-    list_argv = ("claude", "plugin", "list", "--json")
-    foreign = FakeRunner(
-        {list_argv: outcome(list_argv, stdout=CLAUDE_PLUGIN_LIST_JSON_FOREIGN_PROJECT)}
-    )
-    assert adapter.check_postcondition(step, foreign) is False
-
-
-def test_hallouminate_plugin_postcondition_ignores_the_enabled_flag() -> None:
-    # Every plugin claude reports carries `enabled: false`, including active
-    # ones, so the flag must never veto an otherwise user-scoped registration.
-    adapter = HallouminateAdapter(FakeRunner(npm_script()))
-    step = hallouminate_steps(FakeRunner(npm_script()))["hallouminate:plugin:claude-code"]
-
-    list_argv = ("claude", "plugin", "list", "--json")
-    document = json.dumps([{"id": "hallouminate@hallouminate", "scope": "user", "enabled": False}])
-    runner = FakeRunner({list_argv: outcome(list_argv, stdout=document)})
-    assert adapter.check_postcondition(step, runner) is True
 
 
 def test_hallouminate_plugin_postcondition_reads_the_codex_installed_section() -> None:

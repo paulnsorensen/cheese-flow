@@ -53,11 +53,6 @@ PLUGIN_ID = "hallouminate@hallouminate"
 DECOY_MARKETPLACE = MARKETPLACE_NAME
 DECOY_MARKETPLACE_ROOT = "/home/paul/Dev/paulnsorensen/hallouminate"
 
-# A plugin another project installed at project scope. Claude reports foreign
-# project-scoped plugins in its global listing, so the same id is present
-# without this user ever having installed it.
-FOREIGN_PROJECT_PLUGIN = PLUGIN_ID
-
 # What `skills add <repo> --skill '*' --global` puts on disk. Spelled out
 # rather than imported: dropping one of these must fail the postcondition, not
 # follow it.
@@ -159,6 +154,10 @@ class FakeWorld:
             document.setdefault("permissions", {}).setdefault("allow", []).extend(
                 ["mcp__plugin_hallouminate_hallouminate__*", "mcp__tilth__*"]
             )
+            document["extraKnownMarketplaces"] = {
+                MARKETPLACE_NAME: {"source": {"source": "github", "repo": MARKETPLACE_SOURCE}}
+            }
+            document["enabledPlugins"] = {PLUGIN_ID: True}
             settings.write_text(json.dumps(document, indent=2) + "\n", encoding="utf-8")
         if "codex" in harnesses:
             config = self.home / CODEX_MCP_CONFIG
@@ -232,12 +231,12 @@ class FakeWorld:
             self.marketplaces.add(MARKETPLACE_SOURCE)
             return _ok(key)
         if key[1:] == ("plugin", "marketplace", "list", "--json"):
-            return _ok(key, self._marketplace_listing(key[0]))
+            return _ok(key, self._marketplace_listing())
         if len(key) == 4 and key[1] == "plugin" and key[2] in ("install", "add"):
             self.plugins.add(key[3])
             return _ok(key)
         if key[1:] == ("plugin", "list", "--json"):
-            return _ok(key, self._plugin_listing(key[0]))
+            return _ok(key, self._plugin_listing())
         if key[:3] == ("hallouminate", "config", "init"):
             if "hallouminate-config" in self._refuse:
                 return _fail(key, "config init refused")
@@ -284,70 +283,50 @@ class FakeWorld:
             return _ok(key)
         raise AssertionError(f"the fake world was asked to run an unmodelled command: {key}")
 
-    def _marketplace_listing(self, executable: str) -> str:
-        """What `<exe> plugin marketplace list --json` prints.
+    def _marketplace_listing(self) -> str:
+        """What `codex plugin marketplace list --json` prints.
 
         Codex answers ``{"marketplaces": [...]}`` with a nested
-        ``marketplaceSource``; Claude answers a flat list keyed
-        ``source``/``repo``. Both always carry the same-named local decoy, which
-        only the remote/local distinction keeps from satisfying the step.
+        ``marketplaceSource``, and always carries the same-named local decoy,
+        which only the remote/local distinction keeps from satisfying the step.
         """
-        added = sorted(self.marketplaces)
-        if executable == "codex":
-            entries: list[dict[str, object]] = [
-                {
-                    "name": DECOY_MARKETPLACE,
-                    "marketplaceSource": {
-                        "sourceType": "local",
-                        "source": DECOY_MARKETPLACE_ROOT,
-                    },
-                }
-            ]
-            entries += [
-                {
-                    "name": MARKETPLACE_NAME,
-                    "marketplaceSource": {
-                        "sourceType": "git",
-                        "source": f"https://github.com/{source}.git",
-                    },
-                }
-                for source in added
-            ]
-            return json.dumps({"marketplaces": entries})
-        flat: list[dict[str, object]] = [
-            {"name": DECOY_MARKETPLACE, "source": "directory", "path": DECOY_MARKETPLACE_ROOT}
+        entries: list[dict[str, object]] = [
+            {
+                "name": DECOY_MARKETPLACE,
+                "marketplaceSource": {
+                    "sourceType": "local",
+                    "source": DECOY_MARKETPLACE_ROOT,
+                },
+            }
         ]
-        flat += [{"name": MARKETPLACE_NAME, "source": "github", "repo": source} for source in added]
-        return json.dumps(flat)
+        entries += [
+            {
+                "name": MARKETPLACE_NAME,
+                "marketplaceSource": {
+                    "sourceType": "git",
+                    "source": f"https://github.com/{source}.git",
+                },
+            }
+            for source in sorted(self.marketplaces)
+        ]
+        return json.dumps({"marketplaces": entries})
 
-    def _plugin_listing(self, executable: str) -> str:
-        """What `<exe> plugin list --json` prints.
+    def _plugin_listing(self) -> str:
+        """What `codex plugin list --json` prints.
 
         Codex lists what its marketplaces merely offer alongside what is
         installed, so an offered-but-uninstalled plugin appears with
         ``installed`` false — the exact row that must not satisfy the
-        postcondition. Claude lists only installed plugins, but reports OTHER
-        projects' project-scoped ones in the same global listing, so the same
-        id is always present at ``scope: "project"``. Claude also reports
-        ``enabled: false`` for plugins that are in fact active, so the fake
-        never ties that flag to installation.
+        postcondition.
         """
-        if executable == "codex":
-            offered = sorted({PLUGIN_ID} - self.plugins) if self.marketplaces else []
-            document = {
-                "installed": [
-                    {"pluginId": plugin, "installed": True} for plugin in sorted(self.plugins)
-                ],
-                "available": [{"pluginId": plugin, "installed": False} for plugin in offered],
-            }
-            return json.dumps(document)
-        entries: list[dict[str, object]] = [
-            {"id": FOREIGN_PROJECT_PLUGIN, "scope": "project", "enabled": True}
-        ]
-        entries += [
-            {"id": plugin, "scope": "user", "enabled": False} for plugin in sorted(self.plugins)
-        ]
-        return json.dumps(entries)
+        offered = sorted({PLUGIN_ID} - self.plugins) if self.marketplaces else []
+        document = {
+            "installed": [
+                {"pluginId": plugin, "installed": True} for plugin in sorted(self.plugins)
+            ],
+            "available": [{"pluginId": plugin, "installed": False} for plugin in offered],
+        }
+        return json.dumps(document)
 
     def _validate(self, key: tuple[str, ...], cwd: Path | None) -> CommandOutcome:
         if cwd is None:
@@ -661,13 +640,13 @@ def read_only_probes(home: Path) -> list[tuple[str, ...]]:
 
     easy-cheese contributes none: its postcondition reads the installed files
     directly, so a converged host needs no child process to prove the pack is
-    there — and a host with no GitHub CLI reaches the same verdict.
+    there — and a host with no GitHub CLI reaches the same verdict. Claude
+    Code registration contributes none either: it is declared in settings, so
+    a host with no `claude` CLI reaches the same verdict too.
     """
     return [
         ("npm", "view", "hallouminate@latest", "version"),
         ("hallouminate", "--version"),
-        ("claude", "plugin", "marketplace", "list", "--json"),
-        ("claude", "plugin", "list", "--json"),
         ("codex", "plugin", "marketplace", "list", "--json"),
         ("codex", "plugin", "list", "--json"),
         ("hallouminate", "config", "validate"),
@@ -832,13 +811,11 @@ def test_interrupt_forwards_the_signal_and_reports_the_remaining_steps(
 ) -> None:
     world = wire(
         monkeypatch,
-        FakeWorld(
-            home, interrupt_on=("claude", "plugin", "marketplace", "add", MARKETPLACE_SOURCE)
-        ),
+        FakeWorld(home, interrupt_on=("codex", "plugin", "marketplace", "add", MARKETPLACE_SOURCE)),
     )
     manifest = write_manifest(
         tmp_path,
-        manifest_text(harnesses=["claude-code"], components=["hallouminate", "easy-cheese"]),
+        manifest_text(harnesses=["codex"], components=["hallouminate", "easy-cheese"]),
     )
     before = signal.getsignal(signal.SIGINT)
 
@@ -850,13 +827,13 @@ def test_interrupt_forwards_the_signal_and_reports_the_remaining_steps(
     assert world.forwarded == [signal.SIGINT]
     assert statuses(document) == [
         ("hallouminate:npm-install", "succeeded"),
-        ("hallouminate:marketplace:claude-code", "succeeded"),
-        ("hallouminate:plugin:claude-code", "interrupted"),
-        ("hallouminate:permission:claude-code", "interrupted"),
+        ("hallouminate:marketplace:codex", "succeeded"),
+        ("hallouminate:plugin:codex", "interrupted"),
+        ("hallouminate:permission:codex", "interrupted"),
         ("hallouminate:config-init", "interrupted"),
-        ("easy-cheese:install:claude-code", "interrupted"),
+        ("easy-cheese:install:codex", "interrupted"),
     ]
-    assert ("claude", "plugin", "install", PLUGIN_ID) not in world.argvs()
+    assert ("codex", "plugin", "add", PLUGIN_ID) not in world.argvs()
     assert signal.getsignal(signal.SIGINT) is before
 
 
@@ -933,6 +910,33 @@ class GhlessWorld(FakeWorld):
                 elapsed_ms=1,
             )
         return super()._dispatch(key, cwd)
+
+
+def test_install_converges_claude_code_without_the_claude_cli(
+    tmp_path: Path, home: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The cloud regression: a Claude Cloud setup script runs with no `claude`
+    on PATH, so registration never shells out to it — it is declared in user
+    settings instead, and every step still converges."""
+    world = wire(monkeypatch, FakeWorld(home))
+    manifest = write_manifest(
+        tmp_path,
+        manifest_text(
+            harnesses=["claude-code"], components=["hallouminate", "easy-cheese", "tilth"]
+        ),
+    )
+
+    result = cli_runner.invoke(app, ["install", "--config", str(manifest)])
+
+    assert result.exit_code == 0, result.stderr
+    document = json.loads(result.stdout)
+    assert document["status"] == "succeeded"
+    assert not any(argv[0] == "claude" for argv in world.argvs())
+    settings = json.loads((home / ".claude/settings.json").read_text(encoding="utf-8"))
+    assert settings["extraKnownMarketplaces"][MARKETPLACE_NAME] == {
+        "source": {"source": "github", "repo": MARKETPLACE_SOURCE}
+    }
+    assert settings["enabledPlugins"] == {PLUGIN_ID: True}
 
 
 def test_install_converges_every_easy_cheese_step_with_gh_absent(
