@@ -31,6 +31,18 @@ Tilth is optional in v1 and unselected by default. The TUI may recommend it, but
 
 Milknado is post-v1 because its runtime is not ready for this installer contract. V1 removes the existing Milknado dependency, commands, demo, and cheese-flow MCP path rather than retaining unused integration code.[^4]
 
+
+
+**Update (2026-08-16) — partially reintroduced as an optional component.** The deferral above is superseded for the registration surface: milknado now ships as an optional component (`adapters/milknado.py`, added to `COMPONENT_NAMES`, not `REQUIRED_COMPONENTS`). It contributes **no install step** — the plugin's `.mcp.json` self-fetches the server via `uvx --from git+https://github.com/paulnsorensen/milknado@main milknado-mcp` at session start — so cheese-flow only declares three Claude Code registration edits in `~/.claude/settings.json`, mirroring `hallouminate._claude_registration_steps`:
+
+- `extraKnownMarketplaces.milknado` → `{source: {github, paulnsorensen/milknado}}`
+- `enabledPlugins."milknado@milknado"` → `true`
+- `permissions.allow` ← `mcp__plugin_milknado_milknado__*`
+
+Driver: the Claude Cloud routine already installs hallouminate + easy-cheese via `bootstrap.sh --harness claude-code --json`; adding milknado to `COMPONENT_NAMES` makes that unchanged headless line register it too.
+
+Scope of this cut (deliberate): **Claude Code only** — `plan_steps` returns `()` for a state without `claude-code`. Bleeding-edge `@main` git source (not a PyPI pin), so the MCP server does a GitHub clone at session start; walk back to a released tag / PyPI `.mcp.json` (`uvx --from milknado==<version>`) if the cloud GitHub proxy refuses that runtime clone. Codex/Cursor registration deferred; adding them should extract the shared plugin-CLI/cursor helpers out of `hallouminate.py` rather than duplicate them. The v1 removal guards still hold — no milknado CLI command, dependency, entry-point, or unified-MCP module was reintroduced.
+
 ## Multi-repository safety model
 
 1. Never scan the whole home directory automatically.
