@@ -18,6 +18,7 @@ import pytest
 from cheese_flow.adapters import (
     EasyCheeseAdapter,
     HallouminateAdapter,
+    MilknadoAdapter,
     TilthAdapter,
     default_component_adapters,
     easy_cheese,
@@ -1614,6 +1615,112 @@ def test_step_result_reports_a_config_edit_step_with_an_empty_argv() -> None:
 
 
 # --------------------------------------------------------------------------
+# Milknado
+# --------------------------------------------------------------------------
+
+
+def milknado_steps(
+    *,
+    components: tuple[str, ...] = ("hallouminate", "easy-cheese", "milknado"),
+    harnesses: tuple[str, ...] = ("claude-code",),
+) -> dict[str, PlanStep]:
+    adapter = MilknadoAdapter(FakeRunner())
+    return steps_by_id(adapter.plan_steps(state(components=components, harnesses=harnesses)))
+
+
+def test_milknado_declares_claude_registration_in_settings(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(tmp_path / "claude"))
+    steps = milknado_steps()
+
+    marketplace = steps["milknado:marketplace:claude-code"]
+    assert marketplace.argv == ()
+    assert marketplace.config_edit == ConfigEdit(
+        target=tmp_path / "claude" / "settings.json",
+        pointer="extraKnownMarketplaces.milknado",
+        value={"source": {"source": "github", "repo": "paulnsorensen/milknado"}},
+    )
+    assert marketplace.depends_on == ()
+
+    plugin = steps["milknado:plugin:claude-code"]
+    assert plugin.argv == ()
+    assert plugin.config_edit == ConfigEdit(
+        target=tmp_path / "claude" / "settings.json",
+        pointer="enabledPlugins.milknado@milknado",
+        value=True,
+    )
+    assert plugin.depends_on == ("milknado:marketplace:claude-code",)
+
+
+def test_milknado_permission_appends_the_plugin_mcp_wildcard(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(tmp_path))
+    steps = milknado_steps()
+
+    permission = steps["milknado:permission:claude-code"]
+    assert permission.config_edit == ConfigEdit(
+        target=tmp_path / "settings.json",
+        pointer="permissions.allow",
+        value="mcp__plugin_milknado_milknado__*",
+        mode="append_unique",
+    )
+    assert permission.depends_on == ("milknado:plugin:claude-code",)
+
+
+def test_milknado_plans_no_install_step() -> None:
+    steps = milknado_steps()
+    assert set(steps) == {
+        "milknado:marketplace:claude-code",
+        "milknado:plugin:claude-code",
+        "milknado:permission:claude-code",
+    }
+    assert all(step.argv == () for step in steps.values())
+
+
+def test_milknado_plans_nothing_when_not_selected() -> None:
+    assert milknado_steps(components=("hallouminate", "easy-cheese")) == {}
+
+
+def test_milknado_plans_nothing_without_claude_code() -> None:
+    assert milknado_steps(harnesses=("codex", "cursor")) == {}
+
+
+def test_milknado_claude_registration_postconditions_read_settings(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(tmp_path))
+    adapter = MilknadoAdapter(FakeRunner())
+    steps = milknado_steps()
+    marketplace = steps["milknado:marketplace:claude-code"]
+    plugin = steps["milknado:plugin:claude-code"]
+    permission = steps["milknado:permission:claude-code"]
+
+    probe = FakeRunner()
+    assert adapter.check_postcondition(marketplace, probe) is False
+    assert adapter.check_postcondition(plugin, probe) is False
+    assert adapter.check_postcondition(permission, probe) is False
+
+    (tmp_path / "settings.json").write_text(
+        json.dumps(
+            {
+                "extraKnownMarketplaces": {
+                    "milknado": {"source": {"source": "github", "repo": "paulnsorensen/milknado"}}
+                },
+                "enabledPlugins": {"milknado@milknado": True},
+                "permissions": {"allow": ["mcp__plugin_milknado_milknado__*"]},
+            }
+        ),
+        encoding="utf-8",
+    )
+    assert adapter.check_postcondition(marketplace, probe) is True
+    assert adapter.check_postcondition(plugin, probe) is True
+    assert adapter.check_postcondition(permission, probe) is True
+    assert probe.argvs() == []
+
+
+# --------------------------------------------------------------------------
 # Cross-adapter invariants
 # --------------------------------------------------------------------------
 
@@ -1627,7 +1734,7 @@ def all_planned_steps() -> tuple[PlanStep, ...]:
 
 def test_default_component_adapters_cover_every_component() -> None:
     adapters = default_component_adapters(FakeRunner(npm_script()))
-    assert set(adapters) == {"hallouminate", "easy-cheese", "tilth"}
+    assert set(adapters) == {"hallouminate", "easy-cheese", "tilth", "milknado"}
     assert all(name == adapter.name for name, adapter in adapters.items())
 
 

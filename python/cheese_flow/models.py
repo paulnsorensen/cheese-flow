@@ -29,10 +29,10 @@ HarnessName = Literal["claude-code", "codex", "cursor"]
 
 HARNESS_NAMES: tuple[HarnessName, ...] = ("claude-code", "codex", "cursor")
 
-ComponentName = Literal["hallouminate", "easy-cheese", "tilth"]
+ComponentName = Literal["hallouminate", "easy-cheese", "tilth", "milknado"]
 """Cheese ecosystem components cheese-flow can install."""
 
-COMPONENT_NAMES: tuple[ComponentName, ...] = ("hallouminate", "easy-cheese", "tilth")
+COMPONENT_NAMES: tuple[ComponentName, ...] = ("hallouminate", "easy-cheese", "tilth", "milknado")
 
 REQUIRED_COMPONENTS: tuple[ComponentName, ...] = ("hallouminate", "easy-cheese")
 """Components every valid desired state must select. Tilth is optional."""
