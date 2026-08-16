@@ -2,7 +2,7 @@
 
 > _"The cheese must flow."_
 
-A composition installer for the cheese ecosystem: it installs and verifies `hallouminate`, `easy-cheese`, and `tilth` across Claude Code, Codex, and Cursor, driven by a single declarative TOML manifest. Aged in Python, served on Sliced Bread. 🧀
+A composition installer for the cheese ecosystem: it installs and verifies `hallouminate`, `easy-cheese`, `tilth`, and `milknado` across Claude Code, Codex, and Cursor, driven by a single declarative TOML manifest. Aged in Python, served on Sliced Bread. 🧀
 
 ## Why Cheese? Two reasons:
 
@@ -19,7 +19,7 @@ A composition installer for the cheese ecosystem: it installs and verifies `hall
 ## Repository layout
 
 - `python/cheese_flow/` — the `cheese` CLI, profile engine, desired-state manifest handling, install planner, doctor, and the interactive wizard TUI
-- `python/cheese_flow/adapters/` — one adapter per component (`hallouminate`, `easy-cheese`, `tilth`)
+- `python/cheese_flow/adapters/` — one adapter per component (`hallouminate`, `easy-cheese`, `tilth`, `milknado`)
 - `tests/python/` — pytest suite
 - `agents/`, `skills/`, `commands/` — this repo's own agent-authoring assets (prompts, skills, slash commands), used to develop cheese-flow itself
 - `references/` — long-form architectural references (Sliced Bread, etc.)
@@ -157,7 +157,7 @@ selected = ["/home/you/Dev/some-repo"]
 ```
 
 - **Harnesses:** `claude-code`, `codex`, `cursor`
-- **Components:** `hallouminate`, `easy-cheese`, `tilth` — `hallouminate` and `easy-cheese` are required in every manifest; `tilth` is optional
+- **Components:** `hallouminate`, `easy-cheese`, `tilth`, `milknado` — `hallouminate` and `easy-cheese` are required in every manifest; `tilth` and `milknado` are optional. `milknado` currently registers only on Claude Code.
 - **Repositories:** `search_roots` are where repository discovery looks, `max_depth` bounds how deep it searches, and `selected` must each sit under one of the search roots
 
 ## Quality gates

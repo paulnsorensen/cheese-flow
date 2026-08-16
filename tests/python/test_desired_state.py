@@ -161,7 +161,7 @@ def test_unknown_harness_name(tmp_path: Path) -> None:
 def test_unknown_component_name(tmp_path: Path) -> None:
     error = load_error(tmp_path, VALID.replace('"easy-cheese"', '"brie"', 1))
     assert error.reason == (
-        "unknown component names: brie (supported: hallouminate, easy-cheese, tilth)"
+        "unknown component names: brie (supported: hallouminate, easy-cheese, tilth, milknado)"
     )
 
 
