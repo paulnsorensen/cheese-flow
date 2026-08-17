@@ -33,6 +33,21 @@ def read_mcp_entry(path: Path, harness: HarnessName, server: str) -> Any:
     return servers.get(server) if isinstance(servers, dict) else None
 
 
+def mcp_entry_holds(edit: ConfigEdit, harness: HarnessName, server: str) -> bool:
+    """Whether ``harness``'s MCP config declares ``server`` exactly as ``edit`` says.
+
+    A direct ``mcpServers`` entry is verified by its launch command and args, not
+    by the config file merely mentioning the server — a stale entry pointing at a
+    different binary must not satisfy the step that declared this one.
+    """
+    if not isinstance(edit.value, dict):
+        raise ValueError(f"{server} MCP edit carries no entry mapping")
+    entry = read_mcp_entry(edit.target, harness, server)
+    if not isinstance(entry, dict):
+        return False
+    return entry.get("command") == edit.value["command"] and entry.get("args") == edit.value["args"]
+
+
 def claude_config_dir() -> Path:
     """Claude's user config directory, including its documented override."""
     configured = os.environ.get("CLAUDE_CONFIG_DIR", "").strip()

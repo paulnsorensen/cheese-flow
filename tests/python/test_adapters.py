@@ -25,6 +25,7 @@ from cheese_flow.adapters import (
 )
 from cheese_flow.adapters.easy_cheese import AGENT_TOKENS, CORE_SKILLS, skills_directory
 from cheese_flow.adapters.hallouminate import _owner_repo
+from cheese_flow.adapters.native_config import mcp_entry_holds
 from cheese_flow.adapters.tilth import (
     RELEASE_URL,
     _bin_dir,
@@ -234,6 +235,75 @@ def test_hallouminate_plans_native_mcp_permissions(
         assert permission.depends_on == (dependency,)
         assert permission.config_edit == edit
         assert "configures" in permission.postcondition
+
+
+def test_hallouminate_registers_the_claude_mcp_entry_directly(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(tmp_path / "claude"))
+    steps = steps_by_id(HallouminateAdapter(FakeRunner(npm_script())).plan_steps(state()))
+
+    mcp = steps["hallouminate:mcp:claude-code"]
+    assert mcp.argv == ()
+    assert mcp.config_edit == ConfigEdit(
+        target=tmp_path / ".claude.json",
+        pointer="mcpServers.hallouminate",
+        value={"command": "hallouminate", "args": ["serve"]},
+    )
+    assert mcp.depends_on == ("hallouminate:npm-install",)
+
+    permission = steps["hallouminate:permission-mcp:claude-code"]
+    assert permission.config_edit == ConfigEdit(
+        target=tmp_path / "claude" / "settings.json",
+        pointer="permissions.allow",
+        value="mcp__hallouminate__*",
+        mode="append_unique",
+    )
+    assert permission.depends_on == ("hallouminate:mcp:claude-code",)
+
+
+def test_hallouminate_claude_mcp_postcondition_reads_the_config_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.delenv("CLAUDE_CONFIG_DIR", raising=False)
+    adapter = HallouminateAdapter(FakeRunner(npm_script()))
+    mcp = steps_by_id(adapter.plan_steps(state()))["hallouminate:mcp:claude-code"]
+
+    assert adapter.check_postcondition(mcp, FakeRunner()) is False
+    config = tmp_path / ".claude.json"
+    config.write_text(
+        json.dumps(
+            {"mcpServers": {"hallouminate": {"command": "hallouminate", "args": ["serve"]}}}
+        ),
+        encoding="utf-8",
+    )
+    assert adapter.check_postcondition(mcp, FakeRunner()) is True
+
+
+def test_hallouminate_mcp_step_without_a_config_edit_raises() -> None:
+    adapter = HallouminateAdapter(FakeRunner(npm_script()))
+    step = PlanStep(
+        step_id="hallouminate:mcp:cursor",
+        component="hallouminate",
+        harness="cursor",
+        phase=Phase.REGISTER,
+        argv=("noop",),
+        postcondition="unused",
+    )
+    with pytest.raises(ValueError, match="has no MCP config entry"):
+        adapter.check_postcondition(step, FakeRunner())
+
+
+def test_mcp_entry_holds_requires_a_mapping_value() -> None:
+    edit = ConfigEdit(
+        target=Path("/does/not/matter/.claude.json"),
+        pointer="mcpServers.hallouminate",
+        value=True,
+    )
+    with pytest.raises(ValueError, match="carries no entry mapping"):
+        mcp_entry_holds(edit, "claude-code", "hallouminate")
 
 
 def test_hallouminate_permission_postconditions_require_each_native_rule(
@@ -1669,14 +1739,111 @@ def test_milknado_permission_appends_the_plugin_mcp_wildcard(
     assert permission.depends_on == ("milknado:plugin:claude-code",)
 
 
-def test_milknado_plans_no_install_step() -> None:
+def test_milknado_installs_pinned_wheel_and_registers_direct_mcp(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(tmp_path / "claude"))
+    monkeypatch.setenv("XDG_BIN_HOME", str(tmp_path / "bin"))
     steps = milknado_steps()
+
     assert set(steps) == {
+        "milknado:install",
         "milknado:marketplace:claude-code",
         "milknado:plugin:claude-code",
         "milknado:permission:claude-code",
+        "milknado:mcp:claude-code",
+        "milknado:permission-mcp:claude-code",
     }
-    assert all(step.argv == () for step in steps.values())
+
+    install = steps["milknado:install"]
+    assert install.phase is Phase.INSTALL
+    assert install.argv == ("uv", "tool", "install", "milknado==0.2.1")
+    assert install.depends_on == ()
+
+    mcp = steps["milknado:mcp:claude-code"]
+    assert mcp.argv == ()
+    assert mcp.config_edit == ConfigEdit(
+        target=tmp_path / ".claude.json",
+        pointer="mcpServers.milknado",
+        value={"command": str(tmp_path / "bin" / "milknado-mcp"), "args": []},
+    )
+    assert mcp.depends_on == ("milknado:install",)
+
+    permission = steps["milknado:permission-mcp:claude-code"]
+    assert permission.config_edit == ConfigEdit(
+        target=tmp_path / "claude" / "settings.json",
+        pointer="permissions.allow",
+        value="mcp__milknado__*",
+        mode="append_unique",
+    )
+    assert permission.depends_on == ("milknado:mcp:claude-code",)
+
+
+def test_milknado_install_postcondition_probes_the_binary(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("XDG_BIN_HOME", str(tmp_path / "bin"))
+    adapter = MilknadoAdapter(FakeRunner())
+    install = milknado_steps()["milknado:install"]
+    probe = (str(tmp_path / "bin" / "milknado"), "--help")
+
+    assert adapter.check_postcondition(install, FakeRunner()) is False
+    ready = FakeRunner({probe: outcome(probe, exit_code=0)})
+    assert adapter.check_postcondition(install, ready) is True
+    assert ready.argvs() == [probe]
+
+
+def test_milknado_mcp_postcondition_reads_the_claude_config(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("XDG_BIN_HOME", str(tmp_path / "bin"))
+    adapter = MilknadoAdapter(FakeRunner())
+    mcp = milknado_steps()["milknado:mcp:claude-code"]
+    server = str(tmp_path / "bin" / "milknado-mcp")
+
+    assert adapter.check_postcondition(mcp, FakeRunner()) is False
+
+    config = tmp_path / ".claude.json"
+    config.write_text(
+        json.dumps({"mcpServers": {"milknado": {"command": server, "args": []}}}),
+        encoding="utf-8",
+    )
+    assert adapter.check_postcondition(mcp, FakeRunner()) is True
+
+    config.write_text(
+        json.dumps({"mcpServers": {"milknado": {"command": "/other/milknado-mcp", "args": []}}}),
+        encoding="utf-8",
+    )
+    assert adapter.check_postcondition(mcp, FakeRunner()) is False
+
+
+def test_milknado_mcp_postcondition_requires_a_config_edit() -> None:
+    adapter = MilknadoAdapter(FakeRunner())
+    step = PlanStep(
+        step_id="milknado:mcp:claude-code",
+        component="milknado",
+        harness="claude-code",
+        phase=Phase.REGISTER,
+        argv=("noop",),
+        postcondition="unused",
+    )
+    with pytest.raises(ValueError, match="has no MCP config entry"):
+        adapter.check_postcondition(step, FakeRunner())
+
+
+def test_milknado_rejects_an_unknown_step() -> None:
+    adapter = MilknadoAdapter(FakeRunner())
+    step = PlanStep(
+        step_id="milknado:unknown",
+        component="milknado",
+        phase=Phase.REGISTER,
+        argv=("noop",),
+        postcondition="unused",
+    )
+    with pytest.raises(ValueError, match="not a milknado step"):
+        adapter.check_postcondition(step, FakeRunner())
 
 
 def test_milknado_plans_nothing_when_not_selected() -> None:
