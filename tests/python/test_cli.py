@@ -1,4 +1,4 @@
-"""Tests for the Typer ``cheese`` CLI surface (``cheese_flow.cli``).
+"""Tests for the cyclopts ``cheese`` CLI surface (``cheese_flow.cli``).
 
 The v1 top-level surface is ``install``, ``doctor``, and the nested ``profile``
 engine. These tests own routing, headless output discipline, and persistence
@@ -14,7 +14,6 @@ from collections.abc import Sequence
 from pathlib import Path
 
 import pytest
-import typer
 from cheese_flow import cli
 from cheese_flow.cli import app
 from cheese_flow.desired_state import load_desired_state
@@ -33,12 +32,11 @@ from cheese_flow.models import (
     StepStatus,
 )
 from cheese_flow.runner import DEFAULT_TIMEOUT_SECONDS
-from typer.testing import CliRunner
+from cyclopts_testing import CliRunner
 
-# Help-text assertions below rely on Typer's plain (Click) help formatter, which
-# renders option names deterministically regardless of terminal width. The
-# session conftest sets ``TYPER_USE_RICH=0`` before typer is imported; with Rich
-# enabled, headless CI panels render with no body text and these assertions fail.
+# Help-text assertions below read option names out of cyclopts' Rich help. The
+# runner pins a wide, non-tty console (COLUMNS=200) so an option name never wraps
+# off the line an ``in`` assertion scans.
 runner = CliRunner()
 
 REMOVED_COMMANDS = (
@@ -207,8 +205,7 @@ def test_root_help_lists_install_doctor_and_profile() -> None:
 def test_root_help_omits_the_purged_v0_commands() -> None:
     result = runner.invoke(app, ["--help"])
     assert result.exit_code == 0
-    command = typer.main.get_command(app)
-    exposed = command.commands  # type: ignore[attr-defined]
+    exposed = [name for name in app if not name.startswith("-")]
     for name in REMOVED_COMMANDS:
         assert name not in exposed, f"purged command still exposed: {name!r}"
 

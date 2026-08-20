@@ -9,8 +9,8 @@ from cheese_flow.profiles import cli
 from cheese_flow.profiles.errors import ProfileLaunchError
 from cheese_flow.profiles.models import LaunchSpec
 from cheese_flow.profiles.source import ProfileSummary
+from cyclopts_testing import CliRunner
 from pydantic import BaseModel
-from typer.testing import CliRunner
 
 runner = CliRunner()
 
