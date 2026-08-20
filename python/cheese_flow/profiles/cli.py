@@ -1,14 +1,15 @@
-"""Typer commands for the explicit cheese profile engine seams."""
+"""Cyclopts commands for the explicit cheese profile engine seams."""
 
 from __future__ import annotations
 
 import json
 import os
+import sys
 from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Annotated
 
-import typer
+from cyclopts import App, Parameter
 from pydantic import BaseModel, ValidationError
 
 from .apply import apply_profile
@@ -20,11 +21,9 @@ from .models import CompileRequest, LaunchRequest, LaunchSpec, ProjectPermission
 from .project_permissions import render_project_permissions
 from .source import list_profiles, load_profile
 
-app = typer.Typer(
+app = App(
     name="profile",
     help="Inspect, compile, apply, launch, and render agent profiles.",
-    no_args_is_help=True,
-    add_completion=False,
 )
 
 _FAILURE_EXIT_CODE = 1
@@ -40,22 +39,23 @@ def _json_document(value: BaseModel | object) -> str:
 
 
 def _emit(value: BaseModel | object) -> None:
-    typer.echo(_json_document(value))
+    print(_json_document(value))
 
 
 def _handle(operation: Callable[[], object]) -> object:
     try:
         return operation()
     except (ProfileError, ValidationError) as error:
-        typer.echo(str(error), err=True)
-        raise typer.Exit(_FAILURE_EXIT_CODE) from None
+        print(str(error), file=sys.stderr)
+        raise SystemExit(_FAILURE_EXIT_CODE) from None
 
 
-@app.command("list")
+@app.command(name="list")
 def list_command(
+    *,
     source_root: Annotated[
         Path,
-        typer.Option("--source-root", help="Explicit profile source root containing profiles/."),
+        Parameter(help="Explicit profile source root containing profiles/."),
     ],
 ) -> None:
     """List profiles beneath the explicit source root."""
@@ -63,12 +63,13 @@ def list_command(
     _emit([summary.model_dump(mode="json") for summary in summaries])
 
 
-@app.command("describe")
+@app.command(name="describe")
 def describe_command(
-    name: Annotated[str, typer.Argument(help="Profile name to resolve.")],
+    name: Annotated[str, Parameter(help="Profile name to resolve.")],
+    *,
     source_root: Annotated[
         Path,
-        typer.Option("--source-root", help="Explicit profile source root containing profiles/."),
+        Parameter(help="Explicit profile source root containing profiles/."),
     ],
 ) -> None:
     """Show one fully resolved profile."""
@@ -76,19 +77,16 @@ def describe_command(
     _emit(profile)
 
 
-@app.command("compile")
+@app.command(name="compile")
 def compile_command(
-    name: Annotated[str, typer.Argument(help="Profile name to compile.")],
+    name: Annotated[str, Parameter(help="Profile name to compile.")],
+    *,
     source_root: Annotated[
         Path,
-        typer.Option("--source-root", help="Explicit profile source root containing profiles/."),
+        Parameter(help="Explicit profile source root containing profiles/."),
     ],
-    baseline: Annotated[
-        Path, typer.Option("--baseline", help="Baseline tree used for drift and change capture.")
-    ],
-    output: Annotated[
-        Path, typer.Option("--output", help="Directory receiving the immutable publication.")
-    ],
+    baseline: Annotated[Path, Parameter(help="Baseline tree used for drift and change capture.")],
+    output: Annotated[Path, Parameter(help="Directory receiving the immutable publication.")],
 ) -> None:
     """Compile a profile into an immutable manifest publication."""
     manifest = _handle(
@@ -105,12 +103,13 @@ def compile_command(
     _emit(manifest)
 
 
-@app.command("apply")
+@app.command(name="apply")
 def apply_command(
-    manifest: Annotated[Path, typer.Argument(help="Published manifest.json to apply.")],
+    manifest: Annotated[Path, Parameter(help="Published manifest.json to apply.")],
+    *,
     state: Annotated[
         Path | None,
-        typer.Option("--state", help="Optional profile apply state path."),
+        Parameter(help="Optional profile apply state path."),
     ] = None,
 ) -> None:
     """Apply one immutable profile manifest and reconcile prior ownership."""
@@ -168,17 +167,20 @@ def _cleanup_workspace(
     return None
 
 
-@app.command(
-    "launch",
-    context_settings={"allow_extra_args": True, "ignore_unknown_options": True},
-)
+@app.command(name="launch")
 def launch_command(
-    context: typer.Context,
-    harness: Annotated[str, typer.Argument(help="Harness to launch.")],
-    name: Annotated[str, typer.Argument(help="Profile name to resolve.")],
+    harness: Annotated[str, Parameter(help="Harness to launch.")],
+    name: Annotated[str, Parameter(help="Profile name to resolve.")],
+    *arguments: Annotated[
+        str,
+        Parameter(
+            allow_leading_hyphen=True,
+            help="Extra arguments forwarded verbatim to the launched harness.",
+        ),
+    ],
     source_root: Annotated[
         Path,
-        typer.Option("--source-root", help="Explicit profile source root containing profiles/."),
+        Parameter(help="Explicit profile source root containing profiles/."),
     ],
 ) -> None:
     """Resolve policy, then exec the harness with the complete LaunchSpec."""
@@ -189,7 +191,7 @@ def launch_command(
             profile_name=name,
             source_root=source_root,
             harness=harness,
-            arguments=tuple(context.args),
+            arguments=tuple(arguments),
         )
         spec: LaunchSpec | None = None
         workspace: Path | None = None
@@ -221,21 +223,27 @@ def launch_command(
     _handle(execute)
 
 
-@app.command("permissions")
+@app.command(name="permissions")
 def permissions_command(
+    *,
     project_root: Annotated[
         Path,
-        typer.Option(
-            "--project-root", help="Explicit project root containing the permission fragment."
-        ),
+        Parameter(help="Explicit project root containing the permission fragment."),
     ],
     local: Annotated[
         bool,
-        typer.Option("--local", help="Write Claude's gitignored personal settings and skip Codex."),
+        Parameter(
+            negative="",
+            help="Write Claude's gitignored personal settings and skip Codex.",
+        ),
     ] = False,
     harnesses: Annotated[
         list[str] | None,
-        typer.Option("--harness", help="Harness to render; repeat for claude and codex."),
+        Parameter(
+            name="--harness",
+            negative="",
+            help="Harness to render; repeat for claude and codex.",
+        ),
     ] = None,
 ) -> None:
     """Render project permissions from the fixed project-local fragment."""

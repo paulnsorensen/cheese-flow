@@ -25,7 +25,6 @@ from collections.abc import Sequence
 from pathlib import Path
 
 import pytest
-import typer
 from cheese_flow import cli
 from cheese_flow.adapters import default_component_adapters
 from cheese_flow.adapters.tilth import RELEASE_URL, _bin_dir, _install_script, _target_triple
@@ -34,8 +33,8 @@ from cheese_flow.desired_state import load_desired_state, save_desired_state
 from cheese_flow.install import apply_install_plan, build_install_plan
 from cheese_flow.models import CommandOutcome, DesiredState, StepStatus
 from cheese_flow.tui import run_wizard
+from cyclopts_testing import CliRunner
 from pytest_bdd import given, scenarios, then, when
-from typer.testing import CliRunner
 
 cli_runner = CliRunner()
 scenarios("features/easy_cheese.feature")
@@ -1212,7 +1211,7 @@ def test_built_package_declares_no_milknado_dependency_or_extra_entry_point() ->
         for requirement in project["dependencies"]
     )
 
-    assert names == ["PyYAML", "pydantic", "rich", "tomlkit", "typer"]
+    assert names == ["PyYAML", "cyclopts", "pydantic", "rich", "tomlkit"]
     assert project["scripts"] == {"cheese": "cheese_flow.cli:app"}
     assert "entry-points" not in project
     assert "optional-dependencies" not in project
@@ -1223,9 +1222,9 @@ def test_importable_surface_holds_no_compiler_milknado_or_unified_mcp_module() -
 
 
 def test_cli_exposes_exactly_install_doctor_and_profile() -> None:
-    command = typer.main.get_command(app)
+    exposed = [name for name in app if not name.startswith("-")]
 
-    assert sorted(command.commands) == ["doctor", "install", "profile"]  # type: ignore[attr-defined]
+    assert sorted(exposed) == ["doctor", "install", "profile"]
 
 
 # ─── Round trip: wizard → save → load → plan → apply ─────────────────────────
