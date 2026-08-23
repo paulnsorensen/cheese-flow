@@ -152,13 +152,23 @@ class FakeWorld:
             settings.parent.mkdir(parents=True, exist_ok=True)
             document = _read_json(settings)
             document.setdefault("permissions", {}).setdefault("allow", []).extend(
-                ["mcp__plugin_hallouminate_hallouminate__*", "mcp__tilth__*"]
+                [
+                    "mcp__plugin_hallouminate_hallouminate__*",
+                    "mcp__hallouminate__*",
+                    "mcp__tilth__*",
+                ]
             )
             document["extraKnownMarketplaces"] = {
                 MARKETPLACE_NAME: {"source": {"source": "github", "repo": MARKETPLACE_SOURCE}}
             }
             document["enabledPlugins"] = {PLUGIN_ID: True}
             settings.write_text(json.dumps(document, indent=2) + "\n", encoding="utf-8")
+            # The direct user-scope MCP entry Claude Code launches without the
+            # plugin cache, alongside the tilth entry already written above.
+            mcp = self.home / CLAUDE_MCP_CONFIG
+            mcp_document = _read_json(mcp)
+            mcp_document.setdefault("mcpServers", {})["hallouminate"] = HALLOUMINATE_CURSOR_ENTRY
+            mcp.write_text(json.dumps(mcp_document, indent=2) + "\n", encoding="utf-8")
         if "codex" in harnesses:
             config = self.home / CODEX_MCP_CONFIG
             config.write_text(
@@ -607,9 +617,11 @@ def test_complete_config_runs_headlessly_and_stdout_is_one_json_document(
         ("hallouminate:npm-install", "succeeded"),
         ("hallouminate:marketplace:claude-code", "succeeded"),
         ("hallouminate:plugin:claude-code", "succeeded"),
+        ("hallouminate:mcp:claude-code", "succeeded"),
         ("hallouminate:mcp:cursor", "succeeded"),
         ("hallouminate:permission:claude-code", "succeeded"),
         ("hallouminate:permission:cursor", "succeeded"),
+        ("hallouminate:permission-mcp:claude-code", "succeeded"),
         ("hallouminate:config-init", "succeeded"),
         (f"hallouminate:init-repo:{key}", "succeeded"),
         (f"hallouminate:index:{key}", "succeeded"),
@@ -673,7 +685,7 @@ def test_already_satisfied_postconditions_skip_every_mutation(
     assert result.exit_code == 0, result.stderr
     document = json.loads(result.stdout)
     assert {status for _, status in statuses(document)} == {"skipped"}
-    assert len(document["results"]) == 15
+    assert len(document["results"]) == 17
     assert world.argvs() == read_only_probes(home)
     assert snapshot(home) == before
 
@@ -725,7 +737,9 @@ def test_apply_installs_exactly_the_version_planning_resolved(
         ("hallouminate:npm-install", "succeeded"),
         ("hallouminate:marketplace:claude-code", "succeeded"),
         ("hallouminate:plugin:claude-code", "succeeded"),
+        ("hallouminate:mcp:claude-code", "succeeded"),
         ("hallouminate:permission:claude-code", "succeeded"),
+        ("hallouminate:permission-mcp:claude-code", "succeeded"),
         ("hallouminate:config-init", "succeeded"),
         ("easy-cheese:install:claude-code", "succeeded"),
         ("tilth:install", "succeeded"),
@@ -784,7 +798,9 @@ def test_failed_step_blocks_adapter_wired_dependents_and_lets_others_run(
         ("hallouminate:npm-install", "succeeded"),
         ("hallouminate:marketplace:claude-code", "succeeded"),
         ("hallouminate:plugin:claude-code", "succeeded"),
+        ("hallouminate:mcp:claude-code", "succeeded"),
         ("hallouminate:permission:claude-code", "succeeded"),
+        ("hallouminate:permission-mcp:claude-code", "succeeded"),
         ("hallouminate:config-init", "failed"),
         (f"hallouminate:init-repo:{key}", "blocked"),
         (f"hallouminate:index:{key}", "blocked"),

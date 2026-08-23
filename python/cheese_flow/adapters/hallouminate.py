@@ -8,8 +8,8 @@ from pathlib import Path
 from cheese_flow.adapters.native_config import (
     claude_config_dir,
     config_edit_holds,
+    mcp_entry_holds,
     mcp_permission_edit,
-    read_mcp_entry,
 )
 from cheese_flow.models import (
     HARNESS_NAMES,
@@ -48,12 +48,22 @@ CURSOR_MCP_CONFIG = ".cursor/mcp.json"
 
 CURSOR_MCP_POINTER = f"mcpServers.{PACKAGE}"
 
-CURSOR_MCP_ENTRY: dict[str, object] = {"command": PACKAGE, "args": ["serve"]}
+MCP_ENTRY: dict[str, object] = {"command": PACKAGE, "args": ["serve"]}
 """The entry Hallouminate's own plugin ``.mcp.json`` declares for its server."""
+
+CURSOR_MCP_ENTRY = MCP_ENTRY
+"""Kept for backward-compatible imports; the entry is harness-independent."""
+
+CLAUDE_MCP_CONFIG = ".claude.json"
+"""Claude Code's user-scope MCP surface, relative to the home directory."""
+
+CLAUDE_MCP_POINTER = f"mcpServers.{PACKAGE}"
 
 _INSTALL_STEP = "hallouminate:npm-install"
 _CONFIG_STEP = "hallouminate:config-init"
 _CURSOR_MCP_STEP = "hallouminate:mcp:cursor"
+_CLAUDE_MCP_STEP = "hallouminate:mcp:claude-code"
+_CLAUDE_MCP_PERMISSION_STEP = "hallouminate:permission-mcp:claude-code"
 
 
 def _corpus_name(repository: Path) -> str:
@@ -180,6 +190,26 @@ class HallouminateAdapter:
                     depends_on=(dependency,),
                 )
             )
+
+        if "claude-code" in harnesses:
+            # The direct ``mcpServers`` entry serves tools under ``mcp__hallouminate__*``,
+            # not the plugin's ``mcp__plugin_hallouminate_hallouminate__*`` namespace, so
+            # it needs its own approval to be usable headlessly.
+            mcp_permission = mcp_permission_edit("claude-code", PACKAGE)
+            steps.append(
+                PlanStep(
+                    step_id=_CLAUDE_MCP_PERMISSION_STEP,
+                    component=self.name,
+                    harness="claude-code",
+                    phase=Phase.REGISTER,
+                    config_edit=mcp_permission,
+                    postcondition=(
+                        f"{mcp_permission.target} configures {mcp_permission.pointer} as "
+                        f"{mcp_permission.value!r}"
+                    ),
+                    depends_on=(_CLAUDE_MCP_STEP,),
+                )
+            )
         steps.append(
             PlanStep(
                 step_id=_CONFIG_STEP,
@@ -255,8 +285,10 @@ class HallouminateAdapter:
                 return config_edit_holds(step.config_edit)
             return self._check_plugin(step, runner)
         if step.step_id == _CURSOR_MCP_STEP:
-            return _check_cursor_mcp(step)
-        if step.step_id.startswith("hallouminate:permission:"):
+            return _mcp_step_holds(step, "cursor")
+        if step.step_id == _CLAUDE_MCP_STEP:
+            return _mcp_step_holds(step, "claude-code")
+        if step.step_id.startswith("hallouminate:permission"):
             return step.config_edit is not None and config_edit_holds(step.config_edit)
         if step.step_id == _CONFIG_STEP:
             return runner.run(("hallouminate", "config", "validate")).exit_code == 0
@@ -312,7 +344,7 @@ class HallouminateAdapter:
         return outcome.exit_code == 0 and _has_corpus_result(outcome.stdout)
 
 
-def _claude_registration_steps(component: ComponentName) -> tuple[PlanStep, PlanStep]:
+def _claude_registration_steps(component: ComponentName) -> tuple[PlanStep, ...]:
     """Registration declared in Claude Code's user settings, never through its CLI.
 
     Claude Code reads ``extraKnownMarketplaces`` and ``enabledPlugins`` from
@@ -322,6 +354,13 @@ def _claude_registration_steps(component: ComponentName) -> tuple[PlanStep, Plan
     behind a GitHub proxy that refuses clones of repositories not attached to
     the session. Declaring the entries defers the fetch to session start,
     which the cloud blesses, and works identically on a developer machine.
+
+    The MCP server is the exception: the plugin's own ``.mcp.json`` only
+    launches ``hallouminate serve`` once Claude Code materializes the plugin
+    cache at session start, which proved unreliable in Claude Cloud. Since the
+    binary is already installed globally, a direct ``mcpServers`` entry launches
+    it without waiting on the plugin cache, so the wiki grounding comes up even
+    when materialization does not.
     """
     settings = claude_config_dir() / "settings.json"
     marketplace = ConfigEdit(
@@ -330,6 +369,9 @@ def _claude_registration_steps(component: ComponentName) -> tuple[PlanStep, Plan
         value=CLAUDE_MARKETPLACE_ENTRY,
     )
     plugin = ConfigEdit(target=settings, pointer=f"enabledPlugins.{PLUGIN_ID}", value=True)
+    mcp = ConfigEdit(
+        target=Path.home() / CLAUDE_MCP_CONFIG, pointer=CLAUDE_MCP_POINTER, value=MCP_ENTRY
+    )
     return (
         PlanStep(
             step_id="hallouminate:marketplace:claude-code",
@@ -351,18 +393,25 @@ def _claude_registration_steps(component: ComponentName) -> tuple[PlanStep, Plan
             postcondition=f"{settings} enables {PLUGIN_ID} at {plugin.pointer}",
             depends_on=("hallouminate:marketplace:claude-code",),
         ),
+        PlanStep(
+            step_id=_CLAUDE_MCP_STEP,
+            component=component,
+            harness="claude-code",
+            phase=Phase.REGISTER,
+            config_edit=mcp,
+            postcondition=(
+                f"~/{CLAUDE_MCP_CONFIG} holds {CLAUDE_MCP_POINTER} running `{PACKAGE} serve`"
+            ),
+            depends_on=(_INSTALL_STEP,),
+        ),
     )
 
 
-def _check_cursor_mcp(step: PlanStep) -> bool:
-    """Confirm Cursor MCP config declares the entry the step specifies."""
-    edit = step.config_edit
-    if edit is None or not isinstance(edit.value, dict):
+def _mcp_step_holds(step: PlanStep, harness: HarnessName) -> bool:
+    """Confirm ``harness``'s MCP config declares the direct entry the step specifies."""
+    if step.config_edit is None:
         raise ValueError(f"step {step.step_id!r} has no MCP config entry")
-    entry = read_mcp_entry(edit.target, "cursor", PACKAGE)
-    if not isinstance(entry, dict):
-        return False
-    return entry.get("command") == edit.value["command"] and entry.get("args") == edit.value["args"]
+    return mcp_entry_holds(step.config_edit, harness, PACKAGE)
 
 
 _BULLETS = "-*•❯> \t"
