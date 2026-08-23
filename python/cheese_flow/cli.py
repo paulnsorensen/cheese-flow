@@ -1,4 +1,4 @@
-"""Typer CLI entry point for cheese-flow.
+"""Cyclopts CLI entry point for cheese-flow.
 
 ``cheese install`` runs the wizard, or installs headlessly from a manifest
 (``--config``) or from options (``--harness``/``--component``/``--repo``).
@@ -16,10 +16,11 @@ import sys
 import tempfile
 from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
+from importlib.metadata import version
 from pathlib import Path
 from typing import Annotated
 
-import typer
+from cyclopts import App, Group, Parameter
 from rich.console import Console
 
 from cheese_flow.adapters import default_component_adapters
@@ -54,65 +55,81 @@ _FAILURE_EXIT_CODE = 1
 # uvx clone it execs directly, which this runner cannot reach.
 _GIT_LOW_SPEED_DEFAULTS = {"GIT_HTTP_LOW_SPEED_LIMIT": "1000", "GIT_HTTP_LOW_SPEED_TIME": "30"}
 
-app = typer.Typer(
+app = App(
     name="cheese",
+    version=version("cheese-flow"),
     help="Install and verify the cheese ecosystem across Claude Code, Codex, and Cursor.",
-    no_args_is_help=True,
-    add_completion=False,
 )
 
-app.add_typer(profile_app, name="profile")
+app.command(profile_app)
+
+_STATE_SOURCE = Group("State source (choose the wizard, a manifest, or options)")
+_BEHAVIOR = Group("Behavior")
 
 
-@app.command()
+@app.command
 def install(
+    *,
     config: Annotated[
         Path | None,
-        typer.Option(
-            "--config",
+        Parameter(
+            group=_STATE_SOURCE,
             help="Apply this manifest headlessly instead of running the wizard.",
         ),
     ] = None,
     harness: Annotated[
         list[str] | None,
-        typer.Option(
-            "--harness",
+        Parameter(
+            group=_STATE_SOURCE,
+            negative="",
             help="Harnesses to manage, comma- or space-separated. Repeatable. Runs headlessly.",
         ),
     ] = None,
     component: Annotated[
         list[str] | None,
-        typer.Option(
-            "--component",
+        Parameter(
+            group=_STATE_SOURCE,
+            negative="",
             help="Components to install, comma- or space-separated. Defaults to all of them.",
         ),
     ] = None,
     repo: Annotated[
         list[str] | None,
-        typer.Option(
-            "--repo",
+        Parameter(
+            group=_STATE_SOURCE,
+            negative="",
             help="Repositories to index, comma- or space-separated. Relative paths are resolved.",
         ),
     ] = None,
     write_config: Annotated[
         bool,
-        typer.Option(
-            "--write-config",
+        Parameter(
+            group=_BEHAVIOR,
+            negative="",
             help="Persist the resolved manifest. Options are ephemeral without it.",
         ),
     ] = False,
     dry_run: Annotated[
         bool,
-        typer.Option("--dry-run", help="Emit the plan without changing managed state."),
+        Parameter(
+            group=_BEHAVIOR,
+            negative="",
+            help="Emit the plan without changing managed state.",
+        ),
     ] = False,
     json_output: Annotated[
         bool,
-        typer.Option("--json", help="Write one JSON document to stdout."),
+        Parameter(
+            name="--json",
+            group=_BEHAVIOR,
+            negative="",
+            help="Write one JSON document to stdout.",
+        ),
     ] = False,
     timeout: Annotated[
         float,
-        typer.Option(
-            "--timeout",
+        Parameter(
+            group=_BEHAVIOR,
             help="Seconds a single command may run before it is killed.",
         ),
     ] = DEFAULT_TIMEOUT_SECONDS,
@@ -156,18 +173,16 @@ def install(
     _emit(console, report, headless=headless)
 
 
-@app.command()
+@app.command
 def doctor(
+    *,
     config: Annotated[
         Path | None,
-        typer.Option("--config", help="Manifest to verify. Defaults to the standard path."),
+        Parameter(help="Manifest to verify. Defaults to the standard path."),
     ] = None,
     timeout: Annotated[
         float,
-        typer.Option(
-            "--timeout",
-            help="Seconds a single command may run before it is killed.",
-        ),
+        Parameter(help="Seconds a single command may run before it is killed."),
     ] = DEFAULT_TIMEOUT_SECONDS,
 ) -> None:
     """Verify declared managed state without changing it."""
@@ -194,7 +209,7 @@ def _resolution_failure_reported(console: Console) -> Iterator[None]:
         yield
     except RuntimeError as error:
         console.print(f"Planning failed: {error}")
-        raise typer.Exit(_FAILURE_EXIT_CODE) from error
+        raise SystemExit(_FAILURE_EXIT_CODE) from error
 
 
 def _console() -> Console:
@@ -236,12 +251,12 @@ def _reject_conflicting_options(
             "Invalid options: --config and --harness/--component/--repo "
             "name two sources of desired state."
         )
-        raise typer.Exit(_MANIFEST_EXIT_CODE)
+        raise SystemExit(_MANIFEST_EXIT_CODE)
     if write_config and dry_run:
         console.print(
             "Invalid options: --dry-run persists nothing, so --write-config cannot apply."
         )
-        raise typer.Exit(_MANIFEST_EXIT_CODE)
+        raise SystemExit(_MANIFEST_EXIT_CODE)
 
 
 def _option_state(
@@ -259,7 +274,7 @@ def _option_state(
         )
     except OptionError as error:
         console.print(f"Invalid options: {error}")
-        raise typer.Exit(_MANIFEST_EXIT_CODE) from error
+        raise SystemExit(_MANIFEST_EXIT_CODE) from error
 
 
 def _headless_state(console: Console, config: Path | None) -> DesiredState:
@@ -269,7 +284,7 @@ def _headless_state(console: Console, config: Path | None) -> DesiredState:
         return load_desired_state(path)
     except ManifestError as error:
         console.print(f"Invalid manifest: {error}")
-        raise typer.Exit(_MANIFEST_EXIT_CODE) from error
+        raise SystemExit(_MANIFEST_EXIT_CODE) from error
 
 
 def _has_terminal() -> bool:
@@ -289,11 +304,11 @@ def _interactive_state(console: Console, *, dry_run: bool) -> DesiredState:
             "No terminal available for the wizard. Pass --harness/--component "
             "to install headlessly, or --config <manifest> to apply a saved one."
         )
-        raise typer.Exit(_FAILURE_EXIT_CODE)
+        raise SystemExit(_FAILURE_EXIT_CODE)
     state = run_wizard(_prefill(console))
     if state is None:
         console.print("Cancelled: no manifest was written and nothing was installed.")
-        raise typer.Exit(_FAILURE_EXIT_CODE)
+        raise SystemExit(_FAILURE_EXIT_CODE)
     if dry_run:
         console.print("Dry run: the accepted state will not be persisted.")
     return state
@@ -319,7 +334,7 @@ def _emit(console: Console, report: ApplyReport | DoctorReport, *, headless: boo
     else:
         _render(console, report)
     if report.status is not ReportStatus.SUCCEEDED:
-        raise typer.Exit(_FAILURE_EXIT_CODE)
+        raise SystemExit(_FAILURE_EXIT_CODE)
 
 
 def _render(console: Console, report: ApplyReport | DoctorReport) -> None:
