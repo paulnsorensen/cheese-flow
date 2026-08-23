@@ -1195,8 +1195,13 @@ def test_tilth_install_script_downloads_both_release_assets_with_bounded_curl(
     assert tarball_url in script
     assert f"{tarball_url}.sha256" in script
     assert "--proto '=https' --tlsv1.2" in script
-    assert "--connect-timeout 10 --max-time 60" in script
-    assert "--retry 4 --retry-delay 15 --retry-all-errors --retry-max-time 120" in script
+    assert '--connect-timeout 10 --max-time "$curl_max_time"' in script
+    assert '--retry "$curl_retry" --retry-delay "$curl_retry_delay"' in script
+    assert '--retry-all-errors --retry-max-time "$curl_retry_max_time"' in script
+    assert "curl_max_time=30" in script
+    assert "curl_retry_max_time=80" in script
+    assert "curl_max_time=15" in script
+    assert "curl_retry_max_time=5" in script
 
 
 def test_tilth_install_script_installs_atomically_into_the_bin_dir() -> None:
@@ -1242,9 +1247,31 @@ for arg in "$@"; do
     prev="$arg"
 done
 case "$url" in
-    *.sha256) cp "$SHA256_FIXTURE" "$dest" ;;
-    *) cp "$TARBALL_FIXTURE" "$dest" ;;
+    *.sha256)
+        attempt=1
+        if [ -n "${ATTEMPT_COUNTER:-}" ]; then
+            [ -f "$ATTEMPT_COUNTER" ] && attempt="$(cat "$ATTEMPT_COUNTER")"
+            echo $((attempt + 1)) > "$ATTEMPT_COUNTER"
+        fi
+        if [ -n "${MISMATCH_ATTEMPTS:-}" ] && [ "$attempt" -le "$MISMATCH_ATTEMPTS" ]; then
+            cp "$WRONG_SHA256_FIXTURE" "$dest"
+        else
+            cp "$SHA256_FIXTURE" "$dest"
+        fi
+        ;;
+    *)
+        if [ -n "${TARBALL_COUNTER:-}" ]; then
+            count=0
+            [ -f "$TARBALL_COUNTER" ] && count="$(cat "$TARBALL_COUNTER")"
+            echo $((count + 1)) > "$TARBALL_COUNTER"
+        fi
+        cp "$TARBALL_FIXTURE" "$dest"
+        ;;
 esac
+"""
+
+SLEEP_FIXTURE_SHIM = """#!/bin/sh
+exit 0
 """
 
 
@@ -1252,6 +1279,15 @@ def _write_curl_shim(bin_dir: Path) -> None:
     bin_dir.mkdir(parents=True, exist_ok=True)
     shim = bin_dir / "curl"
     shim.write_text(CURL_FIXTURE_SHIM, encoding="utf-8")
+    shim.chmod(shim.stat().st_mode | stat_mod.S_IEXEC | stat_mod.S_IXGRP | stat_mod.S_IXOTH)
+
+
+def _write_sleep_shim(bin_dir: Path) -> None:
+    """A no-op ``sleep`` so retry-loop tests stay fast without shrinking the
+    production script's real 45s inter-attempt delay."""
+    bin_dir.mkdir(parents=True, exist_ok=True)
+    shim = bin_dir / "sleep"
+    shim.write_text(SLEEP_FIXTURE_SHIM, encoding="utf-8")
     shim.chmod(shim.stat().st_mode | stat_mod.S_IEXEC | stat_mod.S_IXGRP | stat_mod.S_IXOTH)
 
 
@@ -1315,8 +1351,10 @@ def test_tilth_install_script_downloads_verifies_and_installs_the_binary(
 def test_tilth_install_script_refuses_and_installs_nothing_on_digest_mismatch(
     tmp_path: Path,
 ) -> None:
+    """A checksum mismatch that persists across all 3 attempts is fatal."""
     shim_dir = tmp_path / "shims"
     _write_curl_shim(shim_dir)
+    _write_sleep_shim(shim_dir)
     tarball = _build_tarball_fixture(tmp_path)
     correct_digest = hashlib.sha256(tarball.read_bytes()).hexdigest()
     wrong_digest = "0" * 64
@@ -1327,6 +1365,8 @@ def test_tilth_install_script_refuses_and_installs_nothing_on_digest_mismatch(
     bin_dir = tmp_path / "bin"
     mktemp_root = tmp_path / "mktemp-root"
     mktemp_root.mkdir()
+    attempt_counter = tmp_path / "attempts"
+    tarball_counter = tmp_path / "tarball-fetches"
 
     script = _install_script(DARWIN_ARM64_TRIPLE, bin_dir)
     env = dict(os.environ) | {
@@ -1334,6 +1374,8 @@ def test_tilth_install_script_refuses_and_installs_nothing_on_digest_mismatch(
         "TMPDIR": str(mktemp_root),
         "TARBALL_FIXTURE": str(tarball),
         "SHA256_FIXTURE": str(sidecar),
+        "ATTEMPT_COUNTER": str(attempt_counter),
+        "TARBALL_COUNTER": str(tarball_counter),
     }
 
     result = subprocess.run(
@@ -1347,9 +1389,69 @@ def test_tilth_install_script_refuses_and_installs_nothing_on_digest_mismatch(
 
     assert result.returncode != 0
     assert not (bin_dir / "tilth").exists()
+    assert int(attempt_counter.read_text()) == 4
+    assert int(tarball_counter.read_text()) == 3
     assert "refusing to install tilth — checksum mismatch" in result.stderr
+    assert "(nightly republish race persisted across 3 attempts)" in result.stderr
     assert f"  expected {wrong_digest}" in result.stderr
     assert f"  actual   {correct_digest}" in result.stderr
+    assert list(mktemp_root.iterdir()) == []
+
+
+def test_tilth_install_script_recovers_from_transient_checksum_mismatch(
+    tmp_path: Path,
+) -> None:
+    """A mismatch caused by a mid-download nightly republish clears on retry
+    once the tarball and sidecar are re-fetched from the same generation."""
+    shim_dir = tmp_path / "shims"
+    _write_curl_shim(shim_dir)
+    _write_sleep_shim(shim_dir)
+    tarball = _build_tarball_fixture(tmp_path)
+    correct_digest = hashlib.sha256(tarball.read_bytes()).hexdigest()
+    wrong_digest = "0" * 64
+    assert wrong_digest != correct_digest
+    correct_sidecar = tmp_path / "tilth.tar.gz.sha256"
+    correct_sidecar.write_text(f"{correct_digest}  tilth.tar.gz\n", encoding="utf-8")
+    wrong_sidecar = tmp_path / "tilth.tar.gz.sha256.wrong"
+    wrong_sidecar.write_text(f"{wrong_digest}  tilth.tar.gz\n", encoding="utf-8")
+
+    bin_dir = tmp_path / "bin"
+    mktemp_root = tmp_path / "mktemp-root"
+    mktemp_root.mkdir()
+    attempt_counter = tmp_path / "attempts"
+    tarball_counter = tmp_path / "tarball-fetches"
+
+    script = _install_script(DARWIN_ARM64_TRIPLE, bin_dir)
+    env = dict(os.environ) | {
+        "PATH": f"{shim_dir}:/usr/bin:/bin",
+        "TMPDIR": str(mktemp_root),
+        "TARBALL_FIXTURE": str(tarball),
+        "SHA256_FIXTURE": str(correct_sidecar),
+        "WRONG_SHA256_FIXTURE": str(wrong_sidecar),
+        "MISMATCH_ATTEMPTS": "1",
+        "ATTEMPT_COUNTER": str(attempt_counter),
+        "TARBALL_COUNTER": str(tarball_counter),
+    }
+
+    result = subprocess.run(
+        ["sh", "-c", script],
+        stdin=subprocess.DEVNULL,
+        capture_output=True,
+        text=True,
+        env=env,
+        timeout=30,
+    )
+
+    assert result.returncode == 0, result.stderr
+    installed = bin_dir / "tilth"
+    assert installed.exists()
+    assert os.access(installed, os.X_OK)
+    assert int(attempt_counter.read_text()) == 3
+    assert int(tarball_counter.read_text()) == 2
+    assert "cheese: tilth checksum mismatch on attempt 1/3" in result.stderr
+    assert f"  expected {wrong_digest}" in result.stderr
+    assert f"  actual   {correct_digest}" in result.stderr
+    assert "refusing to install tilth" not in result.stderr
     assert list(mktemp_root.iterdir()) == []
 
 

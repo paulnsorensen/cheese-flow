@@ -78,31 +78,70 @@ sha256_of() {{
     fi
 }}
 
-# Retry envelope covers the measured ~75s nightly-republish 404 window; worst
-# case ~180s per curl, ~370s for the script.
-curl -fsSL --proto '=https' --tlsv1.2 --connect-timeout 10 --max-time 60 \\
-    --retry 4 --retry-delay 15 --retry-all-errors --retry-max-time 120 \\
-    -o "$workdir/tilth.tar.gz" '{tarball_url}' \\
-    || {{ echo "cheese: could not download tilth for {triple} from {tarball_url}" >&2; exit 1; }}
-curl -fsSL --proto '=https' --tlsv1.2 --connect-timeout 10 --max-time 60 \\
-    --retry 4 --retry-delay 15 --retry-all-errors --retry-max-time 120 \\
-    -o "$workdir/tilth.tar.gz.sha256" '{sidecar_url}' \\
-    || {{
-        echo "cheese: could not download the checksum for tilth {triple} from {sidecar_url}" >&2
-        exit 1
-    }}
+# Attempt 1 uses a generous curl envelope (worst case 80+30=110s per curl) to
+# ride out the measured ~75s nightly-republish 404 window. Attempts 2-3
+# tighten the envelope (worst case 5+15=20s per curl) since the 45s
+# inter-attempt sleep below already does the waiting. Worst-case total across
+# all 3 attempts: 2*110 + 45 + 2*20 + 45 + 2*20 = 390s, which fits smoke's
+# per-step --timeout 420 and the runner's 900s DEFAULT_TIMEOUT_SECONDS.
+#
+# A verified download pair can still mismatch if a nightly republish lands
+# between the tarball and sidecar fetches. Re-fetch both fresh and re-verify
+# up to max_attempts times before giving up.
+max_attempts=3
+attempt=1
+while :; do
+    if [ "$attempt" -eq 1 ]; then
+        curl_max_time=30
+        curl_retry=3
+        curl_retry_delay=15
+        curl_retry_max_time=80
+    else
+        curl_max_time=15
+        curl_retry=1
+        curl_retry_delay=5
+        curl_retry_max_time=5
+    fi
+    curl -fsSL --proto '=https' --tlsv1.2 --connect-timeout 10 --max-time "$curl_max_time" \\
+        --retry "$curl_retry" --retry-delay "$curl_retry_delay" \\
+        --retry-all-errors --retry-max-time "$curl_retry_max_time" \\
+        -o "$workdir/tilth.tar.gz" '{tarball_url}' \\
+        || {{
+            echo "cheese: could not download tilth for {triple} from {tarball_url}" >&2
+            exit 1
+        }}
+    curl -fsSL --proto '=https' --tlsv1.2 --connect-timeout 10 --max-time "$curl_max_time" \\
+        --retry "$curl_retry" --retry-delay "$curl_retry_delay" \\
+        --retry-all-errors --retry-max-time "$curl_retry_max_time" \\
+        -o "$workdir/tilth.tar.gz.sha256" '{sidecar_url}' \\
+        || {{
+            echo "cheese: could not download the checksum for tilth {triple} from {sidecar_url}" >&2
+            exit 1
+        }}
 
-expected="$(cut -d' ' -f1 "$workdir/tilth.tar.gz.sha256")"
-actual="$(sha256_of "$workdir/tilth.tar.gz")" || exit 1
-[ -n "$actual" ] || {{ echo "cheese: could not hash the tilth download" >&2; exit 1; }}
-if [ "$actual" != "$expected" ]; then
-    echo "cheese: refusing to install tilth — checksum mismatch" >&2
+    expected="$(cut -d' ' -f1 "$workdir/tilth.tar.gz.sha256")"
+    actual="$(sha256_of "$workdir/tilth.tar.gz")" || exit 1
+    [ -n "$actual" ] || {{ echo "cheese: could not hash the tilth download" >&2; exit 1; }}
+    if [ "$actual" = "$expected" ]; then
+        break
+    fi
+
+    if [ "$attempt" -ge "$max_attempts" ]; then
+        echo "cheese: refusing to install tilth — checksum mismatch" >&2
+        echo "  expected $expected" >&2
+        echo "  actual   $actual" >&2
+        echo "  url      {tarball_url}" >&2
+        echo "  (nightly republish race persisted across $max_attempts attempts)" >&2
+        exit 1
+    fi
+
+    echo "cheese: tilth checksum mismatch on attempt $attempt/$max_attempts" >&2
     echo "  expected $expected" >&2
     echo "  actual   $actual" >&2
     echo "  url      {tarball_url}" >&2
-    echo "  (a nightly republish mid-download is a likely benign cause; retry)" >&2
-    exit 1
-fi
+    attempt=$((attempt + 1))
+    sleep 45
+done
 
 tar -xzf "$workdir/tilth.tar.gz" -C "$workdir"
 mkdir -p {quoted_bin_dir}
