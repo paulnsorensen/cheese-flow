@@ -3,6 +3,7 @@
 <!-- HALLOUMINATE:INDEX-START -->
 - [claude-mcp-permissions](./claude-mcp-permissions.md) — Claude MCP permissions
 - [claude-plugin-registration-via-settings](./claude-plugin-registration-via-settings.md) — Claude plugin registration goes through settings.json, never the `claude` CLI
+- [cyclopts-cli-migration](./cyclopts-cli-migration.md) — cyclopts replaced typer — three behaviors don't survive a naive port
 - [gh-skill-provenance](./gh-skill-provenance.md) — gh skill provenance
 - [git-has-no-read-timeout](./git-has-no-read-timeout.md) — Git has no read timeout — the install tree bounds it via GIT_HTTP_LOW_SPEED_*
 - [pydantic-lax-coercion-at-the-manifest-boundary](./pydantic-lax-coercion-at-the-manifest-boundary.md) — Pydantic lax coercion at the manifest boundary
