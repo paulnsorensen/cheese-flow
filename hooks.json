@@ -1,8 +1,14 @@
 {
-  "sessionStart": [
-    {
-      "type": "command",
-      "command": "bash hooks/cheese-bootstrap.sh"
-    }
-  ]
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/cheese-bootstrap.sh\""
+          }
+        ]
+      }
+    ]
+  }
 }
