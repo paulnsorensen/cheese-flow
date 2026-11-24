@@ -157,12 +157,24 @@ def test_doctor_with_real_adapters_runs_only_read_only_commands(
         ),
         encoding="utf-8",
     )
+    claude_mcp = tmp_path / ".claude.json"
+    claude_mcp.write_text(
+        json.dumps(
+            {"mcpServers": {"hallouminate": {"command": "hallouminate", "args": ["serve"]}}}
+        ),
+        encoding="utf-8",
+    )
     claude_settings = tmp_path / ".claude" / "settings.json"
     claude_settings.parent.mkdir(exist_ok=True)
     claude_settings.write_text(
         json.dumps(
             {
-                "permissions": {"allow": ["mcp__plugin_hallouminate_hallouminate__*"]},
+                "permissions": {
+                    "allow": [
+                        "mcp__plugin_hallouminate_hallouminate__*",
+                        "mcp__hallouminate__*",
+                    ]
+                },
                 "extraKnownMarketplaces": {
                     "hallouminate": {
                         "source": {"source": "github", "repo": "paulnsorensen/hallouminate"}
@@ -197,9 +209,11 @@ def test_doctor_with_real_adapters_runs_only_read_only_commands(
         "hallouminate:npm-install",
         "hallouminate:marketplace:claude-code",
         "hallouminate:plugin:claude-code",
+        "hallouminate:mcp:claude-code",
         "hallouminate:mcp:cursor",
         "hallouminate:permission:claude-code",
         "hallouminate:permission:cursor",
+        "hallouminate:permission-mcp:claude-code",
         "hallouminate:config-init",
         "easy-cheese:install:claude-code",
         "easy-cheese:install:cursor",
